@@ -3514,6 +3514,47 @@ Home, then the notification). 2.0.0 (code 100) was never uploaded.
     What's new:
     • The app tells you when a new version is ready, so you always have the latest
 
+## 2.0.3: the beta testers' fixes (2026-11-04, `fix/port-crew-round1`)
+
+Owner: "all the fixes make it 2.0.3". The Overseer beta testers (six
+personas on two emulators, a local test database) and Mother, who
+reproduced each defect herself before it was fixed and checked each fix on
+the phone after:
+
+- **"Your cover" on Your order showed an empty "Cover" box.** The cover step
+  puts the photo on the cover as its background; checkout read only the
+  cover's slots (and its test expected the empty box). The card now draws
+  the cover as it prints, as the Preview and the website's Order Summary do
+  (`CoverThumb.tsx`, `orderStart.coverPhotoUri`).
+- **One Back from Your order wiped the name, phone and address.** The form is
+  kept as the website keeps it (`lib/checkoutSession` rules: the same album,
+  the same account, a guest's goes to whoever signs in; forgotten on sign
+  out), in memory only (`src/lib/checkout/formKeep.ts`).
+- **Back in the photo picker dropped every picked photo without asking.** It
+  asks "Add the 50 photos you picked?" with Leave them out and Add 50 photos
+  (`src/lib/pickLeave.ts`, expo-router's `usePreventRemove`).
+- **The start screen's "how it works" slides cut their words at the right
+  edge on Android.** The words beside the picture get the rest of the slide
+  outright; each slide is the exact width (`HomeCards.tsx`).
+- **Test builds for a server on this PC** (a plain-http address in
+  `.env.local`) may talk plain http; the Play build refuses such an address
+  (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
+  at all without it.
+- **Version 2.0.3, code 103.** Same permissions as 2.0.1 and 2.0.2. It has
+  everything in 2.0.2: if 2.0.2 was never uploaded, upload 2.0.3 instead
+  (as 2.0.0 was skipped).
+
+### Release notes 2.0.3 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Your order shows your album's real cover
+    • Going back from checkout keeps your name and address
+    • The photo picker asks before dropping photos you picked
+    Also new:
+    • The app tells you when a new version is ready
+
+(Drop the last line if 2.0.2 went out first: it is 2.0.2's.)
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
