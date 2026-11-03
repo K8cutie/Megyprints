@@ -18,6 +18,8 @@ registerEditorPart({
     label: ADD_BUTTON,
     order: ORDER.tools.memoryVideo,
     wide: true,
+    // The website's gold button (VideoMemoryButton): the album's best feature.
+    look: 'gold',
     shown: (ctx) => ctx.builder.canAddMemoryQr,
     onPress: (ctx) => ctx.openSheet('memories:sheet', { mode: 'add' }),
   }],

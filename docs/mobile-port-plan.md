@@ -3297,6 +3297,21 @@ list on: the old call refused, the new one through. A failed AI quote in the
 **test app** also says what the server answered (never in the Play app). No
 server change; a **new APK** is needed.
 
+## The gold "Add a video memory" button (2026-11-03, `feat/port-gold-memory-button`)
+
+Owner: "we need the golden button for the QR video". The website's
+VideoMemoryButton is gold (src/index.css `.memory-shine`, owner 2026-10-04:
+the video memory is the album's best feature, so it shines; gold keeps it
+from reading as a second "Next page"). The app's was a plain tool tile. Now
+`src/editor/core/GoldButton.tsx`: the same gradient, dark-gold words,
+shadow, a glow that swells (2.6 s) and a light sweep (3.4 s), held to the
+website's stylesheet value for value by `test/goldButton.test.tsx`; still
+with the phone's "reduce motion" on. Drawn with React Native's own
+`backgroundImage` and `boxShadow` and `Animated` (native driver): no new
+library. A registry tool can ask for it (`look: 'gold'`); the memories part
+does, and the editor shows it in its own row just over the page turn.
+A **new APK** is needed.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

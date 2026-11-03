@@ -51,6 +51,7 @@ import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { colors, space } from '../lib/theme';
 import { SheetPlacement, sidePanelWidth } from './core/EditorSheet';
+import { GoldButton } from './core/GoldButton';
 import { A11Y, BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, GO_TO_PAGE, NEXT_PAGE, pageCount, PREVIEW_SHORT, PREVIOUS_PAGE, REDO, ROLL_LABELS, UNDO } from './editorWords';
 import { dangerLast } from './actionRows';
 import { pageHint, pickedHint } from './editorHint';
@@ -275,7 +276,9 @@ export default function EditPagesScreen() {
   const actions = dangerLast(selected ? selectedActionsFor(selected, ctx) : []);
   const allTools = toolsFor(ctx);
   const tools = allTools.filter((t) => !t.wide);
-  const wideTools = allTools.filter((t) => t.wide);
+  const wideTools = allTools.filter((t) => t.wide && t.look !== 'gold');
+  // The gold one ("Add a video memory"), its own row just over the page turn.
+  const goldTools = allTools.filter((t) => t.look === 'gold');
   const banners = bannersFor();
   const isLast = index >= total - 1;
   const Sheet = sheet ? sheetById(sheet.id) : null;
@@ -352,6 +355,8 @@ export default function EditPagesScreen() {
           <Text style={styles.toolText}>{t.label}</Text>
         </Pressable>
       ))}
+
+      {goldTools.map((t) => <GoldButton key={t.id} label={t.label} onPress={() => t.onPress(ctx)} testID={`edit-tool-${t.id}`} />)}
 
       <View style={styles.turnRow}>
         {index > 0 && <Button label={`‹ ${PREVIOUS_PAGE}`} kind="plain" onPress={turn(goPrev)} style={styles.turnButton} testID="edit-prev" />}
