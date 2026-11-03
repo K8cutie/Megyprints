@@ -14,7 +14,7 @@ import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, Albu
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, includedHostingLine, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -1274,7 +1274,7 @@ export default function Order() {
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />Free shipping{freeShippingValue > 0 && <> (₱{freeShippingValue.toLocaleString('en-PH')} value)</>}</li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs (₱{(FREE_QR_MEMORIES * EXTRA_QR_RATE).toLocaleString('en-PH')} value)</li>
                   {includedYears !== null && (
-                    <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedYears} years of memory hosting</li>
+                    <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedHostingLine(includedYears, effectiveYears)}</li>
                   )}
                 </ul>
               </div>
