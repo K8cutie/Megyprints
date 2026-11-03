@@ -10,7 +10,7 @@
    the photo where it is; nothing is copied).
    ══════════════════════════════════════════════════════════════════════════ */
 import { FlashList } from '@shopify/flash-list';
-import { router } from 'expo-router';
+import { router, usePreventRemove } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +20,7 @@ import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useDraft } from '../lib/draftStore';
 import { accessToGiveBack, pickFromFiles } from '../lib/filePhotos';
+import { addPhotosLabel, askBeforeLeavingPicks } from '../lib/pickLeave';
 import { photosForAlbum, type GalleryPhoto } from '../lib/gallery';
 import { formatCount, gridRows, groupByDay, type Day, type GridRow } from '../lib/photoDays';
 import { idsInAlbum, pickerProgress } from '../lib/photoDraft';
@@ -75,6 +76,12 @@ export default function PickPhotos() {
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/photos'));
 
+  // Back with photos picked asks before they are dropped (lib/pickLeave.ts).
+  // Adding them goes back on its own, without the question (allowLeave).
+  const allowLeave = usePreventRemove(picked > 0 && !adding, ({ repeat }) => {
+    askBeforeLeavingPicks(picked, { leave: repeat, add: () => { void addPicked(); } });
+  });
+
   const addPicked = async () => {
     setAdding(true);
     try {
@@ -87,6 +94,7 @@ export default function PickPhotos() {
           `${formatCount(result.alreadyIn)} ${photoWord(result.alreadyIn)} already in your album`,
         );
       }
+      allowLeave();
       goBack();
     } catch (e) {
       console.warn('Could not add the photos', e);
@@ -105,7 +113,7 @@ export default function PickPhotos() {
       void releasePickedFiles(accessToGiveBack(pick.kept, peek().photos)).catch(() => 0);
       const told = [pick.note, result.alreadyIn ? `${result.alreadyIn} ${photoWord(result.alreadyIn)} already in your album` : ''].filter(Boolean).join(' · ');
       if (told) Alert.alert(result.added ? `Added ${result.added} ${photoWord(result.added)}` : 'No photos added', told);
-      if (result.added) goBack();
+      if (result.added) { allowLeave(); goBack(); }
     } catch (e) {
       console.warn('Files picker failed', e);
       say('Could not open Files. Try again.');
@@ -210,7 +218,7 @@ export default function PickPhotos() {
         </Text>
         <Text style={styles.progress}>{pickerProgress(draft.photos.length, picked)}</Text>
         {picked > 0 && (
-          <Button label={`Add ${formatCount(picked)} ${photoWord(picked)}`} busy={adding} onPress={() => { void addPicked(); }} testID="add-photos" />
+          <Button label={addPhotosLabel(picked)} busy={adding} onPress={() => { void addPicked(); }} testID="add-photos" />
         )}
       </SafeAreaView>
     </View>

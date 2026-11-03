@@ -86,12 +86,24 @@ export async function loadOrderAlbumRow(client: Pick<SupabaseClient, 'from'>, us
   return data as OrderAlbumRow;
 }
 
+/** The photo on the front cover, for checkout's "Your cover" card when the
+ *  cover can't be drawn: the one the cover step put on it (its background,
+ *  the website's setCoverToPhoto), else the first photo in a cover slot. The
+ *  card read only the slot, so it showed an empty "Cover" box for every
+ *  album made in the app (beta testers, 2026-11-04). */
+export function coverPhotoUri(coverFront: AlbumPage | null, photos: readonly Pick<UploadedPhoto, 'id' | 'previewUrl'>[]): string | null {
+  const bg = coverFront?.background as { type?: string; photoId?: string } | undefined;
+  const onCover = bg?.type === 'image' && bg.photoId ? photos.find((p) => p.id === bg.photoId) : undefined;
+  if (onCover) return onCover.previewUrl;
+  const index = (coverFront?.slotFills ?? []).find((f): f is number => typeof f === 'number');
+  return index != null ? photos[index]?.previewUrl ?? null : null;
+}
+
 /** What checkout orders: the album on screen, with its row from the account. */
 export function checkoutAlbumFrom(
   b: { getAlbumId: () => string | undefined; albumTitle: string; albumSize: AlbumSizePreset; albumPages: AlbumPage[]; uploadedPhotos: UploadedPhoto[]; coverFront: AlbumPage | null },
   row: OrderAlbumRow,
 ): CheckoutAlbum {
-  const coverIndex = (b.coverFront?.slotFills ?? []).find((f): f is number => typeof f === 'number');
   return {
     albumId: b.getAlbumId() ?? row.id,
     title: b.albumTitle,
@@ -100,7 +112,7 @@ export function checkoutAlbumFrom(
     photoUris: b.uploadedPhotos.map((p) => p.previewUrl),
     photoIds: b.uploadedPhotos.map((p) => p.id),
     coverFront: b.coverFront,
-    coverPhotoUri: coverIndex != null ? b.uploadedPhotos[coverIndex]?.previewUrl ?? null : null,
+    coverPhotoUri: coverPhotoUri(b.coverFront, b.uploadedPhotos),
     row,
   };
 }

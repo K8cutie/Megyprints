@@ -206,6 +206,25 @@ describe('the slides', () => {
     expect(now('albums')).toBe(4);
   });
 
+  it('the words wrap inside the slide (beta testers 2026-11-04: lines ran past the card\'s right edge on the phone)', async () => {
+    await render(<Start />);
+    // The slide area as the phone measures it: 347.43 points (412 dp wide, 32 + 32 of card).
+    await fireEvent(screen.getByTestId('home-albums-slides').children[0] as never, 'layout', { nativeEvent: { layout: { width: 347.43, height: 150 } } });
+    // Each slide exactly the area's width (rounding it made every slide a
+    // little narrower than a page, so the next slide showed a sliver of the last).
+    expect(flat(screen.getByTestId('home-albums-slides-slide-1', { includeHiddenElements: true }).props.style).width).toBe(347.43);
+    // The words beside a 150-point picture get the rest of the slide, set
+    // outright (left to flex on Android, the line was laid out as wide as the slide).
+    /** The View the words sit in. */
+    const column = (words: string) => {
+      let n = screen.getByText(words, { includeHiddenElements: true }).parent;
+      while (n && n.type !== 'View') n = n.parent;
+      return flat(n!.props.style);
+    };
+    expect(column(ALBUMS_CARD.steps[0].desc).width).toBeCloseTo(347.43 - 150, 5);
+    expect(column(ALBUMS_CARD.hook).width).toBeCloseTo(347.43 - 146, 5);
+  });
+
   it('a finger on them holds the clock; a swipe lands on its slide', async () => {
     jest.useFakeTimers();
     await render(<Start />);

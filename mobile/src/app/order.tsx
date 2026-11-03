@@ -49,6 +49,7 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
+import { keepCheckoutForm, keptCheckoutForm } from '../lib/checkout/formKeep';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
 import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
 import { useOptionalBuilder } from '../builder/BuilderProvider';
@@ -113,16 +114,24 @@ export default function OrderScreen() {
   const prices = usePriceSchedule(loadSchedule);
 
   const [step, setStep] = useState<Step>('form');
-  const [material, setMaterial] = useState<MaterialType>(DEFAULT_MATERIAL);
-  const [cover, setCover] = useState<CoverType>(DEFAULT_COVER);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
+  // The form as typed the last time checkout was open for this album
+  // (Back to the album and Order this album again), as the website keeps it.
+  const [kept] = useState(() => keptCheckoutForm(album.albumId, userId));
+  const [material, setMaterial] = useState<MaterialType>(kept?.material ?? DEFAULT_MATERIAL);
+  const [cover, setCover] = useState<CoverType>(kept?.cover ?? DEFAULT_COVER);
+  const [name, setName] = useState(kept?.name ?? '');
+  const [phone, setPhone] = useState(kept?.phone ?? '');
+  const [address, setAddress] = useState<AddressValue>(kept?.address ?? EMPTY_ADDRESS);
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const [addressErrors, setAddressErrors] = useState<AddressErrors>({});
   const [tester, setTester] = useState<TesterCode | null>(null);
   // How long the memories stay live (the website's hostingYears): null = the included term.
-  const [hostingYears, setHostingYears] = useState<number | null>(null);
+  const [hostingYears, setHostingYears] = useState<number | null>(kept?.hostingYears ?? null);
+  // Kept as typed while the form is open (the website's saveCheckoutForm).
+  useEffect(() => {
+    if (step !== 'form') return;
+    keepCheckoutForm({ albumId: album.albumId, name, phone, address, material, cover, hostingYears, userId });
+  }, [album.albumId, step, name, phone, address, material, cover, hostingYears, userId]);
   const [message, setMessage] = useState('');
   const [signInAsk, setSignInAsk] = useState(false);
   const [openAlbumAsk, setOpenAlbumAsk] = useState(false);
@@ -455,7 +464,7 @@ export default function OrderScreen() {
       {/* What you're paying for: the front of the book. */}
       <View style={styles.card}>
         <View style={styles.coverRow}>
-          <CoverThumb uri={album.coverPhotoUri} albumSize={albumSize} />
+          <CoverThumb cover={album.coverFront} photos={ordersOwn && b ? b.uploadedPhotos : null} text={ownText} photoUri={album.coverPhotoUri} albumSize={albumSize} />
           <View style={styles.flex}>
             <Text style={styles.strong}>Your cover</Text>
             <Text style={styles.small}>{pageCount} pages inside, printed as they look in your preview.</Text>

@@ -10,6 +10,7 @@ import type { Session } from '@supabase/supabase-js';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { signInErrorText } from '@web/lib/accountErrors';
+import { forgetCheckoutOnPhone } from './checkout/formKeep';
 import { supabase, supabaseConfigured } from './supabase';
 
 export interface SignInResult {
@@ -61,7 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then(({ data }) => { if (alive) setSession(data.session); })
       .catch(() => { /* no saved sign-in */ })
       .finally(() => { if (alive) setLoading(false); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+      // Signed out (or the sign-in ran out): checkout's typed form goes too,
+      // never shown to the next person (the website's forgetCheckoutOnDevice).
+      if (event === 'SIGNED_OUT') forgetCheckoutOnPhone();
+      setSession(next);
+    });
     // Supabase's advice for phones: keep the sign-in fresh only while the
     // app is on screen.
     const appState = AppState.addEventListener('change', (state) => {

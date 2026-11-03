@@ -17,11 +17,14 @@
    Only the outside is a stand-in, as in checkoutWalk.test.tsx: the
    database (helpers/fakeSupabase.ts), who is signed in, the navigator.
    ══════════════════════════════════════════════════════════════════════════ */
+import fs from 'node:fs';
+import path from 'node:path';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { PriceSchedule } from '@web/lib/pricing';
 import OrderScreen from '../src/app/order';
 import { fixtureCheckoutAlbum, fixturePhotos } from '../src/lib/checkout/fixtureAlbum';
 import { ALBUM_NOT_SAVED } from '../src/lib/checkout/orderStart';
+import { forgetCheckoutOnPhone } from '../src/lib/checkout/formKeep';
 import { fake, rec, resetFake } from './helpers/fakeSupabase';
 import { BASE, fetchFromDisk } from './helpers/psgcFiles';
 
@@ -73,6 +76,15 @@ jest.mock('../src/lib/events/albumEventLink', () => ({
 const mockTier = { value: 'standard' as 'standard' | 'hd', asked: [] as string[][] };
 jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; } }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: async () => ({ canceled: true, assets: null }) }));
+// The page renderer (Skia on the phone): the picture it would draw, by what was asked.
+const mockPictures: { page: { id?: string; background?: unknown }; coverMode?: boolean; width: number }[] = [];
+jest.mock('../src/builder/usePagePicture', () => ({
+  usePagePicture: (_text: unknown, req: { page: { id?: string }; coverMode?: boolean; width: number } | null) => {
+    if (req) mockPictures.push(req);
+    return { uri: req ? `file:///cache/megy-pages/${req.coverMode ? 'cover' : 'page'}-${req.width}.jpg` : null, notDrawn: [], missing: 0, error: null };
+  },
+  PRIORITY: { editing: 3, shown: 2, thumbnail: 1, ahead: 0 },
+}));
 
 /** Like the live list (as in checkoutWalk.test.tsx). */
 const LIVE = {
@@ -102,6 +114,7 @@ const ROW = {
 
 beforeEach(() => {
   resetFake();
+  forgetCheckoutOnPhone();
   fake.rpc.public_price_schedule = { data: LIVE, error: null };
   fake.albumRow = ROW;
   mockAuth.session = { user: { id: 'user-1' } };
@@ -134,6 +147,90 @@ async function fillDetails() {
   await fireEvent.changeText(screen.getByTestId('address-street'), '123 Rizal St., Purok 2');
   await fireEvent.changeText(screen.getByTestId('address-zip'), '1105');
 }
+
+describe('"Your cover": the front of the book, as it prints (beta testers 2026-11-04)', () => {
+  it('draws the album\'s own cover, the photo picked in the cover step on it, as the Preview does', async () => {
+    // The cover step puts the photo on the cover as its background (setCoverToPhoto).
+    const cover = { ...ownAlbum.coverFront, slotFills: [], background: { type: 'image', photoId: photos[5].id } };
+    mockAlbum.builder = { ...ownAlbum, coverFront: cover };
+    mockPictures.length = 0;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    const asked = mockPictures.find((r) => r.coverMode);
+    expect(asked?.page).toBe(cover);
+    expect([screen.getByTestId('order-cover').props.source].flat()[0]).toEqual({ uri: `file:///cache/megy-pages/cover-${asked!.width}.jpg` });
+    expect(screen.queryByTestId('order-cover-empty')).toBeNull();
+  });
+});
+
+describe('Back from checkout keeps what was typed (beta testers 2026-11-04: one Back wiped the form)', () => {
+  /** The form as the screen shows it. */
+  const shown = () => ({
+    name: screen.getByTestId('order-name').props.value,
+    phone: screen.getByTestId('order-phone').props.value,
+    street: screen.getByTestId('address-street').props.value,
+    zip: screen.getByTestId('address-zip').props.value,
+  });
+  const TYPED = { name: 'Juan Dela Cruz', phone: '+63 917 123 4567', street: '123 Rizal St., Purok 2', zip: '1105' };
+
+  it('Back to the album and Order this album again: the same name, phone and address, the paper and cover kept', async () => {
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent(screen.getByTestId('order-phone'), 'blur');
+    await fireEvent.press(screen.getByText('Glossy'));
+    expect(shown()).toEqual(TYPED);
+    await first.unmount();
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(shown()).toEqual(TYPED);
+    expect(await screen.findByText('Metro Manila')).toBeOnTheScreen();
+    expect(screen.getByText('Quezon City')).toBeOnTheScreen();
+    expect(screen.getByText('Bagong Pag-asa')).toBeOnTheScreen();
+    expect(screen.getByRole('radio', { name: /Glossy/ })).toHaveProp('accessibilityState', { checked: true });
+  });
+
+  it('only for that album, and never for another account (the website\'s readCheckoutForm)', async () => {
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await first.unmount();
+    mockAuth.session = { user: { id: 'user-2' } };
+    const other = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('');
+    await other.unmount();
+    mockAuth.session = { user: { id: 'user-1' } };
+    mockParams.albumId = 'album-8';
+    fake.albumRow = { ...ROW, id: 'album-8' };
+    mockAlbum.builder = { ...ownAlbum, getAlbumId: () => 'album-8' };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('');
+  });
+
+  it('typed signed out, it comes back to whoever signs in; signing out forgets it', async () => {
+    mockAuth.session = null;
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.changeText(screen.getByTestId('order-name'), 'Juan Dela Cruz');
+    await first.unmount();
+    mockAuth.session = { user: { id: 'user-1' } };
+    const again = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('Juan Dela Cruz');
+    await again.unmount();
+    forgetCheckoutOnPhone();
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('');
+  });
+
+  it('signing out (or being signed out) forgets it, as the website\'s forgetCheckoutOnDevice', () => {
+    const AUTH = fs.readFileSync(path.join(__dirname, '../src/lib/auth.tsx'), 'utf8');
+    expect(AUTH).toContain("if (event === 'SIGNED_OUT') forgetCheckoutOnPhone();");
+  });
+});
 
 describe('checkout on the album "Order this album" opened it with', () => {
   it('that album, not the test album; its copy read from the account by its id', async () => {
