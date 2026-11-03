@@ -162,6 +162,26 @@ const aspect = () => {
 };
 const textOnScreen = (s: string) => textIn(screen!.container).includes(s);
 
+/** Holds every animation a tap or a finger starts (the page turn, the book's
+ *  slide), until `land()` lets them all finish together. What shows during a
+ *  turn is then checked without racing the clock: a busy CI machine can play
+ *  a whole 0.8 s turn before the next line runs (CI run 41628874847). */
+let heldSpy: jest.SpyInstance | null = null;
+function holdTurns(): () => Promise<void> {
+  const held: { value: Animated.Value; to: number; done?: (r: { finished: boolean }) => void }[] = [];
+  heldSpy = jest.spyOn(Animated, 'timing').mockImplementation((value, config) => ({
+    start: (done?: (r: { finished: boolean }) => void) => { held.push({ value: value as Animated.Value, to: Number(config.toValue), done }); },
+    stop: () => {},
+    reset: () => {},
+  }) as unknown as Animated.CompositeAnimation);
+  return async () => {
+    heldSpy?.mockRestore();
+    heldSpy = null;
+    await act(async () => { for (const h of held.splice(0)) { h.value.setValue(h.to); h.done?.({ finished: true }); } });
+    await refresh();
+  };
+}
+
 beforeEach(() => {
   mockSeen.focused = true;
   mockSeen.header = [];
@@ -174,6 +194,8 @@ beforeEach(() => {
   setScreen(UPRIGHT, UPRIGHT_INSETS);
 });
 afterEach(async () => {
+  heldSpy?.mockRestore();
+  heldSpy = null;
   if (screen) await act(async () => { screen!.unmount(); });
   screen = null;
   jest.clearAllMocks();
@@ -308,8 +330,9 @@ describe('on its side: the open book fills the screen', () => {
     await open();
     await turn(TURNED, TURNED_INSETS);
     const want = sidewaysBook({ screenW: 915, screenH: 412, insets: TURNED_INSETS, aspect: aspect() });
-    // The tap alone (here the turn's animation ends at once once time runs):
-    // the turn has started, the leaf in flight over the book.
+    // The tap: the turn has started, the leaf in flight over the book (held
+    // there while it is checked).
+    const land = holdTurns();
     await act(async () => { one('preview-next').props.onClick({ currentTarget: null, target: null, nativeEvent: {}, stopPropagation() {} }); });
     expect(all('preview-page-turn')).toHaveLength(1);
     expect(flat(one('preview-left-side').props.style).opacity).toBe(0);
@@ -319,7 +342,7 @@ describe('on its side: the open book fills the screen', () => {
     expect(Number(place.left) + slid + want.pageW).toBe(want.closed.x);
     // Once it has landed: the open book in its own place, both sides showing
     // (drawn again here to read the slide's value; the phone moves it itself).
-    await refresh();
+    await land();
     await refresh();
     expect(all('preview-page-turn')).toHaveLength(0);
     expect(flat(one('preview-left-side').props.style).opacity).toBeUndefined();
@@ -426,40 +449,37 @@ describe('it looks like a real book (owner, 2026-11-03; src/builder/bookLook.tsx
     await refresh();
     await refresh();
     // The turn held mid-way (it plays for 0.8 s on the phone; a slow test run could miss it).
-    const held = jest.spyOn(Animated, 'timing').mockImplementation(() => ({ start: () => {}, stop: () => {}, reset: () => {} }) as unknown as Animated.CompositeAnimation);
-    try {
-      await act(async () => { one('preview-next').props.onClick({ currentTarget: null, target: null, nativeEvent: {}, stopPropagation() {} }); });
-      expect(all('preview-page-turn')).toHaveLength(1);
-      expect(all('preview-turn-bend')).toHaveLength(1);
-      expect(all('preview-turn-cast-right')).toHaveLength(1);
-      expect(all('preview-turn-cast-left')).toHaveLength(1);
-    } finally {
-      held.mockRestore();
-    }
+    const land = holdTurns();
+    await act(async () => { one('preview-next').props.onClick({ currentTarget: null, target: null, nativeEvent: {}, stopPropagation() {} }); });
+    expect(all('preview-page-turn')).toHaveLength(1);
+    expect(all('preview-turn-bend')).toHaveLength(1);
+    expect(all('preview-turn-cast-right')).toHaveLength(1);
+    expect(all('preview-turn-cast-left')).toHaveLength(1);
+    await land();
+    expect(all('preview-page-turn')).toHaveLength(0);
   });
 });
 
 describe('a finger turns the page (owner, 2026-11-03; src/builder/pageDrag.ts)', () => {
   /** The bend's opacity on the turning leaf: how far it stands up (0 flat, 1 upright). */
   const lifted = () => Number(flat(one('preview-turn-bend').props.style).opacity);
-  /** Wait for a let-go page to land. */
-  const landed = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 900)); }); await refresh(); };
-
-  async function openAtTwo() {
+  /** The book open at pages 2-3 on its side, every turn landed; then every
+   *  animation held until `land()` (holdTurns). */
+  async function openAtTwo(): Promise<() => Promise<void>> {
     await madeAlbum(SCENARIOS[0]);
     await open();
     await turn(TURNED, TURNED_INSETS);
-    await press('preview-next');
-    await refresh();
-    await refresh();
-    await press('preview-next');
-    await refresh();
-    await refresh();
+    for (let k = 0; k < 2; k++) {
+      const land = holdTurns();
+      await press('preview-next');
+      await land();
+    }
     expect(all('preview-page-turn')).toHaveLength(0);
+    return holdTurns();
   }
 
   it('the page follows the finger: it lifts as the finger crosses the book', async () => {
-    await openAtTwo();
+    const landed = await openAtTwo();
     const total = builder().albumPages.length;
     expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
     const up = await finger([-20, -100], { lift: false });
@@ -477,7 +497,7 @@ describe('a finger turns the page (owner, 2026-11-03; src/builder/pageDrag.ts)',
   });
 
   it('let go after a swipe: the page turns over', async () => {
-    await openAtTwo();
+    const landed = await openAtTwo();
     const total = builder().albumPages.length;
     await finger([-30, -90]);
     await landed();
@@ -486,7 +506,7 @@ describe('a finger turns the page (owner, 2026-11-03; src/builder/pageDrag.ts)',
   });
 
   it('let go after a little move: the page goes back down, the book where it was', async () => {
-    await openAtTwo();
+    const landed = await openAtTwo();
     const total = builder().albumPages.length;
     await finger([-15, -30]);
     await landed();
@@ -495,7 +515,7 @@ describe('a finger turns the page (owner, 2026-11-03; src/builder/pageDrag.ts)',
   });
 
   it('back the other way: a finger moving right turns back', async () => {
-    await openAtTwo();
+    const landed = await openAtTwo();
     const total = builder().albumPages.length;
     await finger([30, 90]);
     await landed();
@@ -504,7 +524,7 @@ describe('a finger turns the page (owner, 2026-11-03; src/builder/pageDrag.ts)',
   });
 
   it('a button while a let-go page is going back: the book is put back first', async () => {
-    await openAtTwo();
+    const landed = await openAtTwo();
     const total = builder().albumPages.length;
     await finger([-15, -30]);
     await press('preview-next');
