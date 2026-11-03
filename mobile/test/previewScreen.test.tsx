@@ -439,6 +439,80 @@ describe('it looks like a real book (owner, 2026-11-03; src/builder/bookLook.tsx
   });
 });
 
+describe('a finger turns the page (owner, 2026-11-03; src/builder/pageDrag.ts)', () => {
+  /** The bend's opacity on the turning leaf: how far it stands up (0 flat, 1 upright). */
+  const lifted = () => Number(flat(one('preview-turn-bend').props.style).opacity);
+  /** Wait for a let-go page to land. */
+  const landed = async () => { await act(async () => { await new Promise((r) => setTimeout(r, 900)); }); await refresh(); };
+
+  async function openAtTwo() {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await turn(TURNED, TURNED_INSETS);
+    await press('preview-next');
+    await refresh();
+    await refresh();
+    await press('preview-next');
+    await refresh();
+    await refresh();
+    expect(all('preview-page-turn')).toHaveLength(0);
+  }
+
+  it('the page follows the finger: it lifts as the finger crosses the book', async () => {
+    await openAtTwo();
+    const total = builder().albumPages.length;
+    expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
+    const up = await finger([-20, -100], { lift: false });
+    // The turn has begun: the book is where it goes, the leaf in the finger.
+    expect(all('preview-page-turn')).toHaveLength(1);
+    expect(textOf('preview-counter')).toBe(`4-5 / ${total}`);
+    const early = lifted();
+    expect(early).toBeGreaterThan(0);
+    await act(async () => { one('preview-book').props.onResponderMove({ nativeEvent: { touches: [{}], changedTouches: [{}], identifier: 0, locationX: 150, locationY: 200, pageX: 150, pageY: 200, target: 0, timestamp: 2000 }, touchHistory: { numberActiveTouches: 1, indexOfSingleActiveTouch: 0, mostRecentTimeStamp: 2000, touchBank: [{ touchActive: true, startPageX: 450, startPageY: 200, startTimeStamp: 1000, currentPageX: 150, currentPageY: 200, currentTimeStamp: 2000, previousPageX: 350, previousPageY: 200, previousTimeStamp: 1600 }] } }); });
+    expect(lifted()).toBeGreaterThan(early);
+    await up();
+    await landed();
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-counter')).toBe(`4-5 / ${total}`);
+  });
+
+  it('let go after a swipe: the page turns over', async () => {
+    await openAtTwo();
+    const total = builder().albumPages.length;
+    await finger([-30, -90]);
+    await landed();
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-counter')).toBe(`4-5 / ${total}`);
+  });
+
+  it('let go after a little move: the page goes back down, the book where it was', async () => {
+    await openAtTwo();
+    const total = builder().albumPages.length;
+    await finger([-15, -30]);
+    await landed();
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
+  });
+
+  it('back the other way: a finger moving right turns back', async () => {
+    await openAtTwo();
+    const total = builder().albumPages.length;
+    await finger([30, 90]);
+    await landed();
+    // The first spread: the inside of the cover and page 1.
+    expect(textOf('preview-counter')).toBe(`1 / ${total}`);
+  });
+
+  it('a button while a let-go page is going back: the book is put back first', async () => {
+    await openAtTwo();
+    const total = builder().albumPages.length;
+    await finger([-15, -30]);
+    await press('preview-next');
+    await landed();
+    expect(textOf('preview-counter')).toBe(`4-5 / ${total}`);
+  });
+});
+
 describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/orderStart.ts)', () => {
   /** To the last page, upright. */
   async function toTheEnd() {
@@ -552,6 +626,42 @@ describe('one picture size both ways up', () => {
 /** A finger moving `dx` points across the open book, through the book's own
  *  touch handlers in the order the phone calls them (the move that claims
  *  the touch, then the rest of the move, then the finger lifted). */
+/** A finger on the book moving through `steps` (points from where it went
+ *  down), slowly (`dt` ms between moves), then lifted unless `lift` is false.
+ *  Returns the book's handlers to lift it later. */
+async function finger(steps: number[], { dt = 200, lift = true } = {}) {
+  const h = one('preview-book').props;
+  const x0 = 450;
+  const y = 200;
+  let t = 1000;
+  let prev = x0;
+  const ev = (cur: number) => ({
+    nativeEvent: { touches: [{}], changedTouches: [{}], identifier: 0, locationX: cur, locationY: y, pageX: cur, pageY: y, target: 0, timestamp: t },
+    touchHistory: {
+      numberActiveTouches: 1, indexOfSingleActiveTouch: 0, mostRecentTimeStamp: t,
+      touchBank: [{
+        touchActive: true, startPageX: x0, startPageY: y, startTimeStamp: 1000,
+        currentPageX: cur, currentPageY: y, currentTimeStamp: t, previousPageX: prev, previousPageY: y, previousTimeStamp: t - dt,
+      }],
+    },
+  }) as unknown as GestureResponderEvent;
+  await act(async () => {
+    h.onStartShouldSetResponderCapture(ev(x0));
+    t += dt;
+    const first = ev(x0 + steps[0]);
+    h.onMoveShouldSetResponderCapture(first);
+    expect(h.onMoveShouldSetResponder(first)).toBe(true);
+    h.onResponderGrant(first);
+  });
+  for (const dx of steps) {
+    await act(async () => { t += dt; h.onResponderMove(ev(x0 + dx)); prev = x0 + dx; });
+  }
+  const last = x0 + steps[steps.length - 1];
+  const up = async () => { await act(async () => { t += dt; h.onResponderRelease(ev(last)); }); };
+  if (lift) await up();
+  return up;
+}
+
 async function swipe(dx: number) {
   const h = one('preview-book').props;
   const x0 = 450;

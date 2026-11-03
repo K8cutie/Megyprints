@@ -3388,9 +3388,21 @@ Room is kept around the pages for the board and the edges (`previewLayout`
 page itself is 22 points narrower than before (an 8x8 page upright on a
 412-point phone: 382 instead of 404; the book with its cover is still 404).
 Plain views and React Native's own gradients: no new library. Not yet:
-dragging the page corner with a finger (the page follows the finger), and
-the paper visibly curving as it turns; a swipe and the buttons turn the page
-as before. A **new APK** is needed.
+the paper visibly curving as it turns. A **new APK** is needed.
+
+## A finger turns the page (2026-11-03, `feat/port-page-drag`)
+
+The drawing's "dragging the corner": the moment a finger moves sideways on
+a page, the turn begins and the leaf follows the finger (flat where it
+started, upright halfway across, over at the end of its reach: most of both
+pages on the open book, the page's width one page at a time). Let go after
+a swipe (the website's `swipeTurn`, the same way), past halfway or on a
+quick flick: it finishes its turn; a little move or back the other way: it
+goes back down and the book is where it was. A button tapped while a page
+is going back counts from where the book really is. The cover still turns
+on a swipe (opening or closing the book slides it). The rules:
+`src/builder/pageDrag.ts`; the Preview: `TurnLayer`'s `drive`. A **new
+APK** is needed.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

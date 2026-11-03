@@ -57,6 +57,7 @@ import { orderCheck, orderSaveError, type OrderCheck } from '../lib/checkout/ord
 import { screenCanTurn, useTurnsWithThePhone } from '../lib/screenTurning';
 import { BOARD, BOOK_DRESS_Y, isSideways, pagePictureWidth, sidewaysBook, uprightBook, UPRIGHT_CHROME_GUESS, UPRIGHT_EDGE, type Box } from '../builder/previewLayout';
 import { BookUnder, bookSides, SpineShade, TURN_LOOK } from '../builder/bookLook';
+import { dragAngle, dragKeeps, dragProgress, dragReach, dragTurns, DRAG_SETTLE_MIN_MS } from '../builder/pageDrag';
 import type { PageRequest } from '../builder/pageImages';
 import { EDIT_PAGES } from '../editor/editorWords';
 import { COVER_ROUTE } from '../editor/cover';
@@ -127,17 +128,23 @@ const TURN_WAIT_MS = 1500;
  *  views): the leaf hinged at the spine turns from `from` to `to` degrees; its
  *  front shows until it stands on edge, then its back. The old page stays on
  *  show on the side the leaf hasn't reached (`patch`). */
-function TurnLayer({ plan, W, H, spineX, face, onDone }: { plan: TurnPlan; W: number; H: number; spineX: number; face: (f: TurnFace) => ReactNode; onDone: () => void }) {
-  const angle = useRef(new Animated.Value(plan.leaf.from)).current;
+function TurnLayer({ plan, W, H, spineX, face, onDone, drive }: {
+  plan: TurnPlan; W: number; H: number; spineX: number; face: (f: TurnFace) => ReactNode; onDone: () => void;
+  /** A finger turning the page (pageDrag.ts): the leaf's angle is its, and it plays nothing itself. */
+  drive?: Animated.Value;
+}) {
+  const own = useRef(new Animated.Value(plan.leaf.from)).current;
+  const angle = drive ?? own;
   // The screen re-renders during a turn (a page finishing drawing): the turn
   // carries on; only its own end (finished) ends it.
   const done = useRef(onDone);
   done.current = onDone;
   useEffect(() => {
-    const anim = Animated.timing(angle, { toValue: plan.leaf.to, duration: plan.ms, easing: EASE, useNativeDriver: true });
+    if (drive) return undefined;
+    const anim = Animated.timing(own, { toValue: plan.leaf.to, duration: plan.ms, easing: EASE, useNativeDriver: true });
     anim.start(({ finished }) => { if (finished) done.current(); });
     return () => anim.stop();
-  }, [angle, plan]);
+  }, [own, plan, drive]);
   const rotate = angle.interpolate({ inputRange: [-180, 0], outputRange: ['-180deg', '0deg'], extrapolate: 'extend' });
   const front = angle.interpolate({ inputRange: [-180, -90.01, -90, 0], outputRange: [0, 0, 1, 1] });
   const back = angle.interpolate({ inputRange: [-180, -90, -89.99, 0], outputRange: [1, 1, 0, 0] });
@@ -243,7 +250,7 @@ export default function Preview() {
   const [coverAt, setCoverAt] = useState<number | null>(() => (index === 0 ? 0 : null));
   const onCover = coverAt === index;
   const pos: PreviewPosition = { view, index, total, onCover, hasCover: true };
-  const [turn, setTurn] = useState<{ plan: TurnPlan; n: number } | null>(null);
+  const [turn, setTurn] = useState<{ plan: TurnPlan; n: number; drive?: Animated.Value } | null>(null);
   const seq = useRef(0);
   const [notDrawn, setNotDrawn] = useState<Record<string, string[]>>({});
 
@@ -290,9 +297,25 @@ export default function Preview() {
   // A turn shows its leaf's pages at once: they are drawn first (usually
   // already, ahead of time below), at most TURN_WAIT_MS, then the book turns.
   const turning = useRef(false);
-  const go = async (t: Turn | null) => {
+  // A page a finger is turning (pageDrag.ts): the book is already where the
+  // turn goes; let go short of a swipe, `undo` puts it back.
+  type Where = { pos: PreviewPosition; coverAt: number | null };
+  const drag = useRef<{ n: number; plan: TurnPlan; angle: Animated.Value; dir: 'forward' | 'back'; reach: number; before: Where; undo: () => void; back: Animated.CompositeAnimation | null } | null>(null);
+  /** A page going back down after a finger let it go: the book is put back
+   *  now, and where it is, is where it was (the screen hasn't caught up). */
+  const settleDrag = (): Where => {
+    const d = drag.current;
+    drag.current = null;
+    if (d?.back) {
+      d.back.stop();
+      d.undo();
+      return d.before;
+    }
+    return { pos, coverAt };
+  };
+  const go = async (t: Turn | null, from: PreviewPosition) => {
     if (!t || turning.current) return;
-    const plan = planTurn(pos, t);
+    const plan = planTurn(from, t);
     if (plan && text) {
       turning.current = true;
       const faces = [plan.leaf.front, plan.leaf.back, plan.patch?.face].filter((f): f is TurnFace => !!f);
@@ -300,25 +323,95 @@ export default function Preview() {
       await Promise.race([Promise.all(reqs.map((r) => preparePagePicture(text, r))), new Promise((r) => setTimeout(r, TURN_WAIT_MS))]);
       turning.current = false;
     }
-    if (t.cover) setCoverAt(index);
+    if (t.cover) setCoverAt(from.index);
     else {
       setCoverAt(null);
-      if (t.index !== index) builder.goToPage(t.index);
+      if (t.index !== from.index) builder.goToPage(t.index);
     }
     setTurn(plan ? { plan, n: ++seq.current } : null);
   };
-  const back = () => { void go(turnBack(pos)); };
-  const forward = () => { void go(turnForward(pos)); };
-  const goRef = useRef({ back, forward });
-  goRef.current = { back, forward };
-  const swipe = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
-    onPanResponderRelease: (_e, g) => {
-      const s = swipeTurn(g.dx, g.dy);
-      if (s === 'forward') goRef.current.forward();
-      else if (s === 'back') goRef.current.back();
-    },
-  }), []);
+  const back = () => { const from = settleDrag().pos; void go(turnBack(from), from); };
+  const forward = () => { const from = settleDrag().pos; void go(turnForward(from), from); };
+
+  // A finger on a page turns it as it moves (owner, 2026-11-03: the page
+  // follows the finger). The cover still turns on a swipe, as before.
+  const startDrag = (dir: 'forward' | 'back'): boolean => {
+    const before = settleDrag();
+    const from = before.pos;
+    if (turning.current) return false;
+    const t = dir === 'forward' ? turnForward(from) : turnBack(from);
+    // To the cover: a swipe, as before.
+    if (!t || t.cover) return false;
+    const plan = planTurn(from, t);
+    if (!plan || !dragTurns(plan, from.onCover, false)) return false;
+    setCoverAt(null);
+    if (t.index !== from.index) builder.goToPage(t.index);
+    const angle = new Animated.Value(plan.leaf.from);
+    const n = ++seq.current;
+    drag.current = {
+      n, plan, angle, dir, before, back: null,
+      reach: dragReach(plan.layout, singleW),
+      undo: () => { setCoverAt(before.coverAt); if (before.pos.index !== t.index) builder.goToPage(before.pos.index); },
+    };
+    setTurn({ plan, n, drive: angle });
+    return true;
+  };
+  const moveDrag = (dx: number) => {
+    const d = drag.current;
+    if (d && !d.back) d.angle.setValue(dragAngle(d.plan, d.dir, dx, d.reach));
+  };
+  const endDrag = (dx: number, dy: number, vx: number) => {
+    const d = drag.current;
+    if (!d || d.back) return;
+    const progress = dragProgress(d.dir, dx, d.reach);
+    const keep = dragKeeps(d.dir, dx, dy, vx, progress);
+    const toValue = keep ? d.plan.leaf.to : d.plan.leaf.from;
+    const ms = Math.max(DRAG_SETTLE_MIN_MS, Math.round(d.plan.ms * (keep ? 1 - progress : progress)));
+    const anim = Animated.timing(d.angle, { toValue, duration: ms, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    const end = () => setTurn((cur) => (cur && cur.n === d.n ? null : cur));
+    if (keep) {
+      drag.current = null;
+      anim.start(({ finished }) => { if (finished) end(); });
+    } else {
+      d.back = anim;
+      anim.start(({ finished }) => {
+        if (!finished || drag.current !== d) return;
+        drag.current = null;
+        d.undo();
+        end();
+      });
+    }
+  };
+  const goRef = useRef({ back, forward, startDrag, moveDrag, endDrag });
+  goRef.current = { back, forward, startDrag, moveDrag, endDrag };
+  const swipe = useMemo(() => {
+    let dragging = false;
+    let tried = false;
+    const release = (dx: number, dy: number, vx: number) => {
+      if (dragging) goRef.current.endDrag(dx, dy, vx);
+      else {
+        const s = swipeTurn(dx, dy);
+        if (s === 'forward') goRef.current.forward();
+        else if (s === 'back') goRef.current.back();
+      }
+      dragging = false;
+      tried = false;
+    };
+    return PanResponder.create({
+      onMoveShouldSetPanResponder: (_e, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy),
+      onPanResponderGrant: () => { dragging = false; tried = false; },
+      onPanResponderMove: (_e, g) => {
+        if (!tried && g.dx !== 0) {
+          tried = true;
+          dragging = goRef.current.startDrag(g.dx < 0 ? 'forward' : 'back');
+        }
+        if (dragging) goRef.current.moveDrag(g.dx);
+      },
+      onPanResponderRelease: (_e, g) => release(g.dx, g.dy, g.vx),
+      // Taken away (the screen scrolling): the page goes back.
+      onPanResponderTerminate: () => release(0, 0, 0),
+    });
+  }, []);
 
   const faceProps = { W: singleW, H, px, pages, cover: builder.coverFront, photos: builder.uploadedPhotos, albumSize: builder.albumSize, text };
 
@@ -460,7 +553,7 @@ export default function Preview() {
       )}
       {!hideLeft && <SpineShade shows={layout} W={singleW} H={H} sides={sides} />}
       {turnNow && (
-        <TurnLayer key={turnNow.n} plan={turnNow.plan} W={singleW} H={H} spineX={layout === 'spread' ? singleW : 0} face={face}
+        <TurnLayer key={turnNow.n} plan={turnNow.plan} W={singleW} H={H} spineX={layout === 'spread' ? singleW : 0} face={face} drive={turnNow.drive}
           onDone={() => setTurn((t) => (t && t.n === turnNow.n ? null : t))} />
       )}
     </View>
