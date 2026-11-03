@@ -116,7 +116,7 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByTestId('order-total')).toHaveTextContent(peso(softPrice.payTotal));
     expect(screen.getByText('Free')).toBeOnTheScreen();
     expect(screen.getByText(/Free shipping \(₱200 value\)/)).toBeOnTheScreen();
-    expect(screen.getByText(/5 years of memory hosting/)).toBeOnTheScreen();
+    expect(screen.getByText(/Memories stay live for 5 years/)).toBeOnTheScreen();
     // Hardbound changes the price, from the same list.
     await fireEvent.press(screen.getByText('Hardbound'));
     expect(await screen.findByText(`Place order · pay ${peso(hardPrice.total)} by bank transfer`)).toBeOnTheScreen();

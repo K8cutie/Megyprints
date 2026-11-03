@@ -408,6 +408,14 @@ describe('an album with a video memory', () => {
     expect(pesos() - before).toBe(99);
     expect(screen.getByTestId('order-term-10').props.accessibilityState).toEqual(expect.objectContaining({ checked: true }));
     expect(screen.getByTestId('order-term-5').props.accessibilityState).toEqual(expect.objectContaining({ checked: false }));
+    // Owner, 2026-11-04: the box said "5 years of memory hosting" beside a
+    // 20-year line. It names the longer term, in the picker's words.
+    expect(screen.getByTestId('order-included')).toHaveTextContent(/Memories stay live for 5 years \(you added 5 more years\)/);
+    await fireEvent.press(screen.getByTestId('order-term-20'));
+    expect(screen.getByTestId('order-included')).toHaveTextContent(/Memories stay live for 5 years \(you added 15 more years\)/);
+    expect(screen.queryByText(/QR memories/)).toBeNull();
+    expect(screen.getAllByText(/7 living-memory QRs included/).length).toBeGreaterThan(0);
+    await fireEvent.press(screen.getByTestId('order-term-10'));
     await fillDetails();
     await fireEvent.press(screen.getByTestId('order-place'));
     await screen.findByTestId('pay-order-placed').catch(() => null);

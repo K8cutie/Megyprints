@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
-import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES } from '@web/lib/pricing';
+import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES, includedHostingLine } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
@@ -544,7 +544,7 @@ export default function OrderScreen() {
           <Text style={styles.strongSmall}>Included with your album</Text>
           <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>
           <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>
-          {price.includedYears !== null && <Text style={styles.small}>✓ {price.includedYears} years of memory hosting</Text>}
+          {price.includedYears !== null && <Text style={styles.small}>✓ {includedHostingLine(price.includedYears, price.effectiveYears)}</Text>}
         </View>
         {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
           // Order.tsx: "How long should your memories stay live?"
