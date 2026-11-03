@@ -26,7 +26,7 @@ export function TesterCodeBox({ tester, onChange, check }: {
             <Text style={styles.link}>Remove</Text>
           </Pressable>
         </View>
-        {/* This build checks only the code's shape (the shop's check is a database write). */}
+        {/* The test album checks only the code's shape (the shop's check is a database write). */}
         {tester.unchecked && <Text style={styles.unchecked} testID="tester-code-unchecked">Test version: this code was not checked with the shop. Here, any code of 4 to 24 letters and numbers shows as free.</Text>}
       </View>
     );

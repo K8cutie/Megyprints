@@ -151,9 +151,11 @@ describe('checkout on the album "Order this album" opened it with', () => {
     await screen.findByTestId('order-own-album');
     await fillDetails();
     if (tester) {
+      fake.rpc.check_tester_code = { data: { ok: true, code: 'MEGYTEST' }, error: null };
       await fireEvent.press(screen.getByText('Have a tester code?'));
       await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
       await fireEvent.press(screen.getByTestId('tester-code-apply'));
+      expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
     }
     await fireEvent.press(screen.getByTestId('order-place'));
   }
@@ -161,6 +163,11 @@ describe('checkout on the album "Order this album" opened it with', () => {
   it('a tester order: sent for THAT album from the account\'s copy; "Test order placed", its number', async () => {
     await place(true);
     expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    // The code was checked with the database first, as on the website: the
+    // order's tester code is taken only from an account that checked it
+    // (0057's trigger; without the check: "MEGYTEST doesn't work any more").
+    expect(rec.rpcs).toContainEqual({ name: 'check_tester_code', args: { p_code: 'MEGYTEST' } });
+    expect(screen.queryByTestId('tester-code-unchecked')).toBeNull();
     expect(screen.getByTestId('order-done-number')).toHaveTextContent('Order MP-2026-TEST01');
     expect(mockSend.calls).toHaveLength(1);
     const c = mockSend.calls[0];
@@ -169,6 +176,22 @@ describe('checkout on the album "Order this album" opened it with', () => {
     // Nothing of the test version: no "Stopped before sending", no test notes.
     expect(screen.queryByText('Stopped before sending')).toBeNull();
     expect(screen.queryByTestId('order-own-album')).toBeNull();
+  });
+
+  it.each([
+    ['wrong', "That code doesn't work. Check the spelling."],
+    ['too_many', 'Too many wrong codes. Try again in an hour.'],
+  ])('a code the database refuses (%s): its words, and the album keeps its price', async (reason, words) => {
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    fake.rpc.check_tester_code = { data: { ok: false, reason }, error: null };
+    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
+    await fireEvent.press(screen.getByTestId('tester-code-apply'));
+    expect(await screen.findByText(words)).toBeOnTheScreen();
+    expect(rec.rpcs).toContainEqual({ name: 'check_tester_code', args: { p_code: 'MEGYTEST' } });
+    expect(screen.queryByTestId('tester-code-on')).toBeNull();
+    expect(screen.queryByTestId('order-tester-line')).toBeNull();
   });
 
   it('the bar follows the real steps, in the website\'s words', async () => {

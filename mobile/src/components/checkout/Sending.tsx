@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import type { PlaceProgress } from '@web/lib/placeProgress';
 import type { CoverType, MaterialType } from '@web/pages/builder/types';
-import { BACKGROUND_NOTE, startKeeper, type Keeper } from '../../lib/checkout/backgroundSend';
+import { BACKGROUND_NOTE, startKeeper, startSending, type Keeper } from '../../lib/checkout/backgroundSend';
 import type { CheckoutAlbum, PlaceOrderPlan } from '../../lib/checkout/orderPayload';
 import { KEEP_OPEN_NOTE, sendFrame } from '../../lib/checkout/placeRun';
 import type { PlacedOrder, SendStep } from '../../lib/checkout/sendOrder';
@@ -41,11 +41,14 @@ export function Sending({ plan, album, cover, material, text, placed, bookingNum
     let prev: PlaceProgress | null = null;
     let keeper: Keeper | null = null;
     const first = sendFrame(null, { step: 'order' });
+    // Until the send settles, the "new version is ready" box waits (a restart
+    // would stop the order half-way).
+    const sendDone = startSending();
     void (async () => {
       // Notifications asked for first (Android shows its question), then the
       // order is made and sent.
       keeper = await startKeeper(first.message);
-      if (!live) { void keeper.end(); return; }
+      if (!live) { void keeper.end(); sendDone(); return; }
       setBackground(keeper.background);
       const k = keeper;
       const onStep = (s: SendStep) => {
@@ -65,8 +68,9 @@ export function Sending({ plan, album, cover, material, text, placed, bookingNum
         .catch(async (e: unknown) => {
           await k.failed(e instanceof Error && e.message ? e.message : SOMETHING_WRONG);
           if (live) handlers.current.onFailed(e);
-        });
-    })();
+        })
+        .finally(sendDone);
+    })().catch(sendDone); // nothing was sent: the box may show again
     return () => { live = false; void keeper?.end(); };
     // One send per visit of this step.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,0 +1,37 @@
+// The app's own small native module for Google Play's in-app updates (see
+// ../index.ts). Built from source by Expo autolinking, which finds every
+// folder under mobile/modules.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.megyprints'
+version = '1.0.0'
+
+// MEGY_FAKE_APP_UPDATE=1: a pretend Play update, so the emulator (never
+// installed from Play) shows Google's part and the "ready" box, as 1.x's
+// -PfakeAppUpdate=true. Never in the Play build.
+def fakeAppUpdate = System.getenv('MEGY_FAKE_APP_UPDATE') == '1'
+if (fakeAppUpdate && System.getenv('MEGY_PLAY') == '1') {
+  throw new GradleException('MEGY_FAKE_APP_UPDATE is for the emulator only, never in the Play build.')
+}
+
+android {
+  namespace "expo.modules.megyappupdate"
+  buildFeatures {
+    buildConfig true
+  }
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+    buildConfigField "boolean", "FAKE_APP_UPDATE", String.valueOf(fakeAppUpdate)
+  }
+}
+
+dependencies {
+  // Google Play's in-app updates, the version 1.x has (android-native variables.gradle).
+  implementation "com.google.android.play:app-update:2.1.0"
+  // PackageInfoCompat (the app already has a newer copy: Gradle keeps the newest).
+  implementation "androidx.core:core:1.13.1"
+}

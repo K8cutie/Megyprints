@@ -12,11 +12,13 @@
    after Nov 9). test/checkoutParity.test.ts runs the website's functions
    beside these and fails on any difference.
 
-   NOT CALLED IN THIS BUILD: check_tester_code writes a row (each try is
-   counted, 10 wrong an hour), and this build never writes to the live
-   database. The checkout here uses checkTesterCodeOffline, which only checks
-   the code's shape and says so in the test panel. checkTesterCode (below) is
-   the real call, ready for when ordering is switched on.
+   Ordering your own album calls checkTesterCode (below): check_tester_code
+   writes a row (each try is counted, 10 wrong an hour), and the order's
+   trigger takes a code only from an account with a working try in the last
+   day. Without that call every tester order failed with "MEGYTEST doesn't
+   work any more" (2.0.1, owner's phone, 2026-11-04). The test album writes
+   nothing, so it uses checkTesterCodeOffline: the code's shape only, and
+   the form says so.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { RpcClient } from './rpcClient';
 

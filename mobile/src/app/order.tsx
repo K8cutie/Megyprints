@@ -60,7 +60,7 @@ import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checko
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
 import { checkoutPrice, peso, placeOrderLabel } from '../lib/checkout/price';
 import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
-import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
+import { checkTesterCode, checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { albumClipTier } from '../lib/memories/albumTier';
@@ -527,7 +527,10 @@ export default function OrderScreen() {
         {!eventLink && price.ready && !tester && price.wasTotal !== null && (
           <Text style={styles.savings} testID="order-savings">New lower price: you save {peso(price.wasTotal - price.total)}</Text>
         )}
-        {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => checkTesterCodeOffline(typed, !!userId)} />}
+        {/* Your own album: the database checks the code, as on the website (its
+            trigger takes a code only from an account that checked it). The
+            test album writes nothing, so it checks the code's shape only. */}
+        {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => (live && userId ? checkTesterCode(supabase, typed, supabaseConfigured) : checkTesterCodeOffline(typed, !!userId))} />}
         <View style={styles.included} testID="order-included">
           <Text style={styles.strongSmall}>Included with your album</Text>
           <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>
