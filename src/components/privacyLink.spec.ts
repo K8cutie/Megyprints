@@ -66,6 +66,23 @@ describe('the privacy policy is one tap away', () => {
   });
 });
 
+/* The 2.0 Android app finds faces with Google ML Kit on the phone
+   (mobile/src/lib/faceModel.ts). The photos never leave the phone, but ML
+   Kit sends Google diagnostics (its Android data-disclosure page), so the
+   policy names it before any 2.0 build reaches Play (owner, 2026-11-03). */
+describe('the policy names Google ML Kit, the 2.0 app\'s face finder', () => {
+  it('what it does, that photos are never sent, and what it does send', async () => {
+    await act(async () => { root.render(createElement(MemoryRouter, null, createElement(Privacy))); });
+    const words = text(q('privacy-ml-kit'));
+    expect(words).toContain('Google ML Kit finds the faces in your photos on your phone');
+    expect(words).toContain('Your photos are never sent anywhere for this.');
+    expect(words).toContain("your phone's make, model and Android version");
+    const providers = [...host.querySelectorAll('section')].find((s) => s.querySelector('h2')?.textContent === 'Service providers we rely on')!;
+    expect(text(providers)).toContain('Google ML Kit — finds faces in your photos on your phone');
+    expect(text(host)).not.toContain("browser's local storage");
+  });
+});
+
 describe('the policy says how people really pay', () => {
   it('InstaPay QR and an optional receipt, no cash on delivery', async () => {
     await act(async () => { root.render(createElement(MemoryRouter, null, createElement(Privacy))); });
