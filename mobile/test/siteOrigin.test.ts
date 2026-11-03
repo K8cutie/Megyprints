@@ -16,6 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { originOf, siteFetch, withSiteOrigin } from '../src/lib/siteOrigin';
 import { PHOTO_QUOTES_URL, writeLinesForPhotos } from '../src/editor/text/photoQuotes';
 import { LIVE_DELETE_ACCOUNT_URL } from '../src/lib/account/deleteAccount';
@@ -47,7 +48,8 @@ describe('the Origin the app sends', () => {
 describe('the website\'s real guard (api/_guard.mjs)', () => {
   /** The guard's answer for these request headers, with ALLOWED_ORIGINS as given. */
   function guardSays(allowed: string, headers: Record<string, string>): unknown {
-    const script = `import { guard } from ${JSON.stringify(path.join(REPO, 'api', '_guard.mjs'))};
+    // A file:// address: Windows (where CI runs) can't load a module by a plain D:\ path.
+    const script = `import { guard } from ${JSON.stringify(pathToFileURL(path.join(REPO, 'api', '_guard.mjs')).href)};
       const lower = Object.fromEntries(Object.entries(${JSON.stringify(headers)}).map(([k, v]) => [k.toLowerCase(), v]));
       process.stdout.write(JSON.stringify(guard({ headers: { 'x-forwarded-for': '203.0.113.' + Math.floor(Math.random() * 200), ...lower }, body: {} }) ?? 'through'));`;
     const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], { env: { ...process.env, ALLOWED_ORIGINS: allowed }, encoding: 'utf8' });
