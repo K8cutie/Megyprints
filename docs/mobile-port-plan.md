@@ -901,8 +901,10 @@ address, which Phase 3's `appPhotos.ts` keeps today).
      data disclosure" page lists it).
   2. **Privacy page** (`src/pages/Privacy.tsx`, "Service providers we rely
      on"): add "Google ML Kit: finds faces on your phone; your photos are
-     never sent". Not added yet: no app that customers have uses ML Kit
-     (the Play testers' app is the 1.x shell).
+     never sent". Written on 2026-11-03: PR #264 into main (the paragraph
+     says what ML Kit sends, per Google's disclosure page; it names "2.0 and
+     later", so it is true while 1.x is the Play app). It goes live when
+     merged, before 2.0 reaches testers.
   3. Optional, for no uploads at all: remove ML Kit's uploader service with a
      manifest `tools:node="remove"` in a config plugin, and run
      `tools/photo-check` again to see ML Kit still works. Not tried.
@@ -3403,6 +3405,36 @@ is going back counts from where the book really is. The cover still turns
 on a swipe (opening or closing the book slides it). The rules:
 `src/builder/pageDrag.ts`; the Preview: `TurnLayer`'s `drive`. A **new
 APK** is needed.
+
+## Privacy Policy and Terms of Service in the app (2026-11-03, `feat/port-legal-links`)
+
+Owner: "the privacy clause and all other applicable clauses pls add it to
+2.0". Google Play's User Data policy wants the privacy policy linked in Play
+Console and inside the app. 1.x had it through the website's footer (#218).
+2.0 had no link to it, none to the Terms (#233), and not the website's "you
+agree to the Terms and you're 18 or older" line. Now (`src/lib/legal.ts`,
+`src/components/LegalLinks.tsx`), each opening the website's own page in the
+browser:
+
+- the start screen: Privacy Policy and Terms of Service under everything, in
+  a white pill over the photo;
+- the start screen's menu: the same two, small, under its places (the menu
+  closes first);
+- Sign in: "By signing in you agree to our Terms of Service and confirm
+  you're 18 or older." In the app, Sign in with Google is how a new account
+  is made, so the website's Create Account line goes here;
+- Place order: the website's line, "By placing an order…";
+- My profile: the two links under Delete my account.
+
+The agree line is the whole line to tap, not only its two words.
+The Terms page, its line and `MIN_AGE` came to main on Oct 31, after
+native-2.0 last took main (Oct 28), so the words are copied in `legal.ts`
+until main is merged in. `test/legalLinks.test.tsx`, `checkoutWalk` and
+`profileWalk` hold them; they fail on the screens before this change. Walked
+on the emulator in the Play build (2.0.0, code 100, installed over 1.3.0):
+both links on the start screen and in the menu, and the Sign in line, open
+the live pages; Back comes back to the app. The Privacy page's ML Kit
+paragraph is website PR #264. A **new APK** is needed.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

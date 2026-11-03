@@ -117,6 +117,16 @@ describe('the checkout screen, walked', () => {
     expect(rec.rpcs.filter((r) => r.name === 'public_price_schedule')).toHaveLength(1);
   });
 
+  it('under Place order, the website\'s line: placing an order agrees to the Terms, 18 or older (test/legalLinks.test.tsx)', async () => {
+    const { Linking } = jest.requireActual('react-native') as typeof import('react-native');
+    const spy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+    await openScreen();
+    expect(screen.getByTestId('order-agree')).toHaveTextContent("By placing an order you agree to our Terms of Service and confirm you're 18 or older.");
+    await fireEvent.press(screen.getByTestId('order-agree'));
+    expect(spy).toHaveBeenCalledWith('https://megyprints.vercel.app/#/terms');
+    spy.mockRestore();
+  });
+
   it('Place order on an empty form says what to fix under each box, and sends nothing', async () => {
     await openScreen();
     await fireEvent.press(screen.getByTestId('order-place'));

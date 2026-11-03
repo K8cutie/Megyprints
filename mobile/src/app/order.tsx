@@ -46,6 +46,7 @@ import { PlaceProgressBar } from '../components/checkout/PlaceProgressBar';
 import { Sending } from '../components/checkout/Sending';
 import { TestPanel } from '../components/checkout/TestPanel';
 import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
+import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
@@ -565,12 +566,16 @@ export default function OrderScreen() {
       {tooFew ? (
         <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn)}</Text></View>
       ) : askSecond && openOrder ? null : (
-        <Button
-          label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
-          busy={!price.ready && (prices.loading || prices.retrying)}
-          onPress={onPlace}
-          testID="order-place"
-        />
+        <>
+          <Button
+            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
+            busy={!price.ready && (prices.loading || prices.retrying)}
+            onPress={onPlace}
+            testID="order-place"
+          />
+          {/* The website's line under Place order (Order.tsx, #233). */}
+          <TermsAgreeLine by="placing an order" testID="order-agree" />
+        </>
       )}
 
       {/* The question takes Place order's place: its filled button is the order

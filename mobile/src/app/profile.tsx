@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Button } from '../components/Button';
 import { Field } from '../components/checkout/Field';
+import { LegalLinks } from '../components/LegalLinks';
 import { SECTION_TEXT, SECTION_TITLE } from '../lib/account/deletionWords';
 import {
   accountName,
@@ -159,6 +160,9 @@ export default function Profile() {
           <Text style={styles.deleteText}>{SECTION_TITLE}</Text>
         </Pressable>
       </View>
+
+      {/* What is kept and deleted is in the Privacy Policy (src/lib/legal.ts). */}
+      <LegalLinks testID="profile-legal" />
     </ScrollView>
   );
 }

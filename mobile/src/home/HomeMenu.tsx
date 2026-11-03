@@ -1,9 +1,12 @@
 /* The start screen's menu (the website's phone menu, src/components/
    Navbar.tsx: the cream page over everything, big Playfair links in the
    middle, a cross to close). The account's places when signed in; Sign in
-   when not; Megyprints Events either way. A tap closes it and goes there. */
+   when not; Megyprints Events either way; under them, small, Privacy Policy
+   and Terms of Service, as the website's menu has. A tap closes it and goes
+   there. */
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LegalLinks } from '../components/LegalLinks';
 import { useType } from './homeFonts';
 import { Cross } from './homeIcons';
 import { HOME } from './homeWords';
@@ -30,6 +33,7 @@ export function HomeMenu({ items, note, close }: { items: MenuItem[]; note?: str
               <Text style={[t.display, styles.itemText]}>{it.label}</Text>
             </Pressable>
           ))}
+          <LegalLinks color={INK.soft} onOpen={close} style={styles.legal} testID="menu-legal" />
         </View>
       </View>
     </Modal>
@@ -44,5 +48,6 @@ const styles = StyleSheet.create({
   note: { fontSize: 14, color: INK.soft, marginBottom: 8 },
   item: { minHeight: 48, paddingHorizontal: 24, justifyContent: 'center' },
   itemText: { fontSize: 24, color: INK.dark, textAlign: 'center' },
+  legal: { marginTop: 14 },
   pressed: { opacity: 0.6 },
 });

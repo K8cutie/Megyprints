@@ -4,6 +4,7 @@ import { googleRefusedNotice } from '@web/lib/accountErrors';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '../components/Button';
+import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { startGoogleSignIn } from '../lib/googleSignIn';
@@ -211,6 +212,9 @@ export default function SignIn() {
         <Button label={busy ? 'Signing in' : 'Sign in'} busy={busy} onPress={submit} style={styles.button} testID="sign-in" />
 
         {googleBlock(false)}
+        {/* The website's line under Create Account: in the app, Sign in with
+            Google is how a new account is made. */}
+        <TermsAgreeLine by="signing in" style={styles.agree} testID="sign-in-agree" />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -242,4 +246,5 @@ const styles = StyleSheet.create({
   error: { color: colors.bad, fontSize: 15, lineHeight: 21, marginTop: space.md },
   button: { marginTop: space.lg },
   note: { fontSize: 14, color: colors.muted, marginTop: space.lg, lineHeight: 20 },
+  agree: { marginTop: space.md },
 });

@@ -124,6 +124,18 @@ describe('My Profile', () => {
     expect(screen.getByText("Permanently deletes your account, your albums, your saved photos, your memory videos and any QR memory links. This can't be undone.")).toBeTruthy();
   });
 
+  it('Privacy Policy and Terms of Service at the bottom open the website\'s pages (test/legalLinks.test.tsx)', async () => {
+    const { Linking } = jest.requireActual('react-native') as typeof import('react-native');
+    const spy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+    await render(<Profile />);
+    expect(screen.getByTestId('profile-legal-privacy')).toHaveTextContent('Privacy Policy');
+    await fireEvent.press(screen.getByTestId('profile-legal-privacy'));
+    expect(spy).toHaveBeenLastCalledWith('https://megyprints.vercel.app/#/privacy');
+    await fireEvent.press(screen.getByTestId('profile-legal-terms'));
+    expect(spy).toHaveBeenLastCalledWith('https://megyprints.vercel.app/#/terms');
+    spy.mockRestore();
+  });
+
   it('signed out: goes to sign in', async () => {
     mockAuth.session = null;
     await render(<Profile />);

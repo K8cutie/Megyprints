@@ -5,7 +5,8 @@
    (src/home/HomeCards.tsx). The app's own parts stay: Continue my album /
    Start a new album in the Albums card, Sign in at the top, the account's
    places in their own card when signed in, and, in the dev build only, the
-   test buttons and the "Test version" note at the bottom.
+   test buttons and the "Test version" note at the bottom. Under everything,
+   the website footer's Privacy Policy and Terms of Service (src/lib/legal.ts).
    ══════════════════════════════════════════════════════════════════════════ */
 import { router, useIsFocused } from 'expo-router';
 import { useState } from 'react';
@@ -13,6 +14,7 @@ import { Alert, Animated, type ImageSourcePropType, Linking, Pressable, ScrollVi
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { releasePickedFiles } from '../../modules/photo-files';
 import { useBuilder } from '../builder/BuilderProvider';
+import { LegalLinks } from '../components/LegalLinks';
 import { albumInProgress, resumeRoute, startNewNote } from '../builder/albumFlow';
 import { AlbumsCard, CardButton, EventsCard, INK, StartCreating } from '../home/HomeCards';
 import { HomeMenu, type MenuItem } from '../home/HomeMenu';
@@ -160,6 +162,8 @@ export default function Start() {
                   <CardButton label="Checkout with a test album" onPress={() => go('/order')} testID="go-order" tall={false} />
                 </View>
               )}
+              {/* The website's footer links (Google Play wants the privacy policy inside the app). */}
+              <LegalLinks color={INK.label} style={styles.legal} testID="home-legal" />
             </ScrollView>
           </SafeAreaView>
           {menu && <HomeMenu items={menuItems} note={session ? HOME.signedInAs(email) : undefined} close={() => setMenu(false)} />}
@@ -192,5 +196,7 @@ const styles = StyleSheet.create({
   link: { alignSelf: 'center', padding: 8 },
   linkText: { fontSize: 15, color: INK.peach, textDecorationLine: 'underline' },
   note: { fontSize: 13, lineHeight: 18, color: INK.soft, textAlign: 'center' },
+  // A pill like Sign in's: the links read over the photo.
+  legal: { alignSelf: 'center', paddingHorizontal: 12, borderRadius: 22, backgroundColor: 'rgba(255, 255, 255, 0.92)' },
   pressed: { opacity: 0.85 },
 });
