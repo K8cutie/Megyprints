@@ -22,4 +22,25 @@
         <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
     </style>
+
+    <!-- AppUpdatePrompt's "new version is ready" box. "Restart to update" is the one filled
+         button, terracotta with white text like the website's main buttons (4.5:1, light and
+         dark). "Later" is plain text in the normal text colour. No capitals. -->
+    <style name="UpdateDialog" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="colorAccent">@color/megy_terracotta</item>
+        <item name="buttonBarPositiveButtonStyle">@style/UpdateDialog.Restart</item>
+        <item name="buttonBarNegativeButtonStyle">@style/UpdateDialog.Later</item>
+    </style>
+
+    <style name="UpdateDialog.Restart" parent="Widget.AppCompat.Button.Colored">
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="textAllCaps">false</item>
+    </style>
+
+    <style name="UpdateDialog.Later" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">?android:attr/textColorPrimary</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="textAllCaps">false</item>
+    </style>
 </resources>

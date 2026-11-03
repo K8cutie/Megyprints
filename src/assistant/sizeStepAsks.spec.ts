@@ -118,7 +118,7 @@ afterEach(async () => { await act(async () => { root.unmount(); }); host.remove(
 
 const guide = () => document.querySelector('[aria-label="Megy\'s guide"]');
 // (The heading types itself out; the step count is there at once.)
-const onSizeStep = () => !!guide()?.textContent?.includes('Step 2 of 7');
+const onSizeStep = () => !!guide()?.textContent?.includes('Step 2 of 4');
 const sizeOnCard = (label: string) => [...(guide()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.startsWith(label)) ?? null;
 const tap = async (el: Element | null) => {
   expect(el).not.toBeNull();

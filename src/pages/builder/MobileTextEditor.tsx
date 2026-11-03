@@ -95,6 +95,8 @@ export default function MobileTextEditor({ initial, onSave, onClose, box }: {
       <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-[#FAFAFA]">
         <textarea
           ref={taRef}
+          // A lesson's coach mark points here (lib/lessonTips ALBUM_TIPS.caption).
+          data-coach="text-box"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type your text…"

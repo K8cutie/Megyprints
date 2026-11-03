@@ -4,4 +4,8 @@
     <string name="title_activity_main">Megy Prints</string>
     <string name="package_name">com.megyprints.app</string>
     <string name="custom_url_scheme">com.megyprints.app</string>
+    <!-- AppUpdatePrompt: the box once a new version has downloaded -->
+    <string name="update_ready">A new version of Megy Prints is ready.</string>
+    <string name="update_restart">Restart to update</string>
+    <string name="update_later">Later</string>
 </resources>

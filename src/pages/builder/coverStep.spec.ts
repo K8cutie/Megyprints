@@ -33,7 +33,7 @@ vi.mock('../../lib/photoCheck', () => ({
   photoQuality: (p: { q: number }) => p.q,
 }));
 
-import CoverEditor, { COVER_PHOTOS_SHOWN } from './CoverEditor';
+import CoverEditor from './CoverEditor';
 import { coverStepNext, MAKE_ALBUM, COVER_TO_PAGES, COVER_TO_PHOTOS, WIZARD_ORDER } from '../../assistant/wizard';
 import { ActionEngine } from '../../assistant/actionEngine';
 import type { BuilderActions } from './useBuilderState';
@@ -106,26 +106,34 @@ describe('the cover screen with the album\'s photos', () => {
     expect(host.querySelector('[data-testid="cover-one-photo"]')?.textContent).toBe('Pick 1 photo for the front cover');
   });
 
-  it('lists the best photos first, 10 of them, and "Show all" shows the rest', () => {
-    open(stub(12));
-    expect(COVER_PHOTOS_SHOWN).toBe(10);
-    expect(shown()).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9']);
-    tap(byText('Show all 12 photos'));
-    expect(shown()).toHaveLength(12);
-    tap(byText('Show fewer'));
-    expect(shown()).toHaveLength(10);
+  /* Owner, 2026-11-01 (phone screenshot): the photos sat UNDER the cover,
+     half hidden behind Back / Make my album. Now they are one row you swipe,
+     above the cover, every photo, best first. */
+  it('the photos come ABOVE the cover: one row, every photo, best first, no "Show all"', () => {
+    open(stub(30));
+    const row = host.querySelector('[data-testid="cover-your-photos"]')!;
+    const cover = host.querySelector('[data-testid="cover-preview"]')!;
+    expect(row.compareDocumentPosition(cover) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(shown()).toEqual(Array.from({ length: 30 }, (_, i) => `p${i}`));
+    expect(host.querySelector('[data-testid="cover-photo-row"]')!.className).toContain('overflow-x-auto');
+    expect(byText('Show all 30 photos')).toBeNull();
+    // The tabs are above the photos, so Background / Text stay together.
+    expect(byText('Background')!.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('a few photos: all of them, no "Show all"', () => {
-    open(stub(4));
-    expect(shown()).toEqual(['p0', 'p1', 'p2', 'p3']);
-    expect(host.querySelector('[data-testid="cover-show-all-photos"]')).toBeNull();
-  });
-
-  it('the photo on the cover is always among those shown, ticked', () => {
+  it('the photo on the cover is ticked, and the row keeps its order', () => {
     open(stub(12, { type: 'image', image: GIF, photoId: 'p11' }));
-    expect(shown()).toHaveLength(10);
-    expect(shown()[0]).toBe('p11');
+    expect(shown()).toEqual(Array.from({ length: 12 }, (_, i) => `p${i}`));
+    const pressed = [...host.querySelectorAll('[data-testid="cover-your-photos"] [aria-pressed="true"] img')].map((i) => i.getAttribute('alt'));
+    expect(pressed).toEqual(['p11.jpg']);
+  });
+
+  it('the Text tab shows the text controls, not the photos', () => {
+    open(stub(12));
+    tap(byText('Text'));
+    expect(host.querySelector('[data-testid="cover-your-photos"]')).toBeNull();
+    tap(byText('Background'));
+    expect(host.querySelector('[data-testid="cover-your-photos"]')).not.toBeNull();
   });
 
   it('tapping a photo puts it on the cover', () => {
@@ -140,7 +148,11 @@ describe('the cover screen with the album\'s photos', () => {
     tap(byText('Text'));
     tap(byText('Background'));
     expect(pickerOpened).not.toHaveBeenCalled();
-    tap(host.querySelector('[data-testid="cover-photo-from-phone"]'));
+    // "From your phone" is the first tile in the row.
+    const fromPhone = host.querySelector('[data-testid="cover-photo-from-phone"]');
+    expect(fromPhone?.textContent?.trim()).toBe('From your phone');
+    expect(fromPhone).toBe(host.querySelector('[data-testid="cover-photo-row"]')!.firstElementChild);
+    tap(fromPhone);
     expect(pickerOpened).toHaveBeenCalledTimes(1);
   });
 

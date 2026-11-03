@@ -36,6 +36,7 @@ export function readResumeCache(userId: string): SavedAlbumSummary[] | null {
         ...(typeof a.title === 'string' ? { title: a.title } : {}),
         ...(typeof a.updatedAt === 'string' ? { updatedAt: a.updatedAt } : {}),
         ...(typeof a.photoCount === 'number' ? { photoCount: a.photoCount } : {}),
+        ...(typeof a.sampleMadeAt === 'number' ? { sampleMadeAt: a.sampleMadeAt } : {}),
       }));
   } catch {
     return null;
@@ -48,7 +49,8 @@ export function writeResumeCache(userId: string, albums: SavedAlbumSummary[]): v
   const keep = [...albums]
     .sort((a, b) => time(b.updatedAt) - time(a.updatedAt))
     .slice(0, KEEP)
-    .map(({ id, title, updatedAt, photoCount }) => ({ id, title, updatedAt, photoCount }));
+    // A sample album's day too (lib/samplePhotos): one number, not its photos.
+    .map(({ id, title, updatedAt, photoCount, sampleMadeAt }) => ({ id, title, updatedAt, photoCount, ...(typeof sampleMadeAt === 'number' ? { sampleMadeAt } : {}) }));
   try {
     localStorage.setItem(RESUME_CACHE_KEY, JSON.stringify({ userId, albums: keep } satisfies ResumeCache));
   } catch { /* full or private mode: the prompt just waits for the account */ }

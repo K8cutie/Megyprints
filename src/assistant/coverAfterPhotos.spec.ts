@@ -122,7 +122,7 @@ describe('the size page\'s "Start Creating" (the guided card closed) goes to the
 describe('the photos step (Step 3) comes first', () => {
   it('45 photos in: "Next: pick your cover →" opens the cover and makes nothing yet', async () => {
     await open('upload_photos', { photos: 45, made: false });
-    expect(guide()).toContain('Step 3 of 7');
+    expect(guide()).toContain('Step 3 of 4');
     expect(button('Generate Album →')).toBeNull();
     await tap(button('Next: pick your cover →'));
     expect(ctx.wizardStep).toBe('design_cover');

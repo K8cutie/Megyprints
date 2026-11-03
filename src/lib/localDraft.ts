@@ -8,6 +8,8 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { liveAlbumSize, liftRetiredPages } from '../pages/builder/retiredSizes';
+import { albumMadeAt } from './testingPhase';
+import { sampleAlbumMadeAt, isSampleAlbum, SAMPLE_ALBUM_NAME } from './samplePhotos';
 
 // The draft's name and "does it hold work" live in localDraftRules.ts, which
 // the 2.0 app shares; they are offered here as before.
@@ -22,6 +24,12 @@ export interface LocalDraftSummary {
   /** When the album was last changed on this device (ms), 0 if unknown. */
   editedAt: number;
   hasContent: boolean;
+  /** When it was made, when it is a sample album (lib/samplePhotos); else null. */
+  sampleMadeAt?: number | null;
+  /** A sample album, made or not: every photo a sample, or no photos yet and
+   *  the sample album's name (its photos didn't come in). Nothing of the
+   *  customer's own to lose (Home's "Make today's sample album"). */
+  isSample?: boolean;
 }
 
 /** The draft on this device, or null when there is none worth resuming. */
@@ -35,6 +43,8 @@ export function readLocalDraftSummary(): LocalDraftSummary | null {
     const hasContent = draftHasContent(d);
     const title = typeof d.title === 'string' ? d.title : '';
     if (!hasContent && !title.trim()) return null;
+    const photos = d.uploadedPhotos ?? [];
+    const photoNames = photos.map((p) => (p as { name?: unknown } | null)?.name).filter((n): n is string => typeof n === 'string');
     return {
       title,
       albumId: typeof d.albumId === 'string' ? d.albumId : undefined,
@@ -42,6 +52,10 @@ export function readLocalDraftSummary(): LocalDraftSummary | null {
       photoCount: d.uploadedPhotos?.length ?? 0,
       editedAt: typeof d.editedAt === 'number' ? d.editedAt : 0,
       hasContent,
+      sampleMadeAt: sampleAlbumMadeAt(photoNames, albumMadeAt(d.albumPages ?? [])),
+      isSample: photos.length > 0
+        ? photoNames.length === photos.length && isSampleAlbum(photoNames.map((name) => ({ name })))
+        : !hasContent && title.startsWith(SAMPLE_ALBUM_NAME),
     };
   } catch {
     return null;

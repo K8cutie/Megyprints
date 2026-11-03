@@ -74,6 +74,8 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
       <motion.div key="sheet" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="absolute inset-0 z-50 bg-black/30 flex items-end" onClick={onClose} data-testid={`studio-sheet-${kind}`}>
         <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+          // A lesson's coach mark points at the Filter sheet (lib/lessonTips ALBUM_TIPS.look).
+          data-coach={kind === 'look' ? 'filter-sheet' : undefined}
           className="w-full bg-white rounded-t-2xl pb-6" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-between px-4 py-3 border-b border-line">
             <span className="text-sm font-semibold text-dark">{kind === 'mask' ? 'Mask' : 'Filter'}</span>

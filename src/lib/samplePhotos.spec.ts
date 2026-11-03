@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import exifr from 'exifr';
@@ -6,6 +6,7 @@ import {
   SAMPLE_PHOTO_COUNT, SAMPLE_PHOTO_NAMES, samplePhotoName, showSamplePhotos, pickSamplePhotos,
   addSamplesLabel, fetchSamplePhotos, sampleCoverPhoto, SAMPLE_COVER_NAME, SAMPLE_ALBUM_NAME, SAMPLE_ALBUM_OCCASION,
   SAMPLE_EVERYDAY_NAMES, SAMPLE_END_OF_DAY_NAMES, SAMPLE_TEST_DAYS, sampleDayNumber, sampleEndOfDayPhoto, sampleAlbumPhotos,
+  sampleAlbumName, requestSampleAlbum, takeSampleAlbumRequest, sampleAlbumMadeAt, sampleAlbumIsFromAnEarlierDay,
 } from './samplePhotos';
 import { isAlbumNameReady } from './albumName';
 import { isAlbumThemeReady } from './albumTheme';
@@ -252,5 +253,49 @@ describe('a different sample album every day of the test', () => {
     const picks = pickSamplePhotos(40, []);
     expect(picks.some((n) => SAMPLE_END_OF_DAY_NAMES.includes(n))).toBe(false);
     expect(pickSamplePhotos(100, [])).toHaveLength(64);
+  });
+});
+
+describe("Welcome back the next day: today's sample album, not yesterday's", () => {
+  const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).getTime();
+
+  it("each day's sample album is named with its day, so the list never shows three the same", () => {
+    expect(sampleAlbumName(new Date(2026, 9, 28, 9, 0))).toBe('Sample Album · Oct 28');
+    expect(sampleAlbumName(new Date(2026, 10, 1, 23, 59))).toBe('Sample Album · Nov 1');
+    expect(isAlbumNameReady(sampleAlbumName(new Date()))).toBe(true);
+  });
+
+  it('a sample album knows when it was made; any other album is not one', () => {
+    const samples = SAMPLE_PHOTO_NAMES.slice(0, 40);
+    expect(sampleAlbumMadeAt(samples, at(28, 9))).toBe(at(28, 9));
+    expect(sampleAlbumMadeAt([...samples.slice(0, 39), 'IMG_2001.jpg'], at(28, 9))).toBeNull();
+    expect(sampleAlbumMadeAt([], at(28, 9))).toBeNull();
+    expect(sampleAlbumMadeAt(undefined, at(28, 9))).toBeNull();
+    expect(sampleAlbumMadeAt(samples, null)).toBeNull();
+    expect(sampleAlbumMadeAt(samples, 0)).toBeNull();
+  });
+
+  it("from an earlier day turns at the phone's midnight", () => {
+    const now = new Date(2026, 9, 29, 0, 5);
+    expect(sampleAlbumIsFromAnEarlierDay(at(28, 23, 59), now)).toBe(true);
+    expect(sampleAlbumIsFromAnEarlierDay(at(29, 0, 1), now)).toBe(false);
+    expect(sampleAlbumIsFromAnEarlierDay(at(20, 12), now)).toBe(true);
+    expect(sampleAlbumIsFromAnEarlierDay(null, now)).toBe(false);
+    expect(sampleAlbumIsFromAnEarlierDay(undefined, now)).toBe(false);
+  });
+
+  it('the request to make it is answered once', () => {
+    // This file runs without a browser: a stand-in for the tab's session storage.
+    const store = new Map<string, string>();
+    vi.stubGlobal('sessionStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => { store.set(k, v); },
+      removeItem: (k: string) => { store.delete(k); },
+    });
+    expect(takeSampleAlbumRequest()).toBe(false);
+    requestSampleAlbum();
+    expect(takeSampleAlbumRequest()).toBe(true);
+    expect(takeSampleAlbumRequest()).toBe(false);
+    vi.unstubAllGlobals();
   });
 });

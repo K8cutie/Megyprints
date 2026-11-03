@@ -45,7 +45,8 @@ export function albumMadeAt(pages: readonly unknown[]): number | null {
   return latest;
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** Short month names, the same on every phone. */
+export const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** "Oct 28, 2026, 2:14 PM", in the phone's own time. Built by hand:
  *  toLocaleString puts a narrow no-break space before PM on newer engines,
