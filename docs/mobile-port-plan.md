@@ -3436,6 +3436,51 @@ both links on the start screen and in the menu, and the Sign in line, open
 the live pages; Back comes back to the app. The Privacy page's ML Kit
 paragraph is website PR #264. A **new APK** is needed.
 
+## main merged in; the pay card and the cover photo row (2026-11-03, `feat/port-main-sync`, 2.0.1)
+
+The owner released 2.0.0 (code 100) to the testers and said "Merge what
+needs to be merged". native-2.0 had not taken main since Oct 28 (the rule
+above says regularly). Merging it in:
+
+- **One conflict**, `src/assistant/wizard.ts`: 2.0 moved `WizardStep` to
+  `wizardSteps.ts` (shared); main dropped the retired `add_text` step and
+  explained Megy's 4-step guide. `wizard.ts` keeps the re-export,
+  `wizardSteps.ts` takes main's list and comment.
+- **The app's word tests caught two website changes 2.0 never had**, so they
+  are in the app now:
+  - **The pay card** (main's #234, the owner's design): the ✓ once an order
+    is placed, "Order … is placed." / "Pay by bank transfer to finish." on
+    two lines, who you pay with the last 4 digits as dots, the QR full size,
+    **Copy** for the order number ("Copied" for 2 s; a phone that won't copy
+    says to type it in the note), and four numbered steps with icons, step 2
+    saying how to pay with this phone (screenshot the QR, then Upload QR).
+    `components/checkout/PayCard.tsx`; icons drawn with views
+    (`payIcons.tsx`, no icon library); copying through Expo's own
+    `expo-clipboard` (`lib/checkout/copyText.ts`), a **new native module**.
+  - **The cover photos in one row ABOVE the cover** (main's #235, owner's
+    phone: they sat under the cover, half hidden): every photo, best first,
+    no "Show all"; the cover's photo ticked; when the screen opens the row
+    scrolls to it only if it's out of sight. On the cover step and on Design
+    your cover (`components/CoverPhotoRow.tsx`). The website's "From your
+    phone" tile is not in the app (the app draws a cover photo only when it
+    is one of the album's, as before).
+- `MIN_AGE` is now the website's own (`src/lib/legal.ts` added to the shared
+  list); `test/legalLinks.test.tsx` holds the app's words to the website's
+  Footer, Navbar and TermsAgreeLine.
+- **Version 2.0.1, code 101** (2.0.0 is code 100 on Play).
+
+Tests: `test/payCard.test.tsx` (new: every word in the website's PayCard.tsx,
+Copy / Copied / the failure line, the test album's band); the walks
+(`checkoutWalk`, `ordersWalk`, `checkoutRealAlbum`) read the new card;
+`editorCover`, `albumWords`, `editorCoverEdits` hold the row's order and its
+scroll rule.
+
+### Release notes 2.0.1 (Play Console "What's new")
+
+    What's new:
+    • Payment: a Copy button for your order number, and how to pay with this same phone
+    • Your photos for the cover are now in one row above the cover
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

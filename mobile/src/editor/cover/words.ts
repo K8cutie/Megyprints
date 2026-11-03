@@ -15,10 +15,8 @@ export const FRONT_COVER = 'Front cover';
 /** CoverEditor.tsx: the two tabs. */
 export const TABS = { background: 'Background', text: 'Text' } as const;
 
-/** CoverEditor.tsx Background tab. */
+/** CoverEditor.tsx Background tab: over the one row of photos (no "Show all" since #235). */
 export const YOUR_PHOTOS = 'Your photos, best ones first. Tap one.';
-export const SHOW_FEWER = 'Show fewer';
-export const showAllPhotos = (n: number) => `Show all ${n} photos`;
 export const COLOUR = 'Colour';
 export const ZOOM = 'Zoom';
 export const RESET = 'Reset';

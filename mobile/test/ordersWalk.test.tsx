@@ -132,8 +132,9 @@ describe('one order', () => {
     await fireEvent.press(screen.getByTestId('order-pay'));
     expect(screen.getByTestId('pay-step')).toBeTruthy();
     expect(screen.getByText('Send ₱1,288')).toBeTruthy();
-    expect(screen.getByTestId('pay-order-placed').props.children.join('')).toBe('Order MP-2026-WAIT001 is placed. Pay by bank transfer to finish.');
-    expect(screen.getByText('3. Send exactly ₱1,288 and put MP-2026-WAIT001 in the note if your app asks.')).toBeTruthy();
+    expect(screen.getByTestId('pay-order-placed')).toHaveTextContent('Order MP-2026-WAIT001 is placed. Pay by bank transfer to finish.');
+    expect(screen.getByText('Send exactly ₱1,288')).toBeTruthy();
+    expect(screen.getByTestId('pay-note-line')).toHaveTextContent('and paste MP-2026-WAIT001 in the note if your app asks.');
     expect(screen.getByTestId('pay-within').props.children).toBe('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
     expect(screen.queryByTestId('pay-qr-test-band')).toBeNull(); // a real order is behind this QR
     // A real order: no test notes; "I've sent" records the payment for THIS order, then the order is shown again.

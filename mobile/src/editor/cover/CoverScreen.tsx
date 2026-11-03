@@ -3,11 +3,12 @@
    the "Cover" tile before page 1 in the Edit pages strip.
 
    The FRONT cover only (the spine follows the title, the back is Megy's): the
-   cover as print draws it (the page renderer, coverMode), and under it the
-   website's two tabs:
-     • Background: the album's photos, best first, to tap ("Show all" for the
-       rest); the cover's colours and "Use <colour> on every page"; with a
-       photo on, Zoom (1 to 3) and Reset, and dragging the cover moves the
+   website's two tabs, then (Background) the album's photos in one row you
+   swipe, best first, ABOVE the cover (CoverPhotoRow; the website's order
+   since #235), then the cover as print draws it (the page renderer,
+   coverMode), then the tab's controls:
+     • Background: the cover's colours and "Use <colour> on every page"; with
+       a photo on, Zoom (1 to 3) and Reset, and dragging the cover moves the
        photo in its frame;
      • Text: the cover title, too long → "Make it fit"; its font (the 74),
        colour (the 28 and "Any color"), alignment, Bold, Italic, Shadow, and
@@ -48,9 +49,9 @@ import { ALBUM_SIZES, bgCoverFit, type AlbumPage } from '@web/pages/builder/type
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
 import { WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
 import { Button } from '../../components/Button';
-import { Thumb } from '../../components/Thumb';
+import { CoverPhotoRow } from '../../components/CoverPhotoRow';
 import { useBuilder } from '../../builder/BuilderProvider';
-import { COVER_PHOTOS_SHOWN, coverPhotoId, coverPhotos } from '../../builder/albumFlow';
+import { coverPhotoId, coverPhotos } from '../../builder/albumFlow';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../../builder/screenWords';
 import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { colors, space } from '../../lib/theme';
@@ -58,7 +59,7 @@ import { BLANK_COVER_MESSAGE, coverBlank, titleInkNeeded, titleTooLong } from '.
 import {
   colourEveryPage, colourTheCover, coverCrop, coverHasPhoto, coverTitleOf, coverWithoutTitle, canRemoveCoverPhoto, fitTitle, moveCoverTitle,
   panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour, setTitleFont, setTitleSize,
-  shownCoverPhotos, titleBoxOf, titleMovable, TITLE_SIZE, toggleTitleBold, toggleTitleItalic, toggleTitleShadow, typeTitle,
+  titleBoxOf, titleMovable, TITLE_SIZE, toggleTitleBold, toggleTitleItalic, toggleTitleShadow, typeTitle,
   zoomCoverPhoto, ZOOM_RANGE, type Align,
 } from './coverEdits';
 import { coverChanged } from '../undoBar';
@@ -71,8 +72,6 @@ import { Slider } from './Slider';
 import * as W from './words';
 
 type Tab = 'background' | 'text';
-const COLUMNS = 5;
-const GAP = 6;
 /** The cover picture is drawn again at most this often while it changes. */
 const DRAW_MS = 300;
 /** The live view never stays longer than this after the finger is up. */
@@ -174,7 +173,6 @@ export default function CoverScreen() {
   const hasPhoto = coverHasPhoto(cover);
   const crop = coverCrop(cover);
   const [tab, setTab] = useState<Tab>('background');
-  const [showAll, setShowAll] = useState(false);
   const [fontsOpen, setFontsOpen] = useState(false);
   const [sizeLive, setSizeLive] = useState<number | null>(null);
   // The zoom slider's value while it moves (and until the cover is drawn with it).
@@ -247,8 +245,6 @@ export default function CoverScreen() {
   // ── The album's photos for the cover, best first ──
   const photos = useMemo(() => coverPhotos(builder.uploadedPhotos).filter((p) => !!p.previewUrl), [builder.uploadedPhotos]);
   const onCover = coverPhotoId(builder);
-  const shown = useMemo(() => shownCoverPhotos(photos, showAll, onCover, COVER_PHOTOS_SHOWN), [photos, showAll, onCover]);
-  const cell = Math.floor((screenW - space.md * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
 
   // The cover's font, if this phone doesn't have it yet (an album made on the
   // website or another phone): fetched once, and the cover is drawn again in it.
@@ -314,8 +310,22 @@ export default function CoverScreen() {
   return (
     <View style={styles.page}>
       <Stack.Screen options={HEADER} />
+      <Text style={styles.sub} testID="cover-one-photo">{W.ONE_PHOTO}</Text>
+      {/* The website's order since #235: the tabs, the photos, then the cover. */}
+      <View style={styles.tabs} accessibilityRole="tablist">
+        {(['background', 'text'] as const).map((t) => (
+          <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} accessibilityLabel={W.TABS[t]} onPress={() => setTab(t)}
+            testID={`cover-tab-${t}`} style={({ pressed }) => [styles.tab, tab === t && styles.tabOn, pressed && styles.pressed]}>
+            <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{W.TABS[t]}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {tab === 'background' && photos.length > 0 && (
+        <View style={styles.photoRow}>
+          <CoverPhotoRow photos={photos} onCover={onCover} onPick={(p) => putPhotoOnCover(builder, p)} pad={space.md} />
+        </View>
+      )}
       <View style={styles.top}>
-        <Text style={styles.sub} testID="cover-one-photo">{W.ONE_PHOTO}</Text>
         <CoverStage
           uri={stageUri} busy={!picture.uri && !!shownUri} failed={picture.error ? PAGE_NOT_SHOWN : null}
           width={coverW} height={coverH} titleRect={titleRect} hasPhoto={hasPhoto} onDrag={onDrag} label={W.FRONT_COVER}
@@ -327,41 +337,9 @@ export default function CoverScreen() {
         <Text style={styles.small}>{W.BACK_NOTE}</Text>
       </View>
 
-      <View style={styles.tabs} accessibilityRole="tablist">
-        {(['background', 'text'] as const).map((t) => (
-          <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} accessibilityLabel={W.TABS[t]} onPress={() => setTab(t)}
-            testID={`cover-tab-${t}`} style={({ pressed }) => [styles.tab, tab === t && styles.tabOn, pressed && styles.pressed]}>
-            <Text style={[styles.tabText, tab === t && styles.tabTextOn]}>{W.TABS[t]}</Text>
-          </Pressable>
-        ))}
-      </View>
-
       <ScrollView style={styles.controls} contentContainerStyle={styles.controlsBody} keyboardShouldPersistTaps="handled" scrollEnabled={!sliding}>
         {tab === 'background' ? (
           <>
-            {photos.length > 0 && (
-              <View testID="cover-your-photos">
-                <Text style={styles.label}>{W.YOUR_PHOTOS}</Text>
-                <View style={styles.grid}>
-                  {shown.map((p) => {
-                    const on = p.id === onCover;
-                    return (
-                      <Pressable key={p.id} accessibilityRole="button" accessibilityState={{ selected: on }} accessibilityLabel={on ? 'On the cover' : 'Put this photo on the cover'}
-                        onPress={() => putPhotoOnCover(builder, p)} style={[styles.cell, { width: cell, height: cell }, on && styles.cellOn]} testID={`cover-photo-${p.id}`}>
-                        <Thumb uri={p.previewUrl} size={on ? cell - 6 : cell} recyclingKey={p.id} />
-                        {on && <View style={styles.tickDot}><Text style={styles.tickText}>✓</Text></View>}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                {photos.length > COVER_PHOTOS_SHOWN && (
-                  <Pressable accessibilityRole="button" onPress={() => setShowAll((v) => !v)} style={styles.linkButton} testID="cover-show-all-photos">
-                    <Text style={styles.linkText}>{showAll ? W.SHOW_FEWER : W.showAllPhotos(photos.length)}</Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
-
             <Text style={styles.label}>{W.COLOUR}</Text>
             <PageColourPicker background={cover.background} onPick={(hex) => colourTheCover(builder, hex)} onPickAll={(hex) => colourEveryPage(builder, hex)} testID="cover-color" />
 
@@ -459,11 +437,12 @@ export default function CoverScreen() {
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.background },
   top: { paddingHorizontal: space.md, paddingTop: space.sm, gap: 6, alignItems: 'center' },
-  sub: { fontSize: 14, color: colors.muted },
+  // Over the tabs now (the website's order since #235): its own margins, centred as before.
+  sub: { fontSize: 14, color: colors.muted, textAlign: 'center', paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.xs },
   caption: { fontSize: 13, color: colors.muted },
   small: { fontSize: 12, color: colors.muted, textAlign: 'center' },
   warnLine: { fontSize: 13, color: '#8A5A12', backgroundColor: '#FFF6E5', borderWidth: 1, borderColor: '#F0D9A8', borderRadius: 10, paddingHorizontal: space.sm, paddingVertical: 6, textAlign: 'center' },
-  tabs: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingTop: space.sm },
+  tabs: { flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingTop: space.xs },
   tab: { flex: 1, minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   tabOn: { borderWidth: 2, borderColor: colors.accent, backgroundColor: '#FFF1EA' },
   tabText: { fontSize: 15, fontWeight: '700', color: colors.text },
@@ -471,11 +450,7 @@ const styles = StyleSheet.create({
   controls: { flex: 1 },
   controlsBody: { padding: space.md, gap: space.sm, paddingBottom: space.lg },
   label: { fontSize: 14, fontWeight: '700', color: colors.text, marginTop: space.xs },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, marginTop: 4 },
-  cell: { borderRadius: 6, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  cellOn: { borderWidth: 3, borderColor: colors.accent },
-  tickDot: { position: 'absolute', top: 3, right: 3, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  tickText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
+  photoRow: { paddingTop: 10 },
   linkButton: { minHeight: 48, minWidth: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.sm },
   linkText: { fontSize: 15, fontWeight: '700', color: colors.accent },
   box: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.card, paddingHorizontal: space.md, paddingBottom: space.sm },

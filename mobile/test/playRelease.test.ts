@@ -98,10 +98,12 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x (Play takes only a higher one); version 2.0.0', () => {
+  it('a higher version code than 1.x and than 2.0.0 on Play (Play takes only a higher one); version 2.0.1', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
-    expect(play.version).toBe('2.0.0');
+    // 2.0.0 went to the testers as code 100 (2026-11-03); 2.0.1 adds the website's pay card and cover photo row.
+    expect(play.android.versionCode).toBe(101);
+    expect(play.version).toBe('2.0.1');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {

@@ -1,8 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   THE PAYMENT STEP (Phase 5, #223): GoTyme / InstaPay QR, the amount, the
-   order number for the transfer note once there is one, "Attach the
-   transfer receipt", "I've sent ₱X". The website's words
-   (src/pages/Order.tsx).
+   THE PAYMENT STEP (Phase 5, #223): the ✓ once an order is placed, "Send
+   ₱X", the pay card (PayCard.tsx: who you pay, the QR, Copy for the order
+   number, the four steps; the website's #234), "Attach the transfer
+   receipt", "I've sent ₱X". The website's words (src/pages/Order.tsx,
+   src/components/PayCard.tsx).
 
    Used by checkout (after Place order, and for "This album already has an
    order") and by Your orders (an order waiting for payment). For a real
@@ -10,16 +11,17 @@
    (lib/checkout/phoneSend.ts); for the test album it shows what it would
    send (the receipt upload and submit_payment_proof) in a test panel.
    ══════════════════════════════════════════════════════════════════════════ */
-import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { PAY_WITHIN_MESSAGE } from '@web/lib/orderExpiry';
+import { Tick } from '../../home/homeIcons';
 import { Button } from '../Button';
 import { Field } from './Field';
+import { PAY, PayCard } from './PayCard';
 import { TestPanel } from './TestPanel';
 import { payByLine, type OpenOrder } from '../../lib/checkout/openOrder';
 import { ORDER_ID } from '../../lib/checkout/orderPayload';
-import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../../lib/checkout/payment';
+import { paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../../lib/checkout/payment';
 import { peso } from '../../lib/checkout/price';
 import { pickReceipt, receiptLabel, type PickedReceipt } from '../../lib/checkout/receipt';
 import { sitePage } from '../../lib/checkout/site';
@@ -45,7 +47,6 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
   /** The payment was recorded (`receiptError`: the receipt didn't go up, said). */
   onPaid?: (receiptError: string | null) => void;
 }) {
-  const [qrMissing, setQrMissing] = useState(false);
   const [receipt, setReceipt] = useState<PickedReceipt | null>(null);
   const [receiptError, setReceiptError] = useState('');
   const [payRef, setPayRef] = useState('');
@@ -94,47 +95,28 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
           ? `Test version: this is how paying order ${order.order_number} looks. The "I've sent" button only shows what it would send. It sends nothing.`
           : 'Test version: no order was placed. This is how the payment step looks for this album. Do not send money: there is no order.'}</Text>
       </View>}
+      {/* The order went through: say so first (the website's ✓, owner's design, 2026-10-31). */}
+      {order && (
+        <View style={styles.placedBadge} testID="pay-placed-badge">
+          <Tick size={26} color="#FFFFFF" stroke={3.2} />
+        </View>
+      )}
       <Text style={[styles.h1, styles.center]}>{amount !== null ? `Send ${amountLabel}` : `Pay order ${order?.order_number ?? ''}`}</Text>
-      {order && <Text style={[styles.small, styles.center]} testID="pay-order-placed">Order {order.order_number} is placed. Pay by bank transfer to finish.</Text>}
+      {order && (
+        <Text style={[styles.small, styles.center]} testID="pay-order-placed">
+          Order <Text style={styles.orderNo}>{order.order_number}</Text> is placed.{'\n'}<Text style={styles.taupe}>Pay by bank transfer to finish.</Text>
+        </Text>
+      )}
 
       <View style={styles.card}>
-        <View style={styles.qrBox}>
-          <Text style={styles.payee}>{PAYEE.bank} · {PAYEE.rail}</Text>
-          {!qrMissing ? (
-            <View>
-              <Image source={{ uri: PAYEE_QR_URL }} style={styles.qr} contentFit="contain" onError={() => setQrMissing(true)}
-                accessibilityLabel={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} />
-              {/* No order behind it: a band across the code, so nobody pays for nothing. */}
-              {!order && (
-                <View style={styles.qrBand} testID="pay-qr-test-band">
-                  <Text style={styles.qrBandText}>Test only. Do not pay.</Text>
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={[styles.qr, styles.qrMissing]}>
-              <Text style={styles.small}>The QR code isn't available right now — message us and we'll send the account details.</Text>
-            </View>
-          )}
-          <Text style={styles.strong}>{PAYEE.name}</Text>
-          <Text style={styles.small}>Account ending in {PAYEE.accountLast4}</Text>
-          {amount !== null ? (
-            <Text style={styles.payAmount}>{amountLabel}</Text>
-          ) : (
-            <View style={styles.noTotal} testID="pay-no-total">
-              <Text style={[styles.small, styles.center]}>This order is older, so its total is not saved here. Message us and we will tell you how much to send.</Text>
-              <Button label="Message us" kind="plain" onPress={() => { void Linking.openURL(sitePage('contact')); }} testID="pay-message-us" />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.steps}>
-          <Text style={styles.small}>1. Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</Text>
-          <Text style={styles.small}>2. Choose Scan QR / InstaPay and scan the code above.</Text>
-          <Text style={styles.small}>3. {amount !== null ? `Send exactly ${amountLabel}` : 'Send the total we tell you'}{order ? ` and put ${order.order_number} in the note if your app asks` : ''}.</Text>
-          <Text style={styles.small}>4. Attach your receipt below — it speeds up confirmation.</Text>
-        </View>
-        <Text style={styles.tiny}>Your app may charge a small InstaPay fee. We don't add any.</Text>
+        {/* Who to pay, the QR, Copy for the order number, and the steps (PayCard). */}
+        <PayCard amountLabel={amount !== null ? amountLabel : null} orderNumber={order?.order_number ?? null} testOnly={!order} />
+        {amount === null && (
+          <View style={styles.noTotal} testID="pay-no-total">
+            <Text style={[styles.small, styles.center]}>This order is older, so its total is not saved here. Message us and we will tell you how much to send.</Text>
+            <Button label="Message us" kind="plain" onPress={() => { void Linking.openURL(sitePage('contact')); }} testID="pay-message-us" />
+          </View>
+        )}
 
         <View style={styles.receiptBox}>
           <Text style={styles.strongSmall}>Receipt screenshot <Text style={styles.tiny}>(optional)</Text></Text>
@@ -210,15 +192,10 @@ const styles = StyleSheet.create({
   error: { fontSize: 15, color: colors.bad, textAlign: 'center' },
   testNote: { borderWidth: 1, borderStyle: 'dashed', borderColor: '#8A5A12', backgroundColor: '#FFF6E5', borderRadius: 12, padding: 12 },
   testNoteText: { fontSize: 13, lineHeight: 18, color: '#8A5A12' },
-  qrBox: { borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFDFB', borderRadius: 12, padding: space.md, alignItems: 'center', gap: 4 },
-  payee: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: colors.muted, textTransform: 'uppercase' },
-  qr: { width: 224, height: 224, borderRadius: 8, backgroundColor: colors.card, marginVertical: space.sm },
-  qrMissing: { backgroundColor: '#F7F1EC', alignItems: 'center', justifyContent: 'center', padding: space.md },
-  qrBand: { position: 'absolute', left: -space.sm, right: -space.sm, top: '42%', paddingVertical: 10, backgroundColor: '#FFF6E5', borderWidth: 1, borderColor: '#8A5A12', borderRadius: 8, alignItems: 'center' },
-  qrBandText: { fontSize: 16, fontWeight: '800', color: '#8A5A12' },
+  placedBadge: { alignSelf: 'center', width: 48, height: 48, borderRadius: 24, backgroundColor: PAY.peach, alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(184, 92, 56, 0.3)' },
+  orderNo: { fontFamily: 'monospace', color: PAY.icon },
+  taupe: { color: PAY.taupe },
   noTotal: { gap: space.sm, alignSelf: 'stretch', marginTop: space.xs },
-  payAmount: { fontSize: 26, fontWeight: '800', color: colors.accent, marginTop: space.xs },
-  steps: { gap: 4 },
   receiptBox: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: space.sm },
   summary: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: space.sm },
 });

@@ -32,9 +32,10 @@ import { coverBlank, titleFontInApp, titleInkNeeded, titleTooLong } from '../src
 import {
   canRemoveCoverPhoto, colourEveryPage, colourTheCover, COVER_PAPER, coverCrop, coverHasPhoto, coverTitleOf, fitTitle,
   moveCoverTitle, panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour,
-  setTitleFont, setTitleSize, shownCoverPhotos, titleBoxOf, coverWithoutTitle, titleRectOf, toggleTitleBold, toggleTitleItalic,
+  setTitleFont, setTitleSize, titleBoxOf, coverWithoutTitle, titleRectOf, toggleTitleBold, toggleTitleItalic,
   toggleTitleShadow, typeTitle, zoomCoverPhoto, type CoverBuilder,
 } from '../src/editor/cover/coverEdits';
+import { scrollToShow, TILE, TILE_GAP } from '../src/components/CoverPhotoRow';
 import { dragTarget } from '../src/editor/cover/CoverStage';
 import { snap } from '../src/editor/cover/Slider';
 import { act, builder, madeAlbum, useEditorBench } from './editorHarness';
@@ -387,12 +388,14 @@ describe('the small pieces', () => {
     expect(snap(44.6, 16, 96, 1)).toBe(45);
   });
 
-  it('the photos shown before "Show all": the best few, the one on the cover always among them', () => {
-    const photos = Array.from({ length: 14 }, (_v, i) => ({ id: `p${i}` }));
-    expect(shownCoverPhotos(photos, false, 'p2', 10).map((p) => p.id)).toEqual(photos.slice(0, 10).map((p) => p.id));
-    expect(shownCoverPhotos(photos, false, 'p12', 10).map((p) => p.id)).toEqual(['p12', ...photos.slice(0, 9).map((p) => p.id)]);
-    expect(shownCoverPhotos(photos, true, 'p12', 10)).toHaveLength(14);
-    expect(shownCoverPhotos(photos.slice(0, 8), false, null, 10)).toHaveLength(8);
+  it('the photo row scrolls to the photo on the cover only when it is out of sight (the website\'s scrollIntoView, nearest)', () => {
+    // 64 px tiles 6 px apart, 16 px before the first: a 360 px row shows tiles 0 to 4 whole.
+    expect([TILE, TILE_GAP]).toEqual([64, 6]);
+    expect(scrollToShow(0, 360, 16)).toBeNull();
+    expect(scrollToShow(4, 360, 16)).toBeNull(); // 16 + 4 × 70 + 64 = 360: in sight
+    expect(scrollToShow(5, 360, 16)).toBe(16 + 5 * 70 + 64 - 360 + 16); // just enough: its right edge 16 px in
+    expect(scrollToShow(-1, 360, 16)).toBeNull(); // no album photo on the cover
+    expect(scrollToShow(9, 0, 16)).toBeNull(); // not laid out yet
   });
 
   it('a photo is on the cover after the app\'s steps (the cover step\'s tap)', async () => {

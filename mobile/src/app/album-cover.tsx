@@ -3,7 +3,9 @@
    "Make my album".
 
    One of the album's photos goes on the front cover with a tap (the builder's
-   setCoverToPhoto, as a tap in the website's cover step), and the title is
+   setCoverToPhoto, as a tap in the website's cover step); the photos are one
+   row you swipe ABOVE the cover, as on the website since #235 (CoverPhotoRow),
+   and the title is
    the album's name until the customer types their own (box 0 of the cover
    page). The front cover is drawn by the app's page renderer the way print
    draws it (coverMode). While this screen is open the builder edits the
@@ -22,17 +24,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { coverTitleFit } from '@web/pages/builder/textFit';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
 import { Button } from '../components/Button';
-import { Thumb } from '../components/Thumb';
+import { CoverPhotoRow } from '../components/CoverPhotoRow';
 import { useBuilder } from '../builder/BuilderProvider';
-import { albumMade, chooseCover, COVER_PHOTOS_SHOWN, coverPhotoId, coverPhotos, coverStepNext, coverTitle, photosIn, saveStep, setCoverTitleText } from '../builder/albumFlow';
+import { albumMade, chooseCover, coverPhotoId, coverPhotos, coverStepNext, coverTitle, photosIn, saveStep, setCoverTitleText } from '../builder/albumFlow';
 import { NOT_DRAWN_LINE } from '../builder/screenWords';
 import { forgetPhotoPictures, usePagePicture } from '../builder/usePagePicture';
 import { useGoToPreview } from '../builder/useGoToPreview';
 import { bundledFace, familyFaces } from '../render/fontTable';
 import { colors, space } from '../lib/theme';
 
-const COLUMNS = 4;
-const GAP = 6;
 /** The cover picture waits this long after the last key typed in the title. */
 const TYPING_MS = 350;
 
@@ -58,7 +58,6 @@ function titleFontInApp(cover: AlbumPage): boolean {
 export default function AlbumCover() {
   const { builder, platform, text } = useBuilder();
   const { width: screenW } = useWindowDimensions();
-  const [showAll, setShowAll] = useState(false);
 
   // Own the cover scope while this is the screen on top; always hand it back
   // (CoverEditor). On focus, not on mount: this screen stays mounted under
@@ -74,12 +73,6 @@ export default function AlbumCover() {
 
   const photos = useMemo(() => coverPhotos(builder.uploadedPhotos).filter((p) => !!p.previewUrl), [builder.uploadedPhotos]);
   const onCover = coverPhotoId(builder);
-  const shown = useMemo(() => {
-    if (showAll || photos.length <= COVER_PHOTOS_SHOWN) return photos;
-    const top = photos.slice(0, COVER_PHOTOS_SHOWN);
-    const picked = onCover && !top.some((p) => p.id === onCover) ? photos.find((p) => p.id === onCover) : undefined;
-    return picked ? [picked, ...top.slice(0, COVER_PHOTOS_SHOWN - 1)] : top;
-  }, [photos, showAll, onCover]);
 
   const title = coverTitle(builder);
   const fit = titleFontInApp(builder.coverFront) ? coverTitleFit(builder.coverFront, builder.albumSize, platform.textMeasurer()) : null;
@@ -99,8 +92,6 @@ export default function AlbumCover() {
     width: Math.round(coverW * 2), coverMode: true,
   } : null);
 
-  const cell = Math.floor((screenW - space.lg * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
-
   const goOn = () => {
     if (next.go === 'photos') { saveStep(platform.deviceStore, 'photos'); router.push('/photos'); return; }
     if (next.go === 'pages') { goToPreview(); return; }
@@ -113,6 +104,13 @@ export default function AlbumCover() {
         <Text style={styles.title}>Design your cover</Text>
         <Text style={styles.sub} testID="cover-one-photo">Pick 1 photo for the front cover</Text>
 
+        {/* The photos ABOVE the cover, one row you swipe (the website's #235). */}
+        {photos.length > 0 && (
+          <View style={styles.row}>
+            <CoverPhotoRow photos={photos} onCover={onCover} onPick={(p) => chooseCover(builder, p.id)} pad={space.lg} />
+          </View>
+        )}
+
         <View style={[styles.cover, { width: coverW, height: coverH }]} testID="cover-picture">
           {picture.uri ? (
             <Image source={{ uri: picture.uri }} style={{ width: coverW, height: coverH }} contentFit="fill" />
@@ -122,25 +120,6 @@ export default function AlbumCover() {
         </View>
         <Text style={styles.caption}>Front cover</Text>
         {picture.notDrawn.length > 0 && <Text style={styles.notDrawn} testID="cover-not-drawn">{NOT_DRAWN_LINE}</Text>}
-
-        <Text style={styles.label}>Your photos, best ones first. Tap one.</Text>
-        <View style={styles.grid}>
-          {shown.map((p) => {
-            const on = p.id === onCover;
-            return (
-              <Pressable key={p.id} accessibilityRole="button" accessibilityLabel={on ? 'On the cover' : 'Put this photo on the cover'}
-                onPress={() => chooseCover(builder, p.id)} style={[styles.cell, { width: cell, height: cell }, on && styles.cellOn]} testID={`cover-photo-${p.id}`}>
-                <Thumb uri={p.previewUrl} size={on ? cell - 6 : cell} recyclingKey={p.id} />
-                {on && <View style={styles.tick}><Text style={styles.tickText}>✓</Text></View>}
-              </Pressable>
-            );
-          })}
-        </View>
-        {photos.length > COVER_PHOTOS_SHOWN && (
-          <Pressable accessibilityRole="button" onPress={() => setShowAll((v) => !v)} style={styles.showAll} testID="cover-show-all">
-            <Text style={styles.showAllText}>{showAll ? 'Show fewer' : `Show all ${photos.length} photos`}</Text>
-          </Pressable>
-        )}
 
         <Text style={styles.label}>Cover title</Text>
         <TextInput value={title} onChangeText={(t) => setCoverTitleText(builder, t)} placeholder="e.g. The Cruz Family" placeholderTextColor="#9A948C"
@@ -172,13 +151,8 @@ const styles = StyleSheet.create({
   caption: { alignSelf: 'center', fontSize: 13, color: colors.muted },
   notDrawn: { fontSize: 13, color: colors.muted, textAlign: 'center' },
   label: { fontSize: 15, fontWeight: '700', color: colors.text, marginTop: space.md },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
-  cell: { borderRadius: 6, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  cellOn: { borderWidth: 3, borderColor: colors.accent },
-  tick: { position: 'absolute', top: 4, right: 4, width: 24, height: 24, borderRadius: 12, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
-  tickText: { color: '#FFFFFF', fontWeight: '800' },
-  showAll: { alignSelf: 'center', padding: space.sm },
-  showAllText: { fontSize: 15, fontWeight: '600', color: colors.accent },
+  // Edge to edge: the row runs under the screen's margins, its own padding lines it up.
+  row: { marginHorizontal: -space.lg, marginBottom: space.sm },
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.card, paddingHorizontal: space.md, paddingVertical: 12, fontSize: 17, color: colors.text },
   warn: { borderWidth: 1, borderColor: '#F0D9A8', backgroundColor: '#FFF6E5', borderRadius: 10, padding: space.sm, gap: space.sm },
   warnText: { fontSize: 14, color: '#8A5A12' },

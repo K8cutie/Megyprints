@@ -33,8 +33,6 @@ import { toPickedPhoto, type InspectPhotos } from './appPhotos';
  *  photos step's (TO_COVER; with a made album KEEP_PAGES or REMAKE_ALBUM)
  *  and the cover step's (MAKE_ALBUM, COVER_TO_PAGES, COVER_TO_PHOTOS). */
 export { COVER_TO_PAGES, COVER_TO_PHOTOS, KEEP_PAGES, MAKE_ALBUM, REMAKE_ALBUM, TO_COVER };
-/** CoverEditor.tsx COVER_PHOTOS_SHOWN: the best few first, "Show all" for the rest. */
-export const COVER_PHOTOS_SHOWN = 10;
 /** GeneratingOverlay.tsx GENERATING_COPY, by the builder's `generating` phase. */
 export const GENERATING_COPY = {
   measuring: 'Looking at your photos…',
