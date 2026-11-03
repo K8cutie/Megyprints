@@ -3481,6 +3481,39 @@ scroll rule.
     • Payment: a Copy button for your order number, and how to pay with this same phone
     • Your photos for the cover are now in one row above the cover
 
+2.0.1 went to Alpha on 2026-11-04 (In review, with the Photo and video and the
+Foreground service declarations; the video is a normal order placed, then
+Home, then the notification). 2.0.0 (code 100) was never uploaded.
+
+## 2.0.2: the tester code, and "a new version is ready" (2026-11-04, `fix/port-tester-code-check`)
+
+- **MEGYTEST works in the app.** On the owner's phone a MEGYTEST order said
+  "The tester code MEGYTEST doesn't work any more, so nothing was ordered".
+  The order screen only checked the code's shape (left over from the test
+  version, which never wrote to the database), and the order's trigger (0057)
+  takes a code only from an account that checked it with `check_tester_code`.
+  Your own album now asks the database, as the website does; the test album
+  still checks the shape only (`test/checkoutRealAlbum.test.tsx`).
+- **The app asks for a new version from Google Play**, as 1.x has since 1.4.0
+  (owner: "Yes, add it"): the same rules and words (`src/lib/appUpdate.ts`,
+  the app's own module `modules/app-update`, Play's flexible in-app update).
+  The app comes on screen and Play has a newer version: Google's sheet, once
+  per launch. Downloaded: the next time the app comes back on screen, "A new
+  version of Megy Prints is ready." with Restart to update and Later (4
+  hours). New in 2.0: neither while an order is being made and sent (a
+  restart would stop it half-way; `orderBeingSent`, marked by `Sending.tsx`
+  until the send settles). Only an app installed from Play gets an answer.
+  To see it on the emulator: build with `MEGY_FAKE_APP_UPDATE=1` (refused
+  together with `-Play`), open the app, wait 5 s, Home, back in
+  (`test/appUpdate.test.tsx`).
+- **Version 2.0.2, code 102.** Same permissions as 2.0.1, so the two
+  declarations still cover it. Upload only after 2.0.1 shows Published.
+
+### Release notes 2.0.2 (Play Console "What's new")
+
+    What's new:
+    • The app tells you when a new version is ready, so you always have the latest
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

@@ -1,0 +1,3 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Google Play's in-app updates (AppUpdateModule): no permissions of its own. -->
+</manifest>

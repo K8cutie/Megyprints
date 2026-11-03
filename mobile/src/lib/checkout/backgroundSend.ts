@@ -62,6 +62,28 @@ export async function askToNotify(native: KeeperNative | null = orderKeeper): Pr
   }
 }
 
+/* An order being made and sent: from Place order until the send settles
+   (components/checkout/Sending.tsx), even if the screen goes first. The
+   "new version is ready" box (lib/appUpdate.ts) waits meanwhile: its
+   restart would stop the order half-way. */
+let sending = 0;
+
+/** An order is being made and sent right now. */
+export function orderBeingSent(): boolean {
+  return sending > 0;
+}
+
+/** A send started; call the answer when it has settled (once is enough). */
+export function startSending(): () => void {
+  sending += 1;
+  let ended = false;
+  return () => {
+    if (ended) return;
+    ended = true;
+    sending -= 1;
+  };
+}
+
 export interface KeeperDeps {
   native: KeeperNative | null;
   askToNotify: () => Promise<boolean>;

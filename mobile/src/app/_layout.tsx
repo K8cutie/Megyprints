@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useLayoutEffect } from 'react';
 import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
+import { useAppUpdatePrompt } from '../lib/appUpdate';
 import { useAskBeforeClosing } from '../lib/closeAsk';
 import { DraftProvider } from '../lib/draftStore';
 import { guardSharedRouter, rootMounted, rootUnmounted } from '../lib/routerBinding';
@@ -27,6 +28,12 @@ function AskBeforeClosing() {
   return null;
 }
 
+/** A new version on Google Play: asked for, then "ready" (appUpdate.ts). */
+function AskAboutUpdates() {
+  useAppUpdatePrompt();
+  return null;
+}
+
 export default function RootLayout() {
   // Every screen is upright; only the Preview turns with the phone, while it
   // is on top (src/lib/screenTurning.ts). Upright from the start, too, after
@@ -40,6 +47,7 @@ export default function RootLayout() {
           <StatusBar style="dark" />
           <KeepRouterBound />
           <AskBeforeClosing />
+          <AskAboutUpdates />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },
