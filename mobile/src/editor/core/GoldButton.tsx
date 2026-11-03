@@ -15,7 +15,8 @@
    Animated (native driver): no new library in the app.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useReduceMotion } from '../../lib/reduceMotion';
 
 /** The website's .memory-shine, value for value. */
 export const GOLD = {
@@ -30,24 +31,13 @@ export const GOLD = {
   sweepMs: 3400,
 } as const;
 
-/** The phone's "reduce motion" setting, kept up to date. */
-function useReduceMotion(): boolean {
-  const [reduce, setReduce] = useState(false);
-  useEffect(() => {
-    let live = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then((v) => { if (live) setReduce(v); }).catch(() => {});
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduce);
-    return () => { live = false; sub.remove(); };
-  }, []);
-  return reduce;
-}
-
-/** A small video camera (the website's lucide Video), in the words' colour. */
-function VideoMark() {
+/** A small video camera (the website's lucide Video), in the words' colour
+ *  (also on the start screen's "Add a video memory" slide, src/home). */
+export function VideoMark({ color = GOLD.text, size = 1 }: { color?: string; size?: number }) {
   return (
-    <View style={styles.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <View style={styles.markBody} />
-      <View style={styles.markLens} />
+    <View style={[styles.mark, size !== 1 && { transform: [{ scale: size }] }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={[styles.markBody, { borderColor: color }]} />
+      <View style={[styles.markLens, { borderRightColor: color }]} />
     </View>
   );
 }

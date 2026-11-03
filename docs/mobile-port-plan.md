@@ -3312,6 +3312,39 @@ library. A registry tool can ask for it (`look: 'gold'`); the memories part
 does, and the editor shows it in its own row just over the page turn.
 A **new APK** is needed.
 
+## The start screen looks like the website's home (2026-11-03, `feat/port-home-look`)
+
+Owner, with the 1.x and 2.0 start screens side by side: "1.x looks more 2.0
+than 2.0". The 2.0 start screen was the app icon and a column of plain
+buttons. Now it is the website's home at phone width (`src/app/index.tsx`,
+`src/home/`):
+
+- the albums photo behind it all under the website's veil, slowly zooming
+  (`assets/home/hero.jpg`, the website's `hero-albums.jpg` cut to its middle
+  for an upright phone, 150 KB); "Megy · Prints" and a menu over it;
+- the Albums and Events cards (`HomeCards.tsx`, the website's
+  `src/pages/home/HomeCards.tsx`): label, Playfair headline, five slides
+  each with the same pictures at the same sizes (a slide every 4 s, Albums
+  half a beat later, dots, Pause/Play, swipe), "Start Creating" and "Book
+  your event ›". The words are a copy of `src/pages/homeCopy.ts` (the
+  website is frozen and that file can't be shared), and
+  `test/homeLook.test.tsx` holds the copy to the website's word for word;
+- the app's own parts stay: Continue my album / Start a new album inside
+  the Albums card; Sign in at the top when signed out; the account's
+  places (albums, orders, profile, memories, sign out) in a card when
+  signed in, and in the menu; in the dev build only, the test buttons and
+  the "Test version" note at the bottom;
+- the type is the website's (Playfair Display, DM Sans), from the font files
+  already in the app; the pictures move (the website's timings) only while
+  the screen is on top, and hold still with "reduce motion" on
+  (`src/lib/reduceMotion.ts`, now shared with the gold button).
+
+Drawn with React Native's own views, `Image`, `boxShadow`, `backgroundImage`
+and `Animated` (native driver): no new library. Checked in a browser copy
+(react-native-web, in the scratchpad only) before the phone. The website's
+"Start the User tutorial" card is a website tester task and is not in the
+app. A **new APK** is needed.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

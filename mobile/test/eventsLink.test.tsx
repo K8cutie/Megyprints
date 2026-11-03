@@ -2,8 +2,9 @@
    MEGYPRINTS EVENTS FROM THE APP (Phase 6: src/app/index.tsx). Events are
    booked and run on the website (src/pages/Events.tsx and the event pages;
    guests take part by scanning the event's QR, nothing to download). The
-   start screen has the website's "Megyprints Events" (the website's menu and
-   home card), which opens the website's Events page, signed in or not.
+   start screen has the website's Events card, whose "Book your event ›"
+   opens the website's Events page, signed in or not (and "Megyprints
+   Events" in the menu, test/homeLook.test.tsx).
    ══════════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,12 +12,14 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Linking } from 'react-native';
 import Start from '../src/app/index';
 import { EVENTS_LABEL, EVENTS_PAGE } from '../src/lib/events';
+import { EVENTS_CARD } from '../src/home/homeWords';
 
 const REPO = path.resolve(__dirname, '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(REPO, rel), 'utf8');
 
 const mockAuth: { session: unknown } = { session: null };
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useIsFocused: () => true }));
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ loading: false, session: mockAuth.session, signOut: jest.fn() }) }));
 jest.mock('../src/builder/BuilderProvider', () => ({
   useBuilder: () => ({ builder: { uploadedPhotos: [], reset: jest.fn() }, platform: { deviceStore: {} } }),
@@ -43,7 +46,8 @@ describe('Megyprints Events', () => {
     mockAuth.session = session;
     await render(<Start />);
     await fireEvent.press(screen.getByTestId('go-events'));
-    expect(screen.getByTestId('go-events')).toHaveTextContent(EVENTS_LABEL);
+    expect(screen.getByTestId('go-events')).toHaveTextContent(`${EVENTS_CARD.cta} ›`);
+    expect(EVENTS_CARD.label).toBe(EVENTS_LABEL);
     expect(openUrl).toHaveBeenCalledWith('https://megyprints.vercel.app/#/events');
   });
 });

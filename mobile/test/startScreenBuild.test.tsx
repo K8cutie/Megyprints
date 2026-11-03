@@ -15,7 +15,8 @@ const appJson = require('../app.json') as { expo: Record<string, unknown> };
 
 const mockConfig: { value: unknown } = { value: null };
 jest.mock('expo-constants', () => ({ __esModule: true, default: { get expoConfig() { return mockConfig.value; } } }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useIsFocused: () => true }));
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ loading: false, session: null, signOut: jest.fn() }) }));
 jest.mock('../src/builder/BuilderProvider', () => ({
   useBuilder: () => ({ builder: { uploadedPhotos: [], reset: jest.fn() }, platform: { deviceStore: {} } }),
