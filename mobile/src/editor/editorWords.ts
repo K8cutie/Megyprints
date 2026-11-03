@@ -8,6 +8,14 @@ export const EDIT_PAGES = 'Edit pages';
 /** MobileReview.tsx: the line over the page. */
 export const pageLine = (index: number, total: number) => `Page ${index + 1} of ${total} · tap a photo to style it`;
 
+/* The app's own (owner, 2026-11-03, the new Edit pages layout): the page
+   count, big over the page, opens a list of every page to jump to (it took
+   the place of the strip of page numbers); on its side the way back to the
+   Preview sits beside it. */
+export const pageCount = (index: number, total: number) => `Page ${index + 1} of ${total}`;
+export const GO_TO_PAGE = 'Go to a page';
+export const PREVIEW_SHORT = '‹ Preview';
+
 /** PageTurnBar.tsx (phone): the page turn, in words both ways. */
 export const PREVIOUS_PAGE = 'Previous page';
 export const NEXT_PAGE = 'Next page';

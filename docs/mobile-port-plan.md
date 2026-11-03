@@ -3259,6 +3259,29 @@ hours, let go in `onDestroy`), so the work goes on with the screen dark.
 New Kotlin and a new permission (`WAKE_LOCK`): a **new APK** is needed.
 Not yet measured on a phone.
 
+## Edit pages: the new layout, upright and on its side (2026-11-03, `feat/port-editor-layout`)
+
+From the owner's drawings (https://claude.ai/artifact/8cVAvMvpJTF6yJH3B2MdQy):
+
+- **No strip of page numbers.** "Page 13 of 72", big over the page, opens
+  **"Go to a page"** (`src/editor/PagePicker.tsx`): the cover first (the
+  parts' `stripStart` tiles), then every page, the one on screen marked.
+- **The guide** with nothing picked: "Select a photo to edit." on a page with
+  a photo (`editorHint.ts`); a page without one says what it can do.
+- **The picked thing's buttons in rows**, all in view (no sideways scroll),
+  the one that removes (red) last (`actionRows.ts dangerLast`).
+- **On its side** the editor turns with the phone (`SCREENS_THAT_TURN`):
+  the page on the left, a panel down the right with "‹ Preview", the count
+  and Undo at the top, then the same buttons. Every `EditorSheet` opens in
+  that panel's place (`SheetPlacement 'side'`), so a filter or mask shows on
+  the page as it is picked; the words editor stays full screen. The header
+  and status bar are hidden on its side. Between the Preview and Edit pages
+  the phone keeps its way up (`screenTurning.ts` counts the screens that may
+  turn and waits `UPRIGHT_AFTER_MS` before upright comes back). The page
+  picture is drawn for the short side, so turning draws nothing again.
+
+A **new APK** is needed. Not tried on a phone yet.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

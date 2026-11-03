@@ -90,6 +90,8 @@ jest.mock('../src/builder/usePagePicture', () => ({
 // After the mocks: the screen and the layout it must follow.
 import Preview from '../src/app/preview';
 import { sidewaysBook, uprightBook, UPRIGHT_EDGE } from '../src/builder/previewLayout';
+import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
+const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
 const DEFAULT = 0;
 const PORTRAIT_UP = 3;
@@ -182,12 +184,16 @@ describe('the Preview turns with the phone, and only while it is on top', () => 
     expect(mockSeen.orientation).toEqual([DEFAULT]);
     mockSeen.focused = false;
     await refresh();
+    // Upright comes back a moment after it is left (screenTurning.ts
+    // UPRIGHT_AFTER_MS: Edit pages, opening over it, may turn too).
+    await pastUprightWait();
     expect(mockSeen.orientation).toEqual([DEFAULT, PORTRAIT_UP]);
     mockSeen.focused = true;
     await refresh();
     await act(async () => { screen!.unmount(); });
     screen = null;
     await settle();
+    await pastUprightWait();
     expect(mockSeen.orientation).toEqual([DEFAULT, PORTRAIT_UP, DEFAULT, PORTRAIT_UP]);
   });
 });

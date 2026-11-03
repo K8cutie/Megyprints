@@ -2,8 +2,8 @@
    HINTS UNDER THE PAGE in "Edit pages" (src/editor/editorHint.ts; owner's
    phone test: the empty space between the page and the page numbers "is a
    usable space that we can show hints"):
-     • nothing picked: what the page can do (an empty box, a QR, a photo,
-       words, the first that fits) and how to turn the page, on real pages;
+     • nothing picked: the guide, "Select a photo to edit." (owner, with the
+       new layout), or what a page with no photo can do, on real pages;
      • a photo picked: it moves and zooms with a finger;
      • the screen shows them in that space.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -12,7 +12,7 @@ import path from 'node:path';
 import { SCENARIOS } from '../../tools/parity/scenarios';
 import { HINTS, pageHint, pickedHint } from '../src/editor/editorHint';
 import { pageTargets, type Target } from '../src/editor/hitTest';
-import { act, builder, madeAlbum, useEditorBench } from './editorHarness';
+import { builder, madeAlbum, useEditorBench } from './editorHarness';
 
 useEditorBench();
 
@@ -21,43 +21,27 @@ const targetsOf = (i: number): Target[] => {
   return pageTargets({ page: b.albumPages[i], albumSize: b.albumSize, pageIndex: i, photoCount: b.uploadedPhotos.length }).targets;
 };
 
-describe('nothing picked: what the page can do, then how to turn it', () => {
-  it('the first that fits: an empty frame, an empty caption box, a QR, a photo, words', () => {
+describe('nothing picked: the guide', () => {
+  it('"Select a photo to edit." on a page with a photo; else what the page can do', () => {
     const t = (...kinds: Target['kind'][]) => kinds.map((kind) => ({ kind }));
-    expect(pageHint(t('photo', 'emptySlot', 'emptyBox'))).toBe(`${HINTS.emptyFrame} ${HINTS.turn}`);
-    expect(pageHint(t('photo', 'emptyBox'))).toBe(`${HINTS.emptyBox} ${HINTS.turn}`);
-    expect(pageHint(t('photo', 'slotQr'))).toBe(`${HINTS.qr} ${HINTS.turn}`);
-    expect(pageHint(t('photo', 'boxText'))).toBe(`${HINTS.photo} ${HINTS.turn}`);
-    expect(pageHint(t('freeText'))).toBe(`${HINTS.words} ${HINTS.turn}`);
-    expect(pageHint([])).toBe(HINTS.turn);
+    expect(HINTS.selectPhoto).toBe('Select a photo to edit.');
+    expect(pageHint(t('photo', 'emptySlot', 'emptyBox'))).toBe(HINTS.selectPhoto);
+    expect(pageHint(t('photo', 'slotQr'))).toBe(HINTS.selectPhoto);
+    expect(pageHint(t('emptySlot', 'emptyBox'))).toBe(HINTS.emptyFrame);
+    expect(pageHint(t('emptyBox', 'boxText'))).toBe(HINTS.emptyBox);
+    expect(pageHint(t('freeText'))).toBe(HINTS.words);
+    expect(pageHint([])).toBe('');
   });
 
-  it('on a real album: every page gets a hint that fits what is on it', async () => {
+  it('on a real album: every page with a photo says "Select a photo to edit."', async () => {
     await madeAlbum(SCENARIOS[0]);
     const pages = builder().albumPages;
     let photoPages = 0;
     for (let i = 0; i < pages.length; i++) {
       const targets = targetsOf(i);
-      const hint = pageHint(targets);
-      expect(hint.endsWith(HINTS.turn)).toBe(true);
-      if (targets.some((x) => x.kind === 'emptySlot')) expect(hint.startsWith(HINTS.emptyFrame)).toBe(true);
-      else if (targets.some((x) => x.kind === 'emptyBox')) expect(hint.startsWith(HINTS.emptyBox)).toBe(true);
-      else if (targets.some((x) => x.kind === 'photo')) { expect(hint.startsWith(HINTS.photo)).toBe(true); photoPages++; }
+      if (targets.some((x) => x.kind === 'photo')) { expect(pageHint(targets)).toBe(HINTS.selectPhoto); photoPages++; }
     }
     expect(photoPages).toBeGreaterThan(0);
-  });
-
-  it('a video memory\'s page says how to change its QR', async () => {
-    await madeAlbum(SCENARIOS[0]);
-    const pages = builder().albumPages;
-    for (let i = 0; i < pages.length; i++) {
-      await act(async () => { builder().goToPage(i); });
-      if (!builder().canAddMemoryQr) continue;
-      await act(async () => { await builder().applyMemoryQr({ code: 'abcd2345', destination: 'https://x/abcd2345.mp4', qrPngDataUrl: 'data:image/png;base64,QR', memoryUrl: 'https://megyprints.vercel.app/m/abcd2345', createdAt: 1, kind: 'clip' } as never, 'br'); });
-      expect(pageHint(targetsOf(i))).toBe(`${HINTS.qr} ${HINTS.turn}`);
-      return;
-    }
-    throw new Error('no single-photo page');
   });
 });
 

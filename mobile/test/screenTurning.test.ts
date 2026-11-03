@@ -28,7 +28,7 @@ jest.mock('expo-screen-orientation', () => {
 });
 
 // After the mock.
-import { keepTheScreenUpright, letTheScreenTurn, mayTurn, screenCanTurn, SCREENS_THAT_TURN, useTurnsWithThePhone } from '../src/lib/screenTurning';
+import { keepTheScreenUpright, letTheScreenTurn, mayTurn, screenCanTurn, SCREENS_THAT_TURN, UPRIGHT_AFTER_MS, useTurnsWithThePhone } from '../src/lib/screenTurning';
 
 const DEFAULT = 0;
 const PORTRAIT_UP = 3;
@@ -44,6 +44,8 @@ function filesUnder(dir: string): string[] {
 }
 const rel = (f: string) => path.relative(MOBILE, f).split(path.sep).join('/');
 const flush = () => new Promise((r) => setTimeout(r, 0));
+/** Past the wait before upright comes back. */
+const settle = () => new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30));
 
 beforeEach(() => {
   mockOrientation.present = true;
@@ -56,19 +58,21 @@ describe('which screens turn with the phone', () => {
     expect(app.expo.orientation).toBe('portrait');
   });
 
-  it('the Preview alone', () => {
-    expect([...SCREENS_THAT_TURN]).toEqual(['preview']);
+  it('the Preview and Edit pages, no other', () => {
+    expect([...SCREENS_THAT_TURN]).toEqual(['preview', 'edit-pages']);
     expect(mayTurn('preview')).toBe(true);
-    for (const other of ['index', 'albums', 'photos', 'album-cover', 'making', 'edit-pages', 'edit-cover', 'order', 'sign-in']) {
+    expect(mayTurn('edit-pages')).toBe(true);
+    for (const other of ['index', 'albums', 'photos', 'album-cover', 'making', 'edit-cover', 'order', 'sign-in']) {
       expect(mayTurn(other)).toBe(false);
     }
   });
 
-  it('only the Preview screen asks to turn, and only screenTurning.ts talks to expo-screen-orientation', () => {
+  it('only the Preview and Edit pages ask to turn, and only screenTurning.ts talks to expo-screen-orientation', () => {
     const files = filesUnder(APP_DIR).map((f) => ({ f: rel(f), text: readFileSync(f, 'utf8') }));
-    expect(files.filter((x) => /useTurnsWithThePhone\(/.test(x.text) && !x.f.endsWith('lib/screenTurning.ts')).map((x) => x.f))
-      .toEqual(['src/app/preview.tsx']);
+    expect(files.filter((x) => /useTurnsWithThePhone\(/.test(x.text) && !x.f.endsWith('lib/screenTurning.ts')).map((x) => x.f).sort())
+      .toEqual(['src/app/preview.tsx', 'src/editor/EditPagesScreen.tsx']);
     expect(readFileSync(path.join(APP_DIR, 'app', 'preview.tsx'), 'utf8')).toContain("useTurnsWithThePhone('preview', ");
+    expect(readFileSync(path.join(APP_DIR, 'editor', 'EditPagesScreen.tsx'), 'utf8')).toContain("useTurnsWithThePhone('edit-pages', ");
     expect(files.filter((x) => x.text.includes("'expo-screen-orientation'")).map((x) => x.f)).toEqual(['src/lib/screenTurning.ts']);
   });
 
@@ -88,14 +92,35 @@ describe('the Preview on top: the phone may turn it; left: upright again', () =>
     await flush();
     expect(mockOrientation.calls).toEqual([DEFAULT]);
     await rerender({ focused: false });
-    await flush();
+    await settle();
     expect(mockOrientation.calls).toEqual([DEFAULT, PORTRAIT_UP]);
     await rerender({ focused: true });
     await flush();
     expect(mockOrientation.calls).toEqual([DEFAULT, PORTRAIT_UP, DEFAULT]);
     await unmount();
-    await flush();
+    await settle();
     expect(mockOrientation.calls).toEqual([DEFAULT, PORTRAIT_UP, DEFAULT, PORTRAIT_UP]);
+  });
+
+  it('from the Preview to Edit pages and back: the phone never flips upright between them, whichever speaks first', async () => {
+    const preview = await renderHook(({ focused }: { focused: boolean }) => useTurnsWithThePhone('preview', focused), { initialProps: { focused: true } });
+    await flush();
+    // The Preview says it is left first; Edit pages a moment later.
+    await preview.rerender({ focused: false });
+    await flush();
+    const editor = await renderHook(({ focused }: { focused: boolean }) => useTurnsWithThePhone('edit-pages', focused), { initialProps: { focused: true } });
+    await settle();
+    expect(mockOrientation.calls).not.toContain(PORTRAIT_UP);
+    // Back to the Preview: Edit pages closes, the Preview is on top again.
+    await preview.rerender({ focused: true });
+    await editor.unmount();
+    await settle();
+    expect(mockOrientation.calls).not.toContain(PORTRAIT_UP);
+    // The cover editor (upright) opens over the Preview: upright again.
+    await preview.rerender({ focused: false });
+    await settle();
+    expect(mockOrientation.calls[mockOrientation.calls.length - 1]).toBe(PORTRAIT_UP);
+    await preview.unmount();
   });
 
   it('not on top: asks for nothing', async () => {
@@ -107,7 +132,7 @@ describe('the Preview on top: the phone may turn it; left: upright again', () =>
   });
 
   it('a screen not in the list never turns', async () => {
-    const { unmount } = await renderHook(() => useTurnsWithThePhone('edit-pages', true));
+    const { unmount } = await renderHook(() => useTurnsWithThePhone('edit-cover', true));
     await flush();
     await unmount();
     await flush();
