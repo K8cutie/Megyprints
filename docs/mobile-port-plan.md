@@ -3536,6 +3536,16 @@ the phone after:
 - **The start screen's "how it works" slides cut their words at the right
   edge on Android.** The words beside the picture get the rest of the slide
   outright; each slide is the exact width (`HomeCards.tsx`).
+- **Signed out with Your order open, the next account saw the typed name,
+  phone and address** (Mother, round 2: the sign-in ran out on the form).
+  Auth forgot the form, then the open screen kept it again as a guest's. An
+  account going away now clears the fields and keeps nothing (`order.tsx`;
+  the website's `Order.tsx` had the same shape, fixed with it).
+- **"Included with your album" said "5 years of memory hosting" beside a
+  20-year order** (owner, from the app). It now reads "Memories stay live
+  for 5 years (you added 15 more years)", in the price line's and the
+  picker's words, and the album line says "7 living-memory QRs" like the box
+  under it (`pricing.includedHostingLine`, shared with the website).
 - **Test builds for a server on this PC** (a plain-http address in
   `.env.local`) may talk plain http; the Play build refuses such an address
   (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
@@ -3550,6 +3560,7 @@ the phone after:
     • Your order shows your album's real cover
     • Going back from checkout keeps your name and address
     • The photo picker asks before dropping photos you picked
+    • Your order says clearly how long your videos stay live
     Also new:
     • The app tells you when a new version is ready
 
