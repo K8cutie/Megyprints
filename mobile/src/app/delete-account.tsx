@@ -34,6 +34,7 @@ import {
 } from '../lib/account/deletionWords';
 import { useAuth } from '../lib/auth';
 import { useDraft } from '../lib/draftStore';
+import { siteFetch } from '../lib/siteOrigin';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 
@@ -82,7 +83,8 @@ export default function DeleteAccount() {
       await deleteAccountFromApp({
         endpoint: where.url,
         token: async () => (await supabase.auth.getSession()).data.session?.access_token ?? null,
-        fetch: (url, init) => fetch(url, init),
+        // Saying it comes from the website (lib/siteOrigin.ts).
+        fetch: (url, init) => siteFetch((u, i) => fetch(u, i))(url, init),
         wipe: async () => {
           // What the phone keeps: the album in progress and the access to photos
           // picked with "Choose from Files" (as Start a new album lets them go).

@@ -236,7 +236,8 @@ describe('the screen', () => {
 
       await fireEvent.changeText(screen.getByTestId('delete-typed'), ' delete ');
       await fireEvent.press(screen.getByTestId('delete-forever'));
-      expect(sent).toEqual([{ url: 'https://megyprints.vercel.app/api/delete-account', init: { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer token-abc' }, body: '{}' } }]);
+      // The website's own call, saying it comes from the website (lib/siteOrigin.ts: the endpoint's origin list).
+      expect(sent).toEqual([{ url: 'https://megyprints.vercel.app/api/delete-account', init: { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer token-abc', Origin: 'https://megyprints.vercel.app' }, body: '{}' } }]);
       expect(await screen.findByText('Your account is deleted')).toBeTruthy();
       expect(screen.getByText('Your albums, photos, videos and memory links are gone. Thanks for using Megy Prints.')).toBeTruthy();
       // On the phone: the photo grants of "Choose from Files" photos, the album, the sign-in.

@@ -46,7 +46,7 @@ export function pagePhotoUris(page: AlbumPage | null | undefined, photos: readon
 
 export type PhotoQuotesResult =
   | { lines: string[]; left?: number }
-  | { error: 'sign_in' | 'limit_user' | 'limit_all' | 'refused' | 'failed' };
+  | { error: 'sign_in' | 'limit_user' | 'limit_all' | 'refused' | 'failed'; detail?: string };
 
 export interface PhotoQuoteDeps {
   /** The signed-in account's access token, or null (signed out). */
@@ -71,11 +71,12 @@ export async function writeLinesForPhotos(deps: PhotoQuoteDeps, uris: string[], 
     const body = (await r.json().catch(() => ({}))) as { error?: unknown; reason?: unknown; lines?: unknown; left?: unknown };
     if (r.status === 401) return { error: 'sign_in' };
     if (r.status === 429) return { error: body.error === 'limit_all' ? 'limit_all' : 'limit_user' };
-    if (!r.ok) return { error: 'failed' };
+    // What the server said, for the test app's line (QuotePickerSheet).
+    if (!r.ok) return { error: 'failed', detail: `${r.status}${typeof body.error === 'string' && body.error ? ` ${body.error}` : ''}` };
     if (body.reason === 'refused') return { error: 'refused' };
     const lines = Array.isArray(body.lines) ? body.lines.filter((l: unknown): l is string => typeof l === 'string') : [];
-    return lines.length ? { lines, left: typeof body.left === 'number' ? body.left : undefined } : { error: 'failed' };
-  } catch {
-    return { error: 'failed' };
+    return lines.length ? { lines, left: typeof body.left === 'number' ? body.left : undefined } : { error: 'failed', detail: 'no lines' };
+  } catch (e) {
+    return { error: 'failed', detail: e instanceof Error && e.message ? e.message : 'no answer' };
   }
 }

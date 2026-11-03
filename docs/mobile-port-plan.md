@@ -1502,9 +1502,8 @@ words, line for line; every change through the website's `useBuilderState`.
 - **Not done / not proven:** not walked on an emulator or phone (the verify step);
   the keyboard lift of the format bar, expo-font in the typing box and a real
   Google Fonts download are unproven on a device. The endpoint's `ALLOWED_ORIGINS`
-  guard (if set on Vercel) would refuse the app, which sends no Origin: the picker
-  then says "Couldn't write lines just now"; the fix is a server rule for the app,
-  held until Nov 9. An album from the website in a fetched font draws in the
+  guard (if set on Vercel) refused the app, which sent no Origin: fixed in the app
+  2026-11-03 (`src/lib/siteOrigin.ts`). An album from the website in a fetched font draws in the
   phone's serif on the Preview until the editor is opened once (the editor fetches
   the album's fonts); the Preview itself doesn't fetch.
 
@@ -3281,6 +3280,22 @@ From the owner's drawings (https://claude.ai/artifact/8cVAvMvpJTF6yJH3B2MdQy):
   picture is drawn for the short side, so turning draws nothing again.
 
 A **new APK** is needed. Not tried on a phone yet.
+
+## The AI quote and "Delete my account" through the origin list (2026-11-03, `feat/port-ai-quote-origin`)
+
+Owner's phone test: the AI quote works on the website, not in the app. The
+website's endpoints share a guard (`api/_guard.mjs`) with an optional origin
+list (`ALLOWED_ORIGINS` on Vercel); a browser always sends its Origin, the
+app sent none, so with the list on every call from the app was refused
+("origin not allowed": the app said "Couldn't write lines just now"). The
+app's calls to the website's own endpoints now carry the endpoint's own
+address as their Origin (`src/lib/siteOrigin.ts`, `siteFetch`), the call
+the website itself makes: the AI quote (`appPhotoQuotes.ts`) and "Delete my
+account" (`app/delete-account.tsx`). Sign-in and the daily limits are as
+before. `test/siteOrigin.test.ts` runs the website's real guard with the
+list on: the old call refused, the new one through. A failed AI quote in the
+**test app** also says what the server answered (never in the Play app). No
+server change; a **new APK** is needed.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

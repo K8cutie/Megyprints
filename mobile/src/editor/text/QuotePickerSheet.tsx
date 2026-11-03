@@ -25,6 +25,7 @@ import { DEAL_BANK_QUOTES } from '@web/pages/builder/generateAlbum';
 import { captionFits, quoteRoom } from '@web/pages/builder/textFit';
 import { curatedQuotesFor, MAX_QUOTE_CHARS } from '@web/lib/themeQuotePool';
 import { cleanAlbumTheme, MAX_THEME_LENGTH, readAlbumThemeFrom, writeAlbumThemeTo } from '@web/lib/albumThemeRules';
+import { buildKind } from '../../lib/buildKind';
 import { colors, space } from '../../lib/theme';
 import { EditorSheet } from '../core/EditorSheet';
 import type { SheetProps } from '../registry';
@@ -34,7 +35,7 @@ import { askToResume } from './resumeQuote';
 import {
   ADD_A_QUOTE, BANK_EMPTY, BANK_HEADING, BANK_PLACEHOLDER, bankSource, CHANGE_QUOTE, consent, EDIT_THE_WORDS, lookingAt,
   MORE_LINES, NO_PHOTO_NOTE, PHOTO_QUOTE_MESSAGES, REMOVE_QUOTE, SIGN_IN, SIGN_IN_FIRST, signInFor, TYPE_YOUR_OWN_WORDS,
-  WRITE_3_MORE, writeALine, writtenFor,
+  testAppDetail, WRITE_3_MORE, writeALine, writtenFor,
 } from './words';
 import { pickQuote, quoteBoxFor, quoteOpening, removeQuote, type WordsTarget } from './wordsFlow';
 
@@ -102,7 +103,8 @@ function Picker({ ctx, params, close, signedIn }: SheetProps<QuotePickerParams> 
       return;
     }
     if (r.error === 'sign_in') { setNeedSignIn(true); return; }
-    setNote(PHOTO_QUOTE_MESSAGES[r.error]);
+    // The test app says what the server answered, so a screenshot shows why.
+    setNote(r.detail && buildKind() === 'dev' ? `${PHOTO_QUOTE_MESSAGES[r.error]}\n${testAppDetail(r.detail)}` : PHOTO_QUOTE_MESSAGES[r.error]);
     // photoUris / quoteBox are worked out from the page each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, deps, theme, lines, platform]);

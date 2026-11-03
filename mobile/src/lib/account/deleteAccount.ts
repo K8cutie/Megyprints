@@ -55,9 +55,9 @@ export function deleteAccountEndpoint(supabaseUrl: string, override: string | un
 
 /** The endpoint's own refusals that are not about the account (its abuse
  *  guard, api/_guard.mjs, and its method check). They are not written for a
- *  customer, so the app says what to do instead. The guard's origin list,
- *  if it is ever switched on, would refuse the app: it sends no Origin
- *  (the fix is a server rule for the app, held until Nov 9). */
+ *  customer, so the app says what to do instead. The guard's origin list
+ *  lets the app through: its call says it comes from the website
+ *  (lib/siteOrigin.ts, 2026-11-03). */
 const NOT_FOR_CUSTOMERS = ['origin not allowed', 'too many requests', 'request body too large', 'POST only'];
 
 /** Said when the app could not get the deletion done and the customer
