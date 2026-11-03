@@ -3,8 +3,10 @@ import { StatusBar } from 'expo-status-bar';
 import { useLayoutEffect } from 'react';
 import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
+import { useAskBeforeClosing } from '../lib/closeAsk';
 import { DraftProvider } from '../lib/draftStore';
 import { guardSharedRouter, rootMounted, rootUnmounted } from '../lib/routerBinding';
+import { keepTheScreenUpright } from '../lib/screenTurning';
 import { colors } from '../lib/theme';
 
 /** Keeps the shared router bound after Android rebuilds the screen (routerBinding.ts). */
@@ -18,13 +20,26 @@ function KeepRouterBound() {
   return null;
 }
 
+/** Back on the last screen asks "Close Megy Prints?" first (closeAsk.ts). */
+const canGoBack = () => router.canGoBack();
+function AskBeforeClosing() {
+  useAskBeforeClosing(canGoBack);
+  return null;
+}
+
 export default function RootLayout() {
+  // Every screen is upright; only the Preview turns with the phone, while it
+  // is on top (src/lib/screenTurning.ts). Upright from the start, too, after
+  // a reload that happened on the Preview. A layout effect: it runs before
+  // any screen's own effect, so a Preview opened first still turns.
+  useLayoutEffect(() => { void keepTheScreenUpright(); }, []);
   return (
     <AuthProvider>
       <DraftProvider>
         <BuilderProvider>
           <StatusBar style="dark" />
           <KeepRouterBound />
+          <AskBeforeClosing />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },
@@ -48,6 +63,13 @@ export default function RootLayout() {
             <Stack.Screen name="golden-pages" options={{ title: 'Golden pages' }} />
             <Stack.Screen name="photo-check-lab" options={{ title: 'Photo check test' }} />
             <Stack.Screen name="order" options={{ title: 'Your order' }} />
+            <Stack.Screen name="orders" options={{ title: 'Your orders' }} />
+            <Stack.Screen name="order-details" options={{ title: 'Order' }} />
+            <Stack.Screen name="profile" options={{ title: 'My Profile' }} />
+            <Stack.Screen name="memories" options={{ title: 'My Memories' }} />
+            <Stack.Screen name="auth-return" options={{ title: 'Signing in' }} />
+            <Stack.Screen name="change-password" options={{ title: 'Change password' }} />
+            <Stack.Screen name="delete-account" options={{ title: 'Delete my account' }} />
           </Stack>
         </BuilderProvider>
       </DraftProvider>

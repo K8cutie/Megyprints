@@ -59,14 +59,15 @@ describe('asking for lines (lib/photoQuotes writeLinesForPhotos)', () => {
       [{ status: 401, body: {} }, { error: 'sign_in' }],
       [{ status: 429, body: { error: 'limit_all' } }, { error: 'limit_all' }],
       [{ status: 429, body: {} }, { error: 'limit_user' }],
-      [{ status: 503, body: {} }, { error: 'failed' }],
+      // A failure keeps what the server said (the test app shows it: siteOrigin.test.ts).
+      [{ status: 503, body: {} }, { error: 'failed', detail: '503' }],
       [{ status: 200, body: { lines: [], reason: 'refused' } }, { error: 'refused' }],
-      [{ status: 200, body: { lines: [] } }, { error: 'failed' }],
-      [{ status: 200, bad: true }, { error: 'failed' }],
+      [{ status: 200, body: { lines: [] } }, { error: 'failed', detail: 'no lines' }],
+      [{ status: 200, bad: true }, { error: 'failed', detail: 'no lines' }],
     ];
     for (const [answer, want] of cases) expect(await writeLinesForPhotos(deps({ answer }).d, ['u'], 't')).toEqual(want);
-    expect(await writeLinesForPhotos(deps({ fetch: async () => { throw new Error('offline'); } }).d, ['u'], 't')).toEqual({ error: 'failed' });
-    expect(await writeLinesForPhotos(deps({ shrink: async () => { throw new Error('photo gone'); } }).d, ['u'], 't')).toEqual({ error: 'failed' });
+    expect(await writeLinesForPhotos(deps({ fetch: async () => { throw new Error('offline'); } }).d, ['u'], 't')).toEqual({ error: 'failed', detail: 'offline' });
+    expect(await writeLinesForPhotos(deps({ shrink: async () => { throw new Error('photo gone'); } }).d, ['u'], 't')).toEqual({ error: 'failed', detail: 'photo gone' });
   });
 });
 

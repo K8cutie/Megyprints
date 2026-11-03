@@ -1,5 +1,6 @@
 package expo.modules.megyphotofiles
 
+import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -7,8 +8,10 @@ import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.exifinterface.media.ExifInterface
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
@@ -39,9 +42,19 @@ import kotlinx.coroutines.withContext
  * (setTargetColorSpace), and writes that as a PNG file the page renderer can
  * read. Proven on the golden page photo-display-p3 (src/dev/goldenRun.ts).
  */
+private const val PICK_PHOTOS_CODE = 4211
+
+/** The phone's camera folder, where Android's Files picker opens
+ *  (owner, 2026-11-02: "make the phone's photo folder the default"). A phone
+ *  without it: the picker opens where it would anyway. */
+private const val CAMERA_FOLDER_ID = "primary:DCIM/Camera"
+
 class PhotoFilesModule : Module() {
   private val resolver
     get() = (appContext.reactContext ?: throw Exceptions.ReactContextLost()).contentResolver
+
+  /** The "Choose from Files" picker that is open, waiting for its answer. */
+  private var pickPromise: Promise? = null
 
   override fun definition() = ModuleDefinition {
     Name("MegyPhotoFiles")
@@ -69,6 +82,74 @@ class PhotoFilesModule : Module() {
     AsyncFunction("drawableCopy") Coroutine { source: String, target: String, maxSide: Int ->
       withContext(Dispatchers.IO) { drawableCopy(source, target, maxSide) }
     }
+
+    // "Choose from Files": Android's document picker for photos, many at
+    // once, opened in the camera folder. The answer: { canceled, assets },
+    // each asset its address, name, type, bytes and last change (the shape
+    // expo-document-picker gives, which the app used before).
+    AsyncFunction("pickPhotos") { promise: Promise ->
+      if (pickPromise != null) {
+        promise.reject("ERR_PICKING", "The Files picker is already open", null)
+        return@AsyncFunction
+      }
+      val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        addCategory(Intent.CATEGORY_OPENABLE)
+        type = "image/*"
+        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+          putExtra(DocumentsContract.EXTRA_INITIAL_URI, DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", CAMERA_FOLDER_ID))
+        }
+      }
+      pickPromise = promise
+      try {
+        appContext.throwingActivity.startActivityForResult(intent, PICK_PHOTOS_CODE)
+      } catch (e: Exception) {
+        pickPromise = null
+        promise.reject("ERR_PICKER", e.message ?: "Could not open Files", e)
+      }
+    }
+
+    OnActivityResult { _, (requestCode, resultCode, data) ->
+      if (requestCode != PICK_PHOTOS_CODE) return@OnActivityResult
+      val promise = pickPromise ?: return@OnActivityResult
+      pickPromise = null
+      if (resultCode != Activity.RESULT_OK || data == null) {
+        promise.resolve(mapOf("canceled" to true, "assets" to emptyList<Map<String, Any?>>()))
+        return@OnActivityResult
+      }
+      try {
+        val clip = data.clipData
+        val uris = if (clip != null) (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri } else listOfNotNull(data.data)
+        promise.resolve(mapOf("canceled" to uris.isEmpty(), "assets" to uris.map { pickedFile(it) }))
+      } catch (e: Exception) {
+        promise.reject("ERR_PICKED", e.message ?: "Could not read the picked photos", e)
+      }
+    }
+  }
+
+  /** A picked file's address, name, type, bytes and last change, from the
+   *  picker's own answer (no file opened). */
+  private fun pickedFile(uri: Uri): Map<String, Any?> {
+    var name: String? = null
+    var size: Long? = null
+    var modified: Long? = null
+    resolver.query(uri, null, null, null, null)?.use { c ->
+      if (c.moveToFirst()) {
+        val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+        if (n >= 0 && !c.isNull(n)) name = c.getString(n)
+        val s = c.getColumnIndex(OpenableColumns.SIZE)
+        if (s >= 0 && !c.isNull(s)) size = c.getLong(s)
+        val m = c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+        if (m >= 0 && !c.isNull(m)) modified = c.getLong(m)
+      }
+    }
+    return mapOf(
+      "uri" to uri.toString(),
+      "name" to (name ?: uri.lastPathSegment ?: ""),
+      "mimeType" to resolver.getType(uri),
+      "size" to size,
+      "lastModified" to modified,
+    )
   }
 
   /**

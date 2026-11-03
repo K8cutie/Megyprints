@@ -332,7 +332,10 @@ every open PR on 2026-10-29). Whichever lands second follows the recipe.
      feedback goes in `docs/tester-feedback-log.md` as always.
   3. Production as a **staged rollout** (a small share of phones first, then
      more), so a problem reaches few people and can be stopped.
-  A phone with 1.x updates to 2.0 in place: still signed in, albums there.
+  A phone with 1.x updates to 2.0 in place, with the albums saved to the
+  account there. **People sign in once more** (1.x kept the sign-in inside
+  its web view; 2.0 keeps its own), and an album made in 1.x without signing
+  in, never saved to an account, stays behind. See "Phase 7: the Play build".
 
 ## 7. Cost
 
@@ -530,7 +533,7 @@ On the `pwa_test` emulator (Android, x86_64), both APKs, next to the 1.x app
   worktrees under `.claude\worktrees\` (each with its own `node_modules`) and
   `C:\Users\Archie\.gradle\caches` (4.6 GB) are where space can come back from.
 
-### Google sign-in: owner steps (not in Phase 1)
+### Google sign-in: owner steps (not in Phase 1; not needed now, see "Sign in with Google" below)
 
 Phase 1 signs in with email and password only. People who made their account
 with Google cannot sign in to the dev app yet (the sign-in screen says so).
@@ -572,6 +575,8 @@ Native Google sign-in needs these steps first, all in the owner's accounts:
   `jsonb_array_length(pages)`, in a migration) and read that instead.
 - **Debug builds use the public React Native debug key.** Before Phase 7,
   make our own dev key, or keep dev builds off real accounts' Google sign-in.
+  (Done by Phase 7's design: Google sign-in comes back only to the Play
+  build, which is signed with the upload key.)
 - Phones: the default ABIs are `arm64-v8a` (phones) and `x86_64` (emulator);
   old 32-bit phones need `armeabi-v7a` added (`-Abis`).
 
@@ -896,8 +901,10 @@ address, which Phase 3's `appPhotos.ts` keeps today).
      data disclosure" page lists it).
   2. **Privacy page** (`src/pages/Privacy.tsx`, "Service providers we rely
      on"): add "Google ML Kit: finds faces on your phone; your photos are
-     never sent". Not added yet: no app that customers have uses ML Kit
-     (the Play testers' app is the 1.x shell).
+     never sent". Written on 2026-11-03: PR #264 into main (the paragraph
+     says what ML Kit sends, per Google's disclosure page; it names "2.0 and
+     later", so it is true while 1.x is the Play app). It goes live when
+     merged, before 2.0 reaches testers.
   3. Optional, for no uploads at all: remove ML Kit's uploader service with a
      manifest `tools:node="remove"` in a config plugin, and run
      `tools/photo-check` again to see ML Kit still works. Not tried.
@@ -1497,9 +1504,8 @@ words, line for line; every change through the website's `useBuilderState`.
 - **Not done / not proven:** not walked on an emulator or phone (the verify step);
   the keyboard lift of the format bar, expo-font in the typing box and a real
   Google Fonts download are unproven on a device. The endpoint's `ALLOWED_ORIGINS`
-  guard (if set on Vercel) would refuse the app, which sends no Origin: the picker
-  then says "Couldn't write lines just now"; the fix is a server rule for the app,
-  held until Nov 9. An album from the website in a fetched font draws in the
+  guard (if set on Vercel) refused the app, which sent no Origin: fixed in the app
+  2026-11-03 (`src/lib/siteOrigin.ts`). An album from the website in a fetched font draws in the
   phone's serif on the Preview until the editor is opened once (the editor fetches
   the album's fonts); the Preview itself doesn't fetch.
 
@@ -1944,6 +1950,7 @@ Script italic. **All but the fonts are drawn since 2026-10-29: see
 - **Georgia** (the default text font) is a Microsoft font; Android phones
   don't have it, so a print file made on an Android phone already uses the
   phone's serif. For the app: bundle Gelasio (same letter widths, OFL).
+  Done 2026-11-02 (`feat/port-phone-test-fixes`).
 - The website's real fonts come from Google Fonts as variable woff2 files;
   the check uses the static TTF files on both sides. Same designs; widths
   could differ slightly between the two file kinds.
@@ -2311,6 +2318,181 @@ Covers on the phone:
 
 ---
 
+## Print files in the app (2026-10-28, Phase 5 core; on native-2.0 2026-11-02)
+
+The app makes, on the phone, the same files the website makes for an order,
+and writes them to its own folder (nothing is uploaded yet). Written on
+2026-10-28 on `feat/port-print-files` (never merged), brought onto today's
+native-2.0 on 2026-11-02 (`feat/port-print-files-2`): it now draws with the
+renderer as it is on native-2.0 (textures, stickers, QR codes, ornaments,
+picture backgrounds, the cover file through `render/coverPlan.ts` +
+`drawCover.ts`). Its website splits stay on native-2.0 with the others: none
+reaches the live website before native-2.0 goes to main after Nov 9.
+
+**2026-11-02 changes from the Oct 28 version:**
+- The cover file is drawn by the app's cover renderer (`planCover` +
+  `CoverDrawer`, held to the website's cover file by the golden covers
+  check) without its words; each text of the wrap (the back's mark, its
+  address, the spine title) is lifted as its own patch the way the
+  website's `liftWords` does (`CoverDrawer.drawLines` draws one text), and
+  the front page's words as before. The Oct 28 `coverSpine.ts` split is
+  gone: native-2.0 had already moved the same code to `coverLayoutRules.ts`.
+- `PageDrawer.withBleed` (the page under its words, given its bleed) is the
+  one renderer addition; `renderPrintPage` uses it, so it draws exactly as
+  before.
+- Pages name pictures by address now (`PagePlan.assets`: a QR code, a
+  sticker, a graphic, a mask edge, a corner file). The album's own (data:
+  URLs) are drawn; one the app can't have (a website file it doesn't carry
+  yet, a sticker with no picture) stops the files with the page named,
+  checked before anything is drawn. `PrintTools.files` is where website
+  files would come from: nothing yet.
+- A photo background's photo is opened with the page's others
+  (`photosDrawn`), and the album's photo ids are passed (`PrintAlbum.photoIds`).
+
+### What it makes, and from which code
+
+| File | On the website | In the app |
+|---|---|---|
+| `<order>.pdf`, the interior | the customer's phone at checkout (`generateAlbumPdf`, jsPDF) | `mobile/src/print/pagePicture.ts` + `printPdf.ts` (pdf-lib): each page drawn at 300 DPI by the app's renderer, bleed mirrored, shrunk to 1800 px and saved as a JPEG at 0.82, its words as see-through 300 DPI pictures (`wordPatches.ts`, the website's own code), page 1 marked as a right-hand page; past 45 MB, again with the words in the pictures (the website's rule) |
+| `<order>-cover.pdf`, the flat cover | the customer's phone at checkout, first (`generateCoverWrapPdf`) | `coverWrap.ts`: the wrap drawn without its words by the app's cover renderer (`render/coverPlan.ts`, `drawCover.ts`: back colour, the front page in cover mode mirrored through the bleed or turn-in, the spine), one JPEG at 0.9; the back's mark, the spine title and the front page's words as see-through patches |
+| press sheets, cover sheet | the console, on the operator's click (`printSheetPdf.ts`) | the very same file, shared; labels drawn by `textPainter.ts` (Arimo, kerned like Chrome's canvas) |
+| "Sheets as JPEG" zip | the console (`pressSheetZip` + pdf.js) | `pressSheetZip.ts`, shared; sheets drawn by `sheetRaster.ts` (Skia), 300 DPI, quality 0.95, DPI written in each picture |
+
+- One page at a time: a page's photos are opened full size just before it
+  is drawn and let go after it (`makePrintFiles` takes an `OpenPhoto`;
+  `phonePhotos.ts` is the phone's: `srgbCopy` first, which also applies the
+  EXIF turn). The check counts every photo it hands out and fails if one is
+  not let go.
+- A page with something the app does not draw yet (`plan.notDrawn`: on
+  native-2.0 only a font it doesn't have, or a faked font style), a picture
+  it names that the app can't have, or a photo that can't be opened, stops
+  it with the page named. The app never prints a page without a part the
+  customer put on it.
+- Fonts: Arimo (Apache 2.0) for the sheet labels only (`textPainter.ts`).
+- Files: `saveFiles.ts` writes them to `print/<order>/` in the app's
+  folder, under the console's names (`megyprints-<order>.pdf`, `-cover.pdf`,
+  `-sheets.pdf`, `-cover-sheet.pdf`, `-jpeg.zip`).
+
+### Website files changed (behaviour the same, held for Nov 9)
+
+Split so the app can import the pure part, the website file re-exporting it:
+`printFileSpec.ts` (the 1800 px / 0.82 / 0.9 / 8000 px / 45 MB numbers, out
+of `printPipeline.ts` and `generateAlbumPdf.ts`), `wordPatches.ts` (out of
+`printPipeline.ts`), `pressSheetWords.ts` and `pressSheetZip.ts` (out of
+`pressSheetFiles.ts`), `SHEET_JPEG_DPI` / `SHEET_JPEG_QUALITY`
+(out of `pressSheetJpeg.ts`). `printSheetPdf.ts` is shared as it is; pdf-lib
+joined the allowed packages (plain JavaScript; the console still loads it
+only on the operator's click, `pressSheetFiles.spec`).
+
+### The comparison (`npm run print:compare` in mobile/)
+
+Three seeded albums from the website's own generator and the synthetic
+photos (`tools/golden/printAlbums.ts`): 8x8 hardbound with 40 pages, 6x4
+softcover glossy with 40 pages, 11.5x8 hardbound with 41 pages (an odd
+count: a blank last side), each with captions, an outlined free title and a
+front cover page. The website makes its files in headless Chromium with its
+own code (`printWeb.mjs`); the app makes its files headless in Node with the
+code the phone runs. Then PyMuPDF (`printCompare.py`) reads both, and the
+golden page bars (`compare.ts`, in plain Node: `printPixels.mjs`) judge the
+pixels at 300 DPI.
+
+Results (2026-10-28, Chromium 149 with the GPU off, CanvasKit in Node):
+
+| | 8x8, 40 pages | 6x4, 40 pages | 11.5x8, 41 pages |
+|---|---|---|---|
+| PDF pages, website / app | interior 40/40, cover 1/1, sheet sides 20/20, cover sheet 1/1 | 40/40, 1/1, 6/6, 1/1 | 41/41, 1/1, 22/22, no cover sheet on either (the cover is 25.2 in: longer than the sheet) |
+| page boxes, page pictures (spot and pixel size), cut lines, fold marks, clips | the same to 0 pt | the same to 0.01 pt | the same to 0 pt |
+| see-through pictures (words, labels) | 4 / 4 interior, 4 / 4 cover, 84 / 84 sheets | 2/2, 5/5, 28/28 | 3/3, 4/4, 90/90 |
+| fonts on the pages, website / app | jsPDF's 14 per page on the checkout files / **none**; sheets none / none | same | same |
+| pixels, everything but words (golden bar 0.15%, tile 1%) | ≤ 0.003%, tile 0.00% | ≤ 0.008%, tile 0.07% | ≤ 0.72%, tile 33.7%: **known gap** (half shrink, below) |
+| page words (golden bars: ink 6%, block 40, 0.5 px) | ink ≤ 6.3%, block ≤ 29, ≤ 0.75 px | ≤ 6.7%, ≤ 38, ≤ 0.79 px | ≤ 4.2%, ≤ 33, ≤ 0.75 px |
+| | over a bar only on the cover: **known gap** (cover words) | same | same |
+| sheet labels (label bars: ink 35%, block 50, 1.5 px) | ≤ 28.4%, ≤ 41.7, ≤ 1.00 px | ≤ 28.4%, ≤ 33, ≤ 1.00 px | ≤ 28.4%, ≤ 40.4, ≤ 1.00 px |
+| zip | same 22 names in order, same HOW-TO-PRINT.txt, every picture 3750 × 5700 at 300 DPI; outside the labels ≤ 1.8%: **known gap** (nearest pixel) | same 8 names; ≤ 0.003% | same 23 names; ≤ 2.3%: **known gap** |
+| sizes, website / app (MB) | interior 2.0 / 2.0, cover 0.4 / 0.4, sheets 2.4 / 2.4, zip 17.9 / 17.7 | 1.4 / 1.4, 0.10 / 0.08, 1.5 / 1.4, 7.5 / 7.5 | 3.0 / 3.0, 0.8 / 0.8, 3.4 / 3.4, 24.2 / 23.7 |
+| time, website (Chromium, desktop) / app (CanvasKit in Node, desktop) | 10.5 s / 56 s | 6.7 s / 24 s | 11.8 s / 70 s |
+
+**Re-run 2026-11-02 on today's native-2.0** (`feat/port-print-files-2`; a
+Linux cloud machine, Chromium 153: the pinned 149 could not be downloaded):
+- Numbers: the same pages and sheet sides on all three albums (40/40, 6/6
+  and 20/20, 41/41 and 22/22); page boxes, pictures, cut lines and clips
+  the same to 0.01 pt; the see-through picture counts the same.
+- Pixels outside the words: 8x8 ≤ 0.002%, 6x4 ≤ 0.000%, 11.5x8 ≤ 0.66%
+  (the half-shrink gap, within its ceiling). **11.5x8 passes whole.**
+- Words: over the bars on 8x8 (interior page 7: ink 7.0%; cover text 3:
+  7.9%) and 6x4 (interior page 4: 9.6%; cover texts up to 24.7%). This is
+  the Linux letter weight the golden checks show on this machine too (the
+  golden covers fail by 6.5-51.9% here, the 6x4 ones by about 21% on the
+  same texts, and pass on Windows CI with the same renderer). **To be
+  confirmed on Windows:** `npm run print:compare` in mobile/.
+- Website side unchanged: `websiteSame.mjs` against origin/native-2.0, 156
+  of 156 print files byte-identical.
+- Time, app (CanvasKit in Node) / website (Chromium), this machine: 8x8
+  171 s / 22 s, 6x4 66 s / 11 s, 11.5x8 223 s / 22 s. The website was about
+  twice as slow here as on the Oct 28 PC, the app about three times: part
+  is the machine, part the renderer's Chrome-like photo sampling added
+  since. On a phone, minutes per album: the order step must show progress
+  and must be measured on the phone.
+
+Every interior file is far under the 45 MB budget (the synthetic photos
+pack small: a real 40-page album's file is about 15 MB on the website).
+
+**The label bars are new and looser than the golden bars.** The sheet labels
+(order number, "pile 1 · pages 1–2", the 6 pt piece numbers) are the
+console's, drawn in Arial by Windows' DirectWrite there and in Arimo by
+FreeType in the app. The same shared code puts each label in the same spot
+(0.01 pt); only the letters inside differ. The first version of the app's
+label painter left out kerning (Chrome's canvas kerns: "MP-TEST-6X4 · sheet
+1 of 3 · front" is 901.21 px kerned, 904.43 px not, the same in Arial and
+Arimo), which moved labels up to 4.8 px; kerned, 1.0 px at most.
+
+**Known gaps** (held to ceilings just above what they measured, so worse
+fails; listed in the check and in `report.json`):
+- **Half shrink**: an 11.5x8 page picture is shrunk from 3526 to 1800 px
+  for the upload cap. Chrome's `imageSmoothingQuality: 'high'` smooths more
+  there than bilinear, by a filter not matched yet (tried: bilinear,
+  trilinear, box and tent mipmaps, area average). The app's picture is a
+  little sharper on the test photos' band of fine stripes: 0.24–0.72% of
+  pixels over the bar. 8.5x11 has the same scale (about 0.53). At the other
+  sizes (shrunk to 0.73 or more) plain bilinear is Chrome's to 0.000–0.007%
+  (cubic was 0.13–0.35%: the first version used it).
+- **Nearest pixel in the zip**: when a page picture is drawn at more than
+  4/3 of its pixels (8x8, 11.5x8), pdf.js draws it unsmoothed and so does
+  the app's sheet drawer; the two pick a different pixel column now and then
+  in the stripe band (≤ 2.3% of pixels). The sheet PDFs themselves match.
+- **Cover words**: the Megy Prints mark (Cinzel at 66% grey) has 6.0–6.7%
+  less ink than Chrome's (bar 6%), and a few cover lines sit 0.6–0.8 px off
+  by the ink-offset estimate (bar 0.5) with their 8×8 blocks within 40
+  levels; on the cover sheet the same pictures pass.
+
+### Not covered yet
+
+- **The phone itself.** Every number above is CanvasKit in Node. No print
+  file was made on the emulator or a phone yet: not the memory peak, not the
+  time, not `phonePhotos.ts` (sRGB copy and EXIF turn) or `saveFiles.ts`
+  (the app's folder). Time on a mid-range phone is likely several times the
+  desktop's 24–70 s per album.
+- **Memory of the zip.** `pressSheetZip` (shared) keeps every sheet picture
+  and the whole zip in memory: about twice the zip's size at the end (≈ 40
+  MB here, 100–200 MB for real photos). Fine on a desktop; on a phone the
+  fix is to write each picture to a file as it is made and build the zip
+  from the files.
+- **What the app can't print yet** stops the files (never printed as
+  something else): a font it doesn't have, a faked font style, a website
+  file a page names (a mask edge such as `/masks/torn.png`, a theme's corner
+  art, a stored picture background: the app carries none of them yet, on
+  screen either), the old CoverDesign cover.
+- **Only the two checkout files are needed at checkout.** The sheets and
+  the zip are made later by the console from the uploaded PDFs; the app
+  makes them here to prove the shared code. The order step (Phase 5, next)
+  makes and uploads `<order>.pdf` and `<order>-cover.pdf` only.
+- **A real printed album** from the shop, checked by the owner (the plan's
+  Phase 5 check), and the checkout itself (upload, order rows): later steps.
+- The comparison's albums use the synthetic photos only: no EXIF rotation,
+  no JPEG or HEIC photo, no P3 photo in a print file.
+
+---
+
 ## Phase 5 notes (2026-10-29): the checkout screens
 
 Built against a **test album** (48 of `public/sample-photos`, made into pages
@@ -2519,6 +2701,740 @@ screenshot; the first walk, before the review fixes, is in
   jest only, not on the emulator.
 
 ---
+
+## The Preview on its side (2026-11-02, `feat/port-landscape-preview`)
+
+Owner: turning the phone shows the open book (two facing pages) full screen,
+and the upright book gets bigger.
+
+- **Only the Preview turns** (`mobile/src/lib/screenTurning.ts`). `app.json`
+  stays `"orientation": "portrait"`, so every screen is upright. While the
+  Preview is the screen on top it calls `expo-screen-orientation`
+  `lockAsync(DEFAULT)`: the phone may turn it, and the phone's own
+  auto-rotate setting decides (with auto-rotate off, Android shows its small
+  turn button instead). When it is left (the editor over it, or closed):
+  `lockAsync(PORTRAIT_UP)`. The root layout makes the app upright on start.
+  `expo-screen-orientation` is a **new native library: a new APK is needed**
+  (`scripts\build-android.ps1`); an older APK just stays upright (the module
+  is loaded only when asked, and the Preview then does not say "or turn your
+  phone sideways").
+- **On its side** (`mobile/src/builder/previewLayout.ts` `sidewaysBook`): no
+  header, no status bar; the open book fills the safe area (clear of the
+  notch and the navigation bar, 4 pt in). Two round turn buttons (‹ and ›,
+  Done at the end, TalkBack reads "Previous pages" / "Next pages") go at the
+  sides when that makes the book bigger (square and tall albums: the height
+  limits them) and in the bottom corners otherwise (wide albums), the count
+  ("2-3 / 40") with them. The closed cover is one page of the same book, in
+  the middle; opening and closing slide the book as on the website
+  (`planTurn` shift and hideLeft). A swipe turns pages too. Messages (missing
+  photos, saved, changed elsewhere) and "Edit pages" wait until the phone is
+  upright again.
+- **Upright** (`uprightBook`): the page is the screen's width less 4 pt each
+  side (was 16), as tall as fits with the line under it on screen (the area
+  is measured, not guessed); the count over the book is gone (the line under
+  it says the same). On a 412 pt phone an 8×8 page goes from 380 to 404 pt.
+  On a phone the width limits the upright page, so turning the phone is the
+  way to see it much bigger. The website's "or turn your phone sideways" is
+  under the open-book button.
+- **Pictures**: one width both ways up (`pagePictureWidth`: the widest the
+  page is shown either way, in the phone's pixels, at most 1400), so turning
+  the phone draws no page again. A little wider than before for wide albums
+  (an 8×6 page: about 1,190 px instead of 1,000 on a 412 pt, 2.625× phone).
+- Proven in jest: `test/previewLayout.test.ts` (the sums, on six phone
+  sizes, four safe areas, every album size), `test/screenTurning.test.ts`
+  (which screens turn, and an older APK) and `test/previewScreen.test.tsx`
+  (the screen rendered upright and turned, Next / Previous / a swipe / Done,
+  the header and status bar, the opening slide). **Not seen on a phone yet.**
+
+---
+
+## Phase 5, step 2: from the album to checkout (2026-11-02, `feat/port-album-to-checkout`)
+
+Stacked on `feat/port-landscape-preview` (#236: both change the Preview).
+
+- **"Order this album"** takes Next's place on the Preview's last page (the
+  website's turn bar; on its side, a round "Order" button). It runs the
+  website's checks first, in its order (`lib/checkout/orderStart.ts`, all
+  shared code): fewer than 40 photos stops it ("Back to my pages"); a photo
+  this phone doesn't have stops it ("Add the photos"; no "anyway"); a blank
+  cover, a title cut off, empty frames or boxes, placeholder words, blank
+  pages, words too long, photos put back from copies are said once with
+  "Order anyway" and "Show me". The Preview's "Done" at the end and the
+  "Ordering from the app comes in a later version" line are gone.
+- Signed in, the album is **saved to the account first** and checkout
+  waits for it (Builder handleOrder); a failed save says why in the
+  website's words (its conflict note says "the note below": the app's is
+  under the book).
+- **Checkout orders that album**: its pages from the app's album, and the
+  account's copy read back by its id (`loadOrderAlbumRow`, the website's
+  `selectOrderAlbum` run beside it in `test/orderStart.test.ts`: the same
+  read, the same row, the same "isn't saved to your account" words). Not
+  signed in, Place order asks to sign in as before. The home screen's
+  "Checkout with a test album" still opens the test album.
+- Still the test version: Place order shows what it would send and sends
+  nothing (step 3).
+- Not done: the website's "Delete N blank pages" in the warning (the app
+  says "Show me" instead), and Megy's "Place Order →" (no Megy in the app).
+
+---
+
+## Phase 5, step 3: ordering for real (2026-11-02, `feat/port-checkout-sends`)
+
+- Checkout on your own album (opened by "Order this album") now **places
+  the order for real**: `lib/checkout/phoneSend.ts` makes the two print
+  files on the phone (`print/printFiles.ts checkoutFiles`: the cover, then
+  the pages; no sheets or zip, the console makes those) and sends them with
+  the order sender (`lib/checkout/sendOrder.ts`, #239), on the app's
+  Supabase client with create-only uploads (`lib/checkout/storage.ts`, the
+  website's `isAlreadyExists` held beside it). The bar follows the real
+  steps in the website's words (`placeRun.ts sendFrame`).
+- A tester-code order ends "Test order placed" with its number; a paid one
+  opens its payment step for real ("Order MP-… is placed"), and "I've
+  sent" sends the receipt and records the payment, then "Thank you — we're
+  confirming your payment". A step that fails says why on the form and
+  keeps the order: Place order again reuses it.
+- The home screen's "Checkout with a test album" still sends nothing.
+- Not proven on a phone yet: the time and memory of making the files, the
+  upload of the bytes to Storage, the receipt read from the phone.
+
+## Place order in the background (2026-11-02, `feat/port-background-send`)
+
+Making the print files on the phone takes minutes. The person can now use
+other apps meanwhile (Facebook, Messenger…), and a notification says when
+the order is done.
+
+- **Why it needs native code:** with the app out of sight, React Native
+  stops the app's timers (`JavaTimerManager`: unless a "headless task"
+  runs) and Android may freeze or close the app. Making the print files
+  waits on a timer between pages, so without help the order stops
+  half-way.
+- **`modules/order-keeper`** (the app's own Kotlin module): while an order
+  is made and sent, a **foreground service** (type `dataSync`) with a
+  notification showing the bar ("Placing your order", "Making page 4 of
+  40…"), and a React Native **headless task** that keeps the timers going.
+  When it is done and the person is in another app, a second notification:
+  "Order MP-… is placed. Pay by bank transfer to finish." (the website's
+  words), "Test order placed", or "Placing your order stopped" with the
+  same words the screen shows for why. Tapping it opens the app on the
+  order. With the app in front, no notification: the screen says it.
+- **`src/lib/checkout/backgroundSend.ts`** decides what it says and when;
+  `src/components/checkout/Sending.tsx` (moved out of `order.tsx`) starts
+  it on Place order. Android 13+ first asks "Allow Megy Prints to send you
+  notifications?". Yes: the screen says "You can use other apps while we
+  make and send your order. A notification will tell you when it is done."
+  No: the screen says "Keep this screen open", as before (the keeper still
+  runs, so leaving does not stop the order, but nothing tells them it is
+  done).
+- An APK without the module: nothing changes (`requireOptionalNativeModule`).
+- Proven in jest only (`test/backgroundSend.test.tsx`, the native half a
+  stand-in). **Not built and not tried on a phone**: the Kotlin was written
+  without the Android SDK. A **new APK** is needed.
+- **Owner step before this goes to Play:** Play Console → App content →
+  **Foreground service permissions** → declare `dataSync`: "Sends the
+  customer's album files to our print shop after they tap Place order, so
+  the order finishes while they use other apps." Google asks for a short
+  video of it (record the phone: Place order, switch to another app, the
+  notification, the "Order … is placed" notification). **Don't upload a
+  build with this to Play until that form is filled in**: Play Console
+  refuses the release without it.
+
+---
+## Phase 6 notes (2026-10-29): Your orders and Profile
+
+**2026-11-02:** brought onto native-2.0 after Phase 5's checkout
+(`feat/port-orders-profile-2`, built on `feat/port-checkout-sends`). The
+payment step lives in `components/checkout/PaymentStep.tsx` (this branch's
+move); for a real order ("I've sent" on an order of Your orders, or on your
+own album's checkout) it records the payment (`lib/checkout/phoneSend.ts`),
+then the order is read again. The notes below are from Oct 29.
+
+Branch `feat/port-orders-profile`, from `native-2.0`.
+
+### What the customer gets
+
+- **Your orders** (`src/app/orders.tsx`), from the start screen ("Your
+  orders", beside "My profile") and from My albums: every order of the
+  account, newest first, each with its album's name (left out for an album
+  never named), "Order MP-…", "Placed October 26, 2026 · 8×8" Square · 40
+  pages", its price, and where it is now in the website's words (the shared
+  `orderTracker`: "Waiting for your payment", "Payment sent — we're
+  confirming it", "Printing your album", "On its way to you", "Delivered",
+  "Cancelled", "Test order: nothing will be printed or sent"). A waiting
+  order shows its last day to pay. A failed read says "We couldn't load
+  your orders: …" with Try again (never "No orders yet"); no orders: "No
+  orders yet." and one filled "Make an album".
+- **One order** (`src/app/order-details.tsx`): the six steps from the real
+  status (ticked, the one now spinning, the rest grey with their number),
+  the courier tracking number once shipped, the website's cancelled note
+  (with "Message us") and tester-code note. **Waiting for payment:** "Send
+  ₱X by bank transfer to finish", "Please pay by …", the filled "Pay ₱X by
+  bank transfer" (opens checkout's payment step, #223, now its own file
+  `components/checkout/PaymentStep.tsx`: the QR, the order number for the
+  note, the receipt; "I've sent" still sends nothing in this version) and
+  "Cancel this order" → "Yes, cancel order MP-…" / "Keep it" (the website's
+  two taps; while the question is open its Yes is the one filled button).
+  Cancel calls the website's `cancel_my_unpaid_order` (0042): the database
+  decides; its refusal is said in the website's words.
+- **My Profile** (`src/app/profile.tsx`): the account's name with the
+  website's "Edit Profile" → "Display Name" → "Save Changes" (updateUser
+  full_name, as the website), the email, **the delivery details from the
+  newest order** (name, phone as "+63 917 123 4567", the address line: the
+  website keeps no phone or address on the account; it keeps them on each
+  order), "See your orders", **Change password**, **Sign out** (to the
+  start screen) and **Delete my account**.
+- **Change password** (`src/app/change-password.tsx`): the website's way,
+  an emailed link (`resetPasswordForEmail`, back to the website's front
+  page, exactly as the 1.x Android app does: `emailLinkReturnUrl`). The
+  website's words ("We will email you a link to make a new one.", "Email me
+  a link", "Check your email", "Not there after a few minutes? Look in
+  Spam…") and its failure words (shared `passwordReset.ts`). The app adds
+  one line: the link opens the website; make the new password there and
+  use it next time on the app.
+- **Delete my account** (`src/app/delete-account.tsx`): the website's
+  dialog as a screen. It reads first (`account_deletion_preflight`): the
+  real counts ("2 saved albums and the photos in them", QR links, memory
+  videos with "hosting runs until …", print files and receipts), what the
+  shop keeps of past orders and why, or the order that blocks it (then only
+  "Close"). "Type DELETE to confirm." "Delete forever" is filled red and
+  never greyed out: a tap before DELETE is typed says "Type DELETE in the
+  box first." Then the website's endpoint, by its full address
+  (`https://megyprints.vercel.app/api/delete-account`), the same POST,
+  headers and body as the website; after it says yes, the phone lets go of
+  the album in progress and the "Choose from Files" photo grants, and drops
+  the sign-in; "Your account is deleted", then the start screen.
+
+### Shared code (website files changed, behaviour the same)
+
+- `src/lib/myOrdersCloud.ts` (new, shared): the reads and the cancel from
+  `myOrders.ts`, each taking the Supabase client (and the columns: the app
+  adds `quoted_amount`), plus `lastShippingWith` (Profile's delivery
+  details). `myOrders.ts` keeps its functions, with the website's client.
+- `src/lib/accountDeletionRules.ts` (new, shared): the preflight, the
+  blocking sentence, and `requestAccountDeletion(endpoint, token, fetch)`.
+  `accountDeletion.ts` keeps `preflightAccountDeletion` and
+  `deleteMyAccount` (its endpoint `/api/delete-account`, wiping the browser,
+  sign out), now through it.
+- Checkout's "this album already has an order" reads through the same
+  shared function (`openOrder.ts`).
+
+### Price on an order waiting for payment
+
+The website's Orders page shows `orders.amount`, which is NULL on every
+order waiting for payment (only the shop sets it), so it shows no price
+there (and its "Send ₱X" line has no number). The app shows the shop's
+amount when set, else `quoted_amount` (the total saved as the order was
+placed, 0055: the number the payment step asks for); a cancelled order
+shows only a confirmed amount. Website gap, for after Nov 9.
+
+### Proven (jest: `mobile/test/orders*`, `profileWalk`, `deleteAccount`)
+
+| What | How |
+|---|---|
+| Same queries as the website | The website's `listMyOrders`, `getMyOrder`, `openOrderForAlbum`, `cancelMyUnpaidOrder` run beside the app's on a recording stand-in: same table, same filters in the same order, this account's orders only; the app's columns are the website's + `quoted_amount` |
+| The words | Every sentence of Your orders, Profile, Change password and Delete account is found in the website's source (MyOrders.tsx, Profile.tsx, LoginModal.tsx, DeleteAccountSection.tsx) |
+| Dates | "Placed …" and "hosting runs until …" equal the website's own `toLocaleDateString('en-PH')` in Manila time on 2,000+ and 1,200+ dates |
+| Where an order is | 24 status mixes (8 statuses × payment sent × tester code): the app's view is the shared `trackOf` |
+| The screens | Walked with testing-library: the list in every state, the order screen, the payment step with the order's own number, total and last day, cancel (asked twice, the RPC, refused, error), Profile (name save, delivery details, failed read, sign out), Change password (the email call, its words, 3 failures), Delete account (counts, typed DELETE, the exact request, the done screen and the start screen after 2.2 s, a blocking order, a server refusal, the abuse guard, a local build with no local endpoint, a failed preflight) |
+| Delete request | The website's own `deleteMyAccount` and the app's send the same `init` (method, headers, body); only the address differs (relative vs full) |
+
+**Never the live endpoint in tests or walks.** jest's `fetch` is a stand-in.
+A build whose Supabase is local refuses the live address
+(`deleteAccountEndpoint`); a walk sets `EXPO_PUBLIC_DELETE_ACCOUNT_URL` to
+`mobile/scripts/local-delete-account.mjs`, which runs the website's own
+`api/delete-account.mjs` against the local Supabase only (it refuses to
+start with any other).
+
+### Not done here, and what each needs
+
+- **"Order this album again"** and **"Send the cover"** (the website's
+  Orders page): need checkout on the real album (it still uses the test
+  album) and the cover drawn and uploaded on the phone (print-files branch).
+- **"I've sent ₱X"**: done (2026-11-02, `feat/port-orders-profile-2`): it
+  uploads the receipt and records the payment, as on the website.
+- **Avatar photo** (the website stores a picked photo as a data URL in the
+  account): left out.
+- **The endpoint's origin guard**: if `ALLOWED_ORIGINS` is ever set on
+  Vercel, `/api/delete-account` refuses the app (it sends no Origin), as it
+  would `/api/photo-quotes`. The app then says to email the shop to delete
+  the account (the public delete-account page's option 2) with an "Email us
+  to delete my account" button. The fix is a server rule for the app, held
+  until Nov 9.
+- **Forgot password on the sign-in screen**: added 2026-11-02
+  (`feat/port-forgot-password`): "Forgot password?" under the password opens
+  the website's "Forgot your password?" (the email already typed, the
+  website's checks), "Email me a link" sends the same emailed link as Change
+  password (it opens the website to make the new password), then "Check your
+  email" and "Back to sign in". `test/forgotPassword.test.tsx`.
+
+## Phase 6: Megyprints Events, and the website's pages (2026-11-02, `feat/port-events-link`)
+
+- Events are booked and run on the website (guests take part by scanning
+  the event's QR; nothing to download). The start screen has the website's
+  "Megyprints Events", which opens the website's Events page
+  (`src/lib/events.ts`, `test/eventsLink.test.tsx`).
+- **Fixed: "Message us" opened the website's front page**, not Contact: the
+  website is a `#/` app and `/contact` is served the front page. Every
+  website page the app opens now goes through `sitePage()`
+  (`src/lib/checkout/site.ts`), and `test/websitePages.test.ts` fails if a
+  screen opens a page by a plain path again.
+
+## Phase 6: QR video memories in the app (2026-11-02, `feat/port-qr-videos`)
+
+The website's video memories (AddQrModal, memoryClips.ts, the checkout's
+video steps, My Memories' Replace video and Delete), on the phone:
+
+- **Editor** (`src/editor/memories`): "Add a video memory" under a
+  single-photo page (the website's `canAddMemoryQr`) and a tap on a page's
+  QR open the website's window as a sheet, in its words: Android's own video
+  picker (no permission), the video's line and a preview, the corner (Auto
+  or chosen), the quality with the album's first memory (HD at its price,
+  then locked), "Place QR" (`applyMemoryQr`), change the video (same code
+  and QR), move the corner, Remove.
+- **The QR picture** (`src/lib/memories/qrPicture.ts`): the website's
+  library and options; every pixel equal to the website's
+  (`test/qrPicture.test.ts`).
+- **Kept on the phone and shrunk** (`src/lib/memories/clips.ts`,
+  `clipStore.ts`, `modules/video-shrink`): the picked video is copied into
+  the app's own folder under its code and shrunk in the background by the
+  app's own native module (Google's Media3 Transformer 1.9.1, the version
+  expo-video uses): one H.264 MP4, short side 720 (Standard) or 1080 (HD),
+  30 fps, the tier's bitrate. Kept as picked when shrinking fails or doesn't
+  help. Freed once its order is paid.
+- **Checkout** (`sendOrder.ts`): the website's steps 0, 2b and 3c. A video
+  that's gone stops Place order before any order row and names its pages;
+  kept videos are uploaded after the cover and checked again after the
+  pages; their memory rows are required. HD comes from the album's videos.
+- **My Memories**: a video plays there; "Replace video" (checked, uploaded
+  over the old one, a new address so phones that played the old one fetch
+  the new; shrunk to HD first only when over the bucket's 100 MB);
+  "Delete" asks first, saying where the QR is, then takes it off the
+  account's albums (`src/lib/memories/removal.ts`).
+- **Found on the website (not fixed, `src/` is frozen until Nov 9):** a
+  picked `.mov`/`.webm`/`.m4v` that the browser shrinks goes up as
+  `<code>.mp4`, but the album and the memory row keep pointing at
+  `<code>.mov`, and the scan page plays exactly that address: the printed QR
+  would play nothing. The app points each row at the file it actually sent.
+- **New native code, a NEW APK:** `modules/video-shrink` (Kotlin),
+  `expo-image-picker`, `expo-video`. No camera, microphone or video-library
+  permission (`test/photoSetup.test.ts`).
+- Choosing how long the memories stay live at checkout: added
+  (`feat/port-hosting-term`): the website's term buttons ("How long should
+  your memories stay live?", the schedule's tiers, the included one first),
+  priced and stored on the order (`hosting_years`).
+- **An event's album at checkout** (`feat/port-event-album`,
+  `src/lib/events`): the website's "another device" way. Checkout offers
+  the host's bookings still waiting for their album ("Use booking EV-… for
+  this album"); the booking's deal card says whether it pays (the balance
+  in, the deal's size and pages: `eventDealState`, the website's words),
+  the deal fixes the cover, the album shows ₱0, and after the files are
+  sent the booking pays the order (`cover_order_with_booking`). "Not my
+  event album" undoes it. The link is kept on the phone (AsyncStorage, the
+  website's key).
+- An event's guest videos ("Or one your guests shared") come only with an
+  album made from the event on the website (they are handed over in that
+  browser); on any other device, the website doesn't offer them either.
+- **The QR goes on the page's outer edge, never by the binding**
+  (`feat/port-qr-outer-corner`, `src/lib/memories/qrSide.ts`; owner,
+  2026-11-02). Next to the binding the page curves into the spine and the
+  QR is hard to scan. Page 1 is bound on its left, so its outer corners are
+  top-right and bottom-right; page 2 the other way (the website's
+  `bindingEdge`). The corner picker offers only the page's two outer
+  corners and marks the binding's side; Auto takes the outer corner farthest
+  from the face (the phone finds no faces yet, so: the bottom one). The
+  website's album code (frozen) still allows all 4 corners, and a page
+  changes sides when a page is added or taken out before it, so the app
+  reads its pages through `withQrOnOuterSide` (BuilderProvider): the
+  editor, the Preview, the print files and the order's copy of the album
+  all have the QR on the outer edge, whatever corner the saved album names.
+  Before this, Auto always took bottom-right (no faces found), which is by
+  the binding on every left-hand page. **Website, after the Nov 9 freeze:**
+  the same rule in `applyMemoryQr`, the corner picker (AddQrModal) and
+  generateAlbum's carried memories, then the app can drop its own copy.
+
+### Test APK from GitHub (`.github/workflows/android-apk.yml`)
+
+Every pull request into native-2.0 that touches the app builds a test APK
+on GitHub's machines ("Megy Prints 2.0 (dev)", the debug key: it installs
+next to 1.x). Download: the PR's Checks → "2.0 test APK" → Summary →
+Artifacts. **Owner step, once (done 2026-11-02):** GitHub → the repository → Settings →
+Secrets and variables → Actions → New repository secret, twice:
+`EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_ANON_KEY`, the same two
+lines as in `mobile\.env.local`. Without them the app is still built (so a
+mistake in the app's own Kotlin modules shows), but no APK is kept, and the
+run says so. It is the first real compile of those modules.
+
+## Phase 6: My Memories (2026-11-02, `feat/port-my-memories`)
+
+- `src/app/memories.tsx` (from the start screen and My albums): every QR
+  memory of the account, newest first, in the website's words: the address
+  its printed QR opens ("Share link"), its scans, "Live until …" /
+  "Hosting ended …", a longer term waiting on payment. A link memory is
+  re-pointed here ("Points to", Save: the same printed QR). A video memory
+  can be watched; replacing a video or deleting a memory stays on the
+  website for now ("Open on the website": it changes the video file, or the
+  saved albums the QR is printed in).
+- `src/lib/memories/memories.ts` keeps the website's rules (its
+  qrMemories.ts reads its own client; qrMemory.ts and memoryClips.ts hold
+  browser-only code): `test/memories.test.ts` runs the website's own list,
+  relink and pending-term functions beside the app's on a stand-in database
+  (`test/helpers/fakeMemories.ts`), and holds the allowed links, their words,
+  the QR address and the video rule to the website's source.
+- Not in the app yet: adding a QR memory to a page (the editor), replacing a
+  video, deleting a memory, the QR picture in the list.
+
+## Sign in with Google (2026-11-02, `feat/port-google-sign-in`)
+
+People who made their account with Google can now sign in to 2.0, the same
+way the 1.x app does it (`src/lib/nativeAuth.ts`, `public/auth-native.html`):
+
+- "Sign in with Google" on the sign-in screen asks Supabase for Google's
+  page (the website's own call, `redirectTo` =
+  `https://megyprints.vercel.app/auth-native.html?n=<one-time code>`) and
+  opens it in a Chrome tab (`expo-web-browser`).
+- After Google, Supabase sends the tab to the website's
+  `auth-native.html`, which hands the sign-in back to the app
+  (`com.megyprints.app`) as `megyprints://auth?…` or the verified
+  `https://megyprints.vercel.app/auth-native.html#…` link.
+- `src/app/+native-intent.tsx` sends both shapes to the `auth-return`
+  screen; `src/lib/googleSignIn.ts` signs in only when the one-time code is
+  the one this phone started (kept in AsyncStorage, `src/lib/googleNonce.ts`,
+  made with `expo-crypto`), then goes back where the person was. A refused or
+  cancelled sign-in shows the website's words (`googleRefusedNotice`).
+- **Nothing to set up in Google Cloud or Supabase**: the same page, the
+  same app name, the same return address as 1.x. (The Credential Manager
+  steps above are no longer needed for 2.0.)
+- **Works only in the release app `com.megyprints.app`** (Phase 7), because
+  the website's page hands the sign-in to that app name. In a dev build
+  (`com.megyprints.app.dev`) the Google page opens, but the sign-in goes to
+  the 1.x app or stays in Chrome.
+  **So the test app shows no Google button** (`feat/port-test-app-google`,
+  `src/lib/account/googleHere.ts`; owner's first APK test, 2026-11-02: the
+  button opened the Play Store for 1.x, which shows the website). It says
+  instead that Google is in the Play app, and to sign in with email and
+  password ("Forgot password?" makes one for a Google-only account).
+  `test/signInTestBuild.test.tsx`.
+- New native modules (`expo-web-browser`, `expo-crypto`): a **new APK** is
+  needed.
+- Proven: `test/googleSignIn.test.ts` (start, the way back, the one-time
+  code, held to `nativeAuth.ts` and `auth-native.js`), `test/authReturn.test.tsx`,
+  `test/signInReturn.test.tsx`. Not proven on a phone.
+
+## Phase 7: the Play build (2026-11-02, `feat/port-play-release`)
+
+One command on the owner's PC makes the real app for Google Play:
+
+    mobile\scripts\build-android.ps1 -Play
+
+- **What it makes** (`app.config.js`, on top of `app.json`): "Megy Prints",
+  `com.megyprints.app` (1.x's name and app name), version 2.0.0, version
+  code 100 (1.x is 4), Google sign-in's two ways back
+  (`https://megyprints.vercel.app/auth-native.html`, verified, and
+  `megyprints://`), every screen, permission and plugin the same as the dev
+  build. Phones: arm64, old 32-bit arm and x86_64 (Chromebooks).
+- **What customers see is not a test build:** the start screen's "Shared
+  code check" and "Checkout with a test album" buttons and the "Test version
+  2.0 (dev)" note are only in the dev build (`extra.build`,
+  `src/lib/buildKind.ts`, `test/startScreenBuild.test.tsx`).
+- **Signed with the upload key 1.x is signed with**
+  (`plugins/withPlaySigning.js`): Gradle reads the key's settings from the
+  1.x app's `android-native\keystore.properties` (git-ignored; storeFile,
+  storePassword, keyAlias, keyPassword) or the file `-KeystoreProperties`
+  names. Without it the script stops before building. After building, it
+  checks the key with `apksigner` against the website's `assetlinks.json`.
+- **Out:** `mobile\dist\android\megyprints-2.0-play.aab` (for Play Console)
+  and `megyprints-2.0-play.apk` (the same app, signed with the upload key).
+- The dev build is unchanged (`com.megyprints.app.dev`, debug key). The two
+  use the one short folder `C:\megy2` in turn: switching starts its
+  `android\` afresh (about 10 more minutes).
+- Proven: `test/playRelease.test.ts` reads the Android manifest Expo makes
+  for each build (Expo's own introspect run: no Android SDK needed) and holds
+  it to 1.x's manifest, `capacitor.config.ts`, `assetlinks.json` and
+  `auth-native.js`. Also: `npx expo prebuild` of the Play build (cloud,
+  2026-11-02) made `com.megyprints.app`, "Megy Prints", version code 100, both
+  ways back and the signing lines; the signing lines run in Gradle 8.14 with a
+  stand-in Android block signed release with the upload key from a relative,
+  `../` and full key path, and stopped with a clear message for a missing
+  settings file, key file or line, and for a release build without the
+  settings. **Not proven: a real Gradle build of the Play app** (no Android SDK
+  in the cloud) and the app on a phone.
+
+### Owner steps, in order
+
+1. On the PC: `git pull`, `npm ci` in `mobile\`, then
+   `mobile\scripts\build-android.ps1 -Play`. It needs `mobile\.env.local`
+   and `android-native\keystore.properties` (the same file the 1.x builds
+   use).
+2. Play Console → Test and release → **Internal testing** → Create new
+   release → upload `megyprints-2.0-play.aab`. Release notes: below. Only the
+   owner on the Internal testing list.
+3. On the owner's phone (with 1.x from Play): update through the Internal
+   testing link. Walk: sign in with Google, make an album, Preview on its
+   side, order and pay with a test code, Your orders, My memories.
+4. Play Console may ask for the **photo permission declaration**
+   (`READ_MEDIA_IMAGES`, see Phase 2 notes): making photo albums is the app's
+   main job.
+5. Then **Alpha** (closed testing) with the same `.aab`, then production as a
+   staged rollout (section 6).
+
+### For people updating from 1.x
+
+- They sign in once more (Google or email, as before). Albums saved to the
+  account are all there; orders and QR memories too.
+- An album started in 1.x **without signing in** lived only inside 1.x and
+  does not come across.
+
+### Release notes (Play Console "What's new", under 500 characters)
+
+    Megy Prints 2.0: the app is now made for your phone.
+    • Make your album on your phone, page by page
+    • See it as a real book; turn your phone sideways for the open book
+    • Order and pay in the app
+    • Your orders, your QR memories and your profile, all in the app
+    After updating, please sign in again. The albums saved to your account
+    are all there.
+
+---
+
+## Back asks before closing the app (2026-11-02, `feat/port-ask-before-closing`)
+
+Owner, testing the first APK: "i pressed back by accident and totally lost
+all the album. Is there an 'are you sure you want to exit app' message?"
+There wasn't: Back on the start screen closed the app at once. Now Back
+with no screen left to go back to asks **"Close Megy Prints?"**, Stay (the
+default; tapping outside the question too) or Close (`src/lib/closeAsk.ts`,
+mounted once in `src/app/_layout.tsx`). Every other Back still goes back a
+screen, and a screen that takes Back for itself (Making your album, an open
+sheet) still does. **Still open:** why the album was lost; asked the owner
+which screen they were on, whether the app closed, and whether "Continue my
+album" or "See my albums" still has it.
+
+## "Choose from Files" opens in the camera folder (2026-11-02, `feat/port-files-camera-folder`)
+
+Owner: "when selecting pictures please make the phone's photo folder the
+default directory". Android's Files picker opened wherever it liked (often
+Downloads), and expo-document-picker can't say where to start. The app's
+photo module now opens it (`modules/photo-files` `pickPhotos`:
+ACTION_OPEN_DOCUMENT, photos, many at once, `EXTRA_INITIAL_URI` =
+`primary:DCIM/Camera`, the phone's camera folder). It reads only the
+picker's answer (name, type, bytes, last change), nothing is copied, and
+the photos go in exactly as before (`filesToPhotos`). A phone without that
+folder: the picker opens where it would anyway. An APK without the new
+function: the older picker. The app's own grid (all the phone's photos,
+newest first) is unchanged. New Kotlin: a **new APK** is needed.
+`test/filesCameraFolder.test.ts`.
+
+## Fixes from the owner's second phone test (2026-11-02, `feat/port-phone-test-fixes`)
+
+- **Checkout refused an album with words on it**: "page 7 has font Georgia,
+  "Times New Roman", serif (drawn in the phone's own font)". Georgia is the
+  website's default text font and a Microsoft font (no phone has it, it
+  can't be bundled). The app now carries **Gelasio** (OFL), Georgia's
+  stand-in with the same letter widths, in all four styles
+  (`render/fontTable.ts`, `builder/fontAssets.ts`), and draws, measures and
+  prints Georgia with it. A text counts as drawn exactly only in its own
+  font (the first it names): `"Lora", Georgia, serif` before Lora is
+  downloaded is drawn in Georgia meanwhile, and still listed.
+- **The Preview on its side had no "Edit pages"**: now at the top of the
+  left-hand strip, across from the count ("Edit cover" on the cover);
+  between the back button and the count when the buttons are under the
+  book (`builder/previewLayout.ts` `edit`).
+- **Hints in the empty space under the page** in Edit pages
+  (`editor/editorHint.ts`): nothing picked, the button row says what the
+  page can do (an empty box, a QR, a photo, words) and "Swipe the page to
+  turn it."; a photo picked, the line under the page says "Drag the photo
+  to move it in its frame. Pinch to zoom."
+
+A **new APK** is needed (a new font file).
+
+## Place order out of sight: as fast as on screen (2026-11-03, `feat/port-background-speed`)
+
+Owner's phone test: with the app out of sight while the order is made,
+about 3 pages a minute, many more on screen. React Native runs the app's
+timers on the screen's refresh (`JavaTimerManager` on the Choreographer;
+the headless task keeps them going, but Android all but stops the refresh
+for an app out of sight), and the print files waited on a timer after
+every page and press sheet. `src/lib/breathe.ts`: on screen a timer, so the
+progress bar is drawn; out of sight `setImmediate`, no screen needed. And
+the order keeper now holds a partial wake lock while it runs (at most 2
+hours, let go in `onDestroy`), so the work goes on with the screen dark.
+New Kotlin and a new permission (`WAKE_LOCK`): a **new APK** is needed.
+Not yet measured on a phone.
+
+## Edit pages: the new layout, upright and on its side (2026-11-03, `feat/port-editor-layout`)
+
+From the owner's drawings (https://claude.ai/artifact/8cVAvMvpJTF6yJH3B2MdQy):
+
+- **No strip of page numbers.** "Page 13 of 72", big over the page, opens
+  **"Go to a page"** (`src/editor/PagePicker.tsx`): the cover first (the
+  parts' `stripStart` tiles), then every page, the one on screen marked.
+- **The guide** with nothing picked: "Select a photo to edit." on a page with
+  a photo (`editorHint.ts`); a page without one says what it can do.
+- **The picked thing's buttons in rows**, all in view (no sideways scroll),
+  the one that removes (red) last (`actionRows.ts dangerLast`).
+- **On its side** the editor turns with the phone (`SCREENS_THAT_TURN`):
+  the page on the left, a panel down the right with "‹ Preview", the count
+  and Undo at the top, then the same buttons. Every `EditorSheet` opens in
+  that panel's place (`SheetPlacement 'side'`), so a filter or mask shows on
+  the page as it is picked; the words editor stays full screen. The header
+  and status bar are hidden on its side. Between the Preview and Edit pages
+  the phone keeps its way up (`screenTurning.ts` counts the screens that may
+  turn and waits `UPRIGHT_AFTER_MS` before upright comes back). The page
+  picture is drawn for the short side, so turning draws nothing again.
+
+A **new APK** is needed. Not tried on a phone yet.
+
+## The AI quote and "Delete my account" through the origin list (2026-11-03, `feat/port-ai-quote-origin`)
+
+Owner's phone test: the AI quote works on the website, not in the app. The
+website's endpoints share a guard (`api/_guard.mjs`) with an optional origin
+list (`ALLOWED_ORIGINS` on Vercel); a browser always sends its Origin, the
+app sent none, so with the list on every call from the app was refused
+("origin not allowed": the app said "Couldn't write lines just now"). The
+app's calls to the website's own endpoints now carry the endpoint's own
+address as their Origin (`src/lib/siteOrigin.ts`, `siteFetch`), the call
+the website itself makes: the AI quote (`appPhotoQuotes.ts`) and "Delete my
+account" (`app/delete-account.tsx`). Sign-in and the daily limits are as
+before. `test/siteOrigin.test.ts` runs the website's real guard with the
+list on: the old call refused, the new one through. A failed AI quote in the
+**test app** also says what the server answered (never in the Play app). No
+server change; a **new APK** is needed.
+
+## The gold "Add a video memory" button (2026-11-03, `feat/port-gold-memory-button`)
+
+Owner: "we need the golden button for the QR video". The website's
+VideoMemoryButton is gold (src/index.css `.memory-shine`, owner 2026-10-04:
+the video memory is the album's best feature, so it shines; gold keeps it
+from reading as a second "Next page"). The app's was a plain tool tile. Now
+`src/editor/core/GoldButton.tsx`: the same gradient, dark-gold words,
+shadow, a glow that swells (2.6 s) and a light sweep (3.4 s), held to the
+website's stylesheet value for value by `test/goldButton.test.tsx`; still
+with the phone's "reduce motion" on. Drawn with React Native's own
+`backgroundImage` and `boxShadow` and `Animated` (native driver): no new
+library. A registry tool can ask for it (`look: 'gold'`); the memories part
+does, and the editor shows it in its own row just over the page turn.
+A **new APK** is needed.
+
+## The start screen looks like the website's home (2026-11-03, `feat/port-home-look`)
+
+Owner, with the 1.x and 2.0 start screens side by side: "1.x looks more 2.0
+than 2.0". The 2.0 start screen was the app icon and a column of plain
+buttons. Now it is the website's home at phone width (`src/app/index.tsx`,
+`src/home/`):
+
+- the albums photo behind it all under the website's veil, slowly zooming
+  (`assets/home/hero.jpg`, the website's `hero-albums.jpg` cut to its middle
+  for an upright phone, 150 KB); "Megy · Prints" and a menu over it;
+- the Albums and Events cards (`HomeCards.tsx`, the website's
+  `src/pages/home/HomeCards.tsx`): label, Playfair headline, five slides
+  each with the same pictures at the same sizes (a slide every 4 s, Albums
+  half a beat later, dots, Pause/Play, swipe), "Start Creating" and "Book
+  your event ›". The words are a copy of `src/pages/homeCopy.ts` (the
+  website is frozen and that file can't be shared), and
+  `test/homeLook.test.tsx` holds the copy to the website's word for word;
+- the app's own parts stay: Continue my album / Start a new album inside
+  the Albums card; Sign in at the top when signed out; the account's
+  places (albums, orders, profile, memories, sign out) in a card when
+  signed in, and in the menu; in the dev build only, the test buttons and
+  the "Test version" note at the bottom;
+- the type is the website's (Playfair Display, DM Sans), from the font files
+  already in the app; the pictures move (the website's timings) only while
+  the screen is on top, and hold still with "reduce motion" on
+  (`src/lib/reduceMotion.ts`, now shared with the gold button).
+
+Drawn with React Native's own views, `Image`, `boxShadow`, `backgroundImage`
+and `Animated` (native driver): no new library. Checked in a browser copy
+(react-native-web, in the scratchpad only) before the phone. The website's
+"Start the User tutorial" card is a website tester task and is not in the
+app. A **new APK** is needed.
+
+## Textured photo edges print from the app (2026-11-03, `feat/port-mask-files`)
+
+Owner's phone test: Place order stopped with "The app can't make this
+album's print file yet: page 1 has picture file /masks/deckle.png." A photo
+with a textured edge (Mask: deckle, torn, brushed, frost, paint, watercolor)
+names a picture the website serves from `public/masks`; the app had none of
+them, so any album with one could not be ordered (and the Preview drew the
+photo without its edge). Now `src/builder/siteFiles.ts` gives the page
+drawer those 7 pictures, for print (Place order, `phoneSend.ts`) and on
+screen (`pageImages.ts`). They are in the app's code as base64
+(`src/builder/maskFiles.ts`, made by `scripts/mask-files.cjs`, 681 KB),
+not as image files: an Android build may re-encode a bundled PNG and hands
+it to the screen without a file the print step could read (the golden phone
+build carries its pictures the same way). `test/maskFiles.test.ts` holds
+them to the website's files byte for byte and fails when `public/masks`
+changes until the script is run again. A theme's corner art (old albums
+only; albums made today have none) is still not in the app. A **new APK**
+is needed.
+
+## The Preview looks like a real book (2026-11-03, `feat/port-book-look`)
+
+Owner: "make the view look like a book effect with edges looking like pages
+and page flips looking realistic" (the drawing:
+https://claude.ai/artifact/TF3673TheumrdrJ5YvkHb9). Now
+(`src/builder/bookLook.tsx`, `src/app/preview.tsx`):
+
+- around the pages: the cover board (a warm cloth brown) with its shadow on
+  the table; the stack of page edges at each outer side, thin where few
+  pages are and thick where many are (read pages on the left, those to
+  come on the right; up to 7 points, a fine line between sheets); the page
+  edges under the pages. One page at a time: the spine and the cover's hinge
+  on its bound side (binding.ts), the page edges on the other. The closed
+  book is just its cover;
+- over the pages: each bends down into the spine (light where it lifts,
+  darker at the spine), and a crease where the two pages meet;
+- the page turn: the leaf shades like bending paper while it stands up, and
+  throws a shadow that follows its free edge over the pages under it.
+
+Room is kept around the pages for the board and the edges (`previewLayout`
+`BOOK_DRESS_X` = 11 at each side, `BOOK_DRESS_Y` = 7 above and below): the
+page itself is 22 points narrower than before (an 8x8 page upright on a
+412-point phone: 382 instead of 404; the book with its cover is still 404).
+Plain views and React Native's own gradients: no new library. Not yet:
+the paper visibly curving as it turns. A **new APK** is needed.
+
+## A finger turns the page (2026-11-03, `feat/port-page-drag`)
+
+The drawing's "dragging the corner": the moment a finger moves sideways on
+a page, the turn begins and the leaf follows the finger (flat where it
+started, upright halfway across, over at the end of its reach: most of both
+pages on the open book, the page's width one page at a time). Let go after
+a swipe (the website's `swipeTurn`, the same way), past halfway or on a
+quick flick: it finishes its turn; a little move or back the other way: it
+goes back down and the book is where it was. A button tapped while a page
+is going back counts from where the book really is. The cover still turns
+on a swipe (opening or closing the book slides it). The rules:
+`src/builder/pageDrag.ts`; the Preview: `TurnLayer`'s `drive`. A **new
+APK** is needed.
+
+## Privacy Policy and Terms of Service in the app (2026-11-03, `feat/port-legal-links`)
+
+Owner: "the privacy clause and all other applicable clauses pls add it to
+2.0". Google Play's User Data policy wants the privacy policy linked in Play
+Console and inside the app. 1.x had it through the website's footer (#218).
+2.0 had no link to it, none to the Terms (#233), and not the website's "you
+agree to the Terms and you're 18 or older" line. Now (`src/lib/legal.ts`,
+`src/components/LegalLinks.tsx`), each opening the website's own page in the
+browser:
+
+- the start screen: Privacy Policy and Terms of Service under everything, in
+  a white pill over the photo;
+- the start screen's menu: the same two, small, under its places (the menu
+  closes first);
+- Sign in: "By signing in you agree to our Terms of Service and confirm
+  you're 18 or older." In the app, Sign in with Google is how a new account
+  is made, so the website's Create Account line goes here;
+- Place order: the website's line, "By placing an order…";
+- My profile: the two links under Delete my account.
+
+The agree line is the whole line to tap, not only its two words.
+The Terms page, its line and `MIN_AGE` came to main on Oct 31, after
+native-2.0 last took main (Oct 28), so the words are copied in `legal.ts`
+until main is merged in. `test/legalLinks.test.tsx`, `checkoutWalk` and
+`profileWalk` hold them; they fail on the screens before this change. Walked
+on the emulator in the Play build (2.0.0, code 100, installed over 1.3.0):
+both links on the start screen and in the menu, and the Sign in line, open
+the live pages; Back comes back to the app. The Privacy page's ML Kit
+paragraph is website PR #264. A **new APK** is needed.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

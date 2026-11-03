@@ -26,11 +26,13 @@ export const fake = {
   insertError: null as { message: string; code?: string } | null,
   /** Holds an RPC's answer until the test lets it go (a request still on its way). */
   hold: {} as Record<string, Promise<void> | undefined>,
+  /** The account's event bookings (event_bookings reads). */
+  bookings: [] as Record<string, unknown>[],
 };
 
 export function resetFake(): void {
   rec.inserts = []; rec.upserts = []; rec.rpcs = []; rec.reads = []; rec.uploads = [];
-  fake.userId = 'user-1'; fake.albumRow = null; fake.orderRow = null; fake.rpc = {}; fake.insertError = null; fake.hold = {};
+  fake.userId = 'user-1'; fake.albumRow = null; fake.orderRow = null; fake.rpc = {}; fake.insertError = null; fake.hold = {}; fake.bookings = [];
 }
 
 function from(table: string) {
@@ -45,6 +47,7 @@ function from(table: string) {
       rec.reads.push(read);
       if (table === 'albums') return { data: fake.albumRow, error: null };
       if (table === 'orders') return { data: fake.orderRow, error: null };
+      if (table === 'event_bookings') return { data: bookingsFor(read.filters)[0] ?? null, error: null };
       return { data: null, error: null };
     },
     insert(row: Record<string, unknown>) {
@@ -59,7 +62,20 @@ function from(table: string) {
     },
     async upsert(rows: unknown[], opts: unknown) { rec.upserts.push({ table, rows, opts }); return { error: null }; },
   };
+  // A list read of the bookings (awaited without maybeSingle).
+  if (table === 'event_bookings') {
+    Object.assign(b, {
+      then(ok: (v: unknown) => unknown, bad?: (e: unknown) => unknown) {
+        rec.reads.push(read);
+        return Promise.resolve({ data: bookingsFor(read.filters), error: null }).then(ok, bad);
+      },
+    });
+  }
   return b;
+}
+
+function bookingsFor(filters: Record<string, unknown>) {
+  return fake.bookings.filter((r) => Object.entries(filters).every(([k, v]) => r[k] === v));
 }
 
 export const fakeClient = {

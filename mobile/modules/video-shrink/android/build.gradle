@@ -1,0 +1,28 @@
+// The app's own small native module that shrinks a memory video (see
+// ../index.ts). Built from source by Expo autolinking, which finds every
+// folder under mobile/modules.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.megyprints'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.megyvideoshrink"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // Google's Media3 Transformer: decodes the phone's video and writes a new
+  // H.264 + AAC MP4. The same Media3 version expo-video plays with (its
+  // android/build.gradle), so the app has one copy of Media3.
+  def media3 = "1.9.1"
+  implementation "androidx.media3:media3-transformer:${media3}"
+  implementation "androidx.media3:media3-effect:${media3}"
+  implementation "androidx.media3:media3-common:${media3}"
+}

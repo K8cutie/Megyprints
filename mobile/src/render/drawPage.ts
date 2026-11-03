@@ -589,14 +589,25 @@ export class PageDrawer {
   }
 
   private printPage(plan: PagePlan, photos: PhotoSource, options: DrawOptions): SkImage {
-    const W = plan.width, H = plan.height, b = plan.bleed;
     const trim = this.renderTrim(plan, photos, options);
-    const d = this.surfaces.take(W + 2 * b, H + 2 * b);
-    const out = d.canvas;
-    out.drawRect(this.Skia.XYWHRect(0, 0, W + 2 * b, H + 2 * b), this.paint('#ffffff'));
-    this.image(out, trim, { x: 0, y: 0, w: W, h: H }, { x: b, y: b, w: W, h: H });
-    this.mirrorEdges(out, trim, { x: b, y: b, w: W, h: H }, { top: b, right: b, bottom: b, left: b });
+    const image = this.withBleed(trim, plan);
     trim.dispose();
-    return this.surfaces.snapshot(d);
+    return image;
+  }
+
+  /** printBleed withBleed: a page picture at print size (renderTrim) with
+   *  its bleed mirrored round every edge. The print files use it on a page
+   *  drawn without its words (src/print/pagePicture.ts). The caller disposes
+   *  both pictures. */
+  withBleed(trim: SkImage, plan: PagePlan): SkImage {
+    return this.drawing(() => {
+      const W = plan.width, H = plan.height, b = plan.bleed;
+      const d = this.surfaces.take(W + 2 * b, H + 2 * b);
+      const out = d.canvas;
+      out.drawRect(this.Skia.XYWHRect(0, 0, W + 2 * b, H + 2 * b), this.paint('#ffffff'));
+      this.image(out, trim, { x: 0, y: 0, w: W, h: H }, { x: b, y: b, w: W, h: H });
+      this.mirrorEdges(out, trim, { x: b, y: b, w: W, h: H }, { top: b, right: b, bottom: b, left: b });
+      return this.surfaces.snapshot(d);
+    });
   }
 }

@@ -32,6 +32,14 @@ describe('photo access set-up', () => {
     expect(appJson.expo.android.blockedPermissions).not.toContain('android.permission.READ_MEDIA_VISUAL_USER_SELECTED');
   });
 
+  it('a memory video comes from Android\'s own picker: no camera, microphone or video-library permission', () => {
+    const picker = appJson.expo.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-image-picker') as [string, Record<string, unknown>] | undefined;
+    expect(picker?.[1]).toEqual({ cameraPermission: false, microphonePermission: false, photosPermission: false });
+    expect(appJson.expo.android.blockedPermissions).toEqual(expect.arrayContaining([
+      'android.permission.CAMERA', 'android.permission.RECORD_AUDIO', 'android.permission.READ_MEDIA_VIDEO',
+    ]));
+  });
+
   it('the app\'s own Files module is an Android Expo module autolinking finds', () => {
     const cfg = JSON.parse(readFileSync(path.join(root, 'modules', 'photo-files', 'expo-module.config.json'), 'utf8')) as { platforms: string[]; android: { modules: string[] } };
     expect(cfg.platforms).toEqual(['android']);

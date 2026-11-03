@@ -27,6 +27,14 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   Worklets, Gesture Handler) are not in the APK. Importing one crashes the
   app on the phone; `test/nativeLibraries.test.ts` fails first. Delete the
   line there to turn one back on.
+- **Only the Preview and Edit pages turn with the phone**
+  (`src/lib/screenTurning.ts`, `expo-screen-orientation`); every other screen
+  is upright (`app.json` `"orientation": "portrait"`). A new screen that
+  should turn goes in `SCREENS_THAT_TURN` and calls `useTurnsWithThePhone`;
+  `test/screenTurning.test.ts` fails otherwise. The book's sizes both ways
+  up are `src/builder/previewLayout.ts`; the editor on its side puts the page
+  on the left and its buttons, and its sheets (`core/EditorSheet`
+  `SheetPlacement`), in a panel down the right.
 - **The app's own native code** lives in `modules/`: `modules/photo-files`
   keeps access to photos picked with "Choose from Files" and reads their size
   and EXIF time, and its `srgbCopy` turns a Display P3 / Adobe RGB photo into
@@ -35,7 +43,10 @@ is `../docs/mobile-port-plan.md`; read it, and its "Phase 1 notes", first.
   on a copy up to twice that size (`src/lib/phonePhotoCheck.ts`; compared with
   the website by `../tools/photo-check`). ML Kit sends Google anonymous usage
   numbers (never the photos) and adds about 13 MB to the app: see
-  `src/lib/faceModel.ts` before shipping it. Expo autolinking builds every
+  `src/lib/faceModel.ts` before shipping it. `modules/order-keeper` keeps
+  Place order going while the person uses other apps (a foreground service
+  with a notification, and a headless task so React Native's timers keep
+  running; `src/lib/checkout/backgroundSend.ts`). Expo autolinking builds every
   folder there; after changing its Kotlin, run prebuild and Gradle again.
   Jest has no native modules: its JS side (`index.ts`) works without the
   native half.

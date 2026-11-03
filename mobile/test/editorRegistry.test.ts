@@ -27,8 +27,8 @@ import { act, builder, ctxOn, firstPhoto, madeAlbum, useEditorBench } from './ed
 useEditorBench();
 
 describe('the parts', () => {
-  it('the screen\'s own part and the three part folders register themselves; sheets are found by their full id', () => {
-    expect(editorParts().map((p) => p.id).sort()).toEqual(['core', 'cover', 'photos', 'text']);
+  it('the screen\'s own part and the four part folders register themselves; sheets are found by their full id', () => {
+    expect(editorParts().map((p) => p.id).sort()).toEqual(['core', 'cover', 'memories', 'photos', 'text']);
     expect(sheetById(ADD_TO_BOX_SHEET)).not.toBeNull();
     expect(sheetById('core:retired')).not.toBeNull();
     expect(sheetById('core:nothing')).toBeNull();
@@ -44,7 +44,7 @@ describe('the parts', () => {
       off();
       expect(editorParts().map((p) => p.id)).toEqual(['core']);
     } finally { restore(); }
-    expect(editorParts().map((p) => p.id).sort()).toEqual(['core', 'cover', 'photos', 'text']);
+    expect(editorParts().map((p) => p.id).sort()).toEqual(['core', 'cover', 'memories', 'photos', 'text']);
   });
 });
 

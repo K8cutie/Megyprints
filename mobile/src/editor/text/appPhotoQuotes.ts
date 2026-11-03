@@ -7,6 +7,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { drawableCopy } from '../../../modules/photo-files';
 import { hashText } from '../../builder/pageImages';
 import { PHOTO_QUOTE_PX, type PhotoQuoteDeps } from './photoQuotes';
+import { siteFetch } from '../../lib/siteOrigin';
 
 const FOLDER = 'megy-quote-copies';
 
@@ -38,5 +39,7 @@ export const appPhotoQuoteDeps: PhotoQuoteDeps = {
       try { copy.delete(); } catch { /* the phone clears its cache itself */ }
     }
   },
-  fetch: (url, init) => fetch(url, init),
+  // Saying it comes from the website, as the website's own call does
+  // (lib/siteOrigin.ts: the endpoint's origin list).
+  fetch: (url, init) => siteFetch((u, i) => fetch(u, i))(url, init),
 };

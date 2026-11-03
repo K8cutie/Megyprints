@@ -4,8 +4,9 @@ import { colors, space } from '../lib/theme';
 interface Props {
   label: string;
   onPress: () => void;
-  /** 'main' = the one filled terracotta button that moves you forward. */
-  kind?: 'main' | 'plain';
+  /** 'main' = the one filled terracotta button that moves you forward.
+   *  'danger' = filled red, for the one button that deletes for good. */
+  kind?: 'main' | 'plain' | 'danger';
   /** Working on it: the label stays, with a spinner, and taps wait. */
   busy?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -15,7 +16,7 @@ interface Props {
 /** A button that says what it does. Never greyed out: while busy it keeps
  *  its colour and shows a spinner next to the words. */
 export function Button({ label, onPress, kind = 'main', busy = false, style, testID }: Props) {
-  const main = kind === 'main';
+  const main = kind === 'main' || kind === 'danger';
   return (
     <Pressable
       accessibilityRole="button"
@@ -23,7 +24,7 @@ export function Button({ label, onPress, kind = 'main', busy = false, style, tes
       accessibilityState={{ busy }}
       testID={testID}
       onPress={busy ? undefined : onPress}
-      style={({ pressed }) => [styles.base, main ? styles.main : styles.plain, pressed && styles.pressed, style]}
+      style={({ pressed }) => [styles.base, kind === 'danger' ? styles.danger : main ? styles.main : styles.plain, pressed && styles.pressed, style]}
     >
       {busy && <ActivityIndicator color={main ? colors.accentText : colors.accent} style={styles.spinner} />}
       <Text style={[styles.label, main ? styles.mainLabel : styles.plainLabel]}>{label}</Text>
@@ -41,6 +42,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   main: { backgroundColor: colors.accent },
+  danger: { backgroundColor: colors.bad },
   plain: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: colors.accent },
   pressed: { opacity: 0.85 },
   spinner: { marginRight: space.sm },

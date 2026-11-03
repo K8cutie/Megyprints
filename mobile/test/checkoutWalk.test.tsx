@@ -27,7 +27,9 @@ const mockPicked: { asset: { uri: string; name: string; size: number; mimeType: 
 
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockAuth.session, loading: false }) }));
 jest.mock('../src/lib/supabase', () => ({ supabase: jest.requireActual('./helpers/fakeSupabase').fakeClient, supabaseConfigured: true }));
-jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) } }));
+jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) }, useLocalSearchParams: () => ({}) }));
+// Opened from the home screen's test button: no album id, no album (the test album).
+jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => null }));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: async () => (mockPicked.asset ? { canceled: false, assets: [mockPicked.asset] } : { canceled: true, assets: null }),
@@ -113,6 +115,16 @@ describe('the checkout screen, walked', () => {
     expect(hardPrice.total).toBeGreaterThan(softPrice.total);
     // The price came from the database's public price list, read once.
     expect(rec.rpcs.filter((r) => r.name === 'public_price_schedule')).toHaveLength(1);
+  });
+
+  it('under Place order, the website\'s line: placing an order agrees to the Terms, 18 or older (test/legalLinks.test.tsx)', async () => {
+    const { Linking } = jest.requireActual('react-native') as typeof import('react-native');
+    const spy = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never);
+    await openScreen();
+    expect(screen.getByTestId('order-agree')).toHaveTextContent("By placing an order you agree to our Terms of Service and confirm you're 18 or older.");
+    await fireEvent.press(screen.getByTestId('order-agree'));
+    expect(spy).toHaveBeenCalledWith('https://megyprints.vercel.app/#/terms');
+    spy.mockRestore();
   });
 
   it('Place order on an empty form says what to fix under each box, and sends nothing', async () => {
@@ -355,7 +367,7 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByText('3. Send the total we tell you and put MP-2026-ABC1234 in the note if your app asks.')).toBeOnTheScreen();
     expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
     await fireEvent.press(screen.getByTestId('pay-message-us'));
-    expect(opened).toEqual(['https://megyprints.vercel.app/contact']);
+    expect(opened).toEqual(['https://megyprints.vercel.app/#/contact']); // the website's Contact page (a #/ page)
     await fireEvent.press(screen.getByText("I've sent the payment"));
     await fireEvent.press(screen.getByTestId('test-panel-toggle'));
     const sent = JSON.parse(String(screen.getByText(/"rpc": \{/).props.children));

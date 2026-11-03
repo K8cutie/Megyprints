@@ -9,11 +9,12 @@
    cannot draw yet is not drawn and is listed (plan.notDrawn), never faked.
 
    The pictures a page keeps inside the album (a memory QR code, a graphic,
-   a sticker: PNG data: URLs) are opened and drawn (render/assets.ts). Files
-   the website serves (a textured edge's /masks pictures, a theme's corner
-   art, a background stored by address) are not in the app yet: such a page
-   is drawn without them, as print draws a picture that fails to load, and
-   each one is added to the page's notDrawn list.
+   a sticker: PNG data: URLs) are opened and drawn (render/assets.ts), and so
+   are a textured edge's /masks pictures, which the app carries
+   (siteFiles.ts). Other files the website serves (a theme's corner art, a
+   background stored by address) are not in the app: such a page is drawn
+   without them, as print draws a picture that fails to load, and each one
+   is added to the page's notDrawn list.
 
    Photos are drawn from small copies (at most PHOTO_MAX_SIDE px), made by
    the phone (modules/photo-files drawableCopy: upright, sRGB, HEIC opened)
@@ -25,6 +26,7 @@ import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '@web/pages/build
 import { planPage, type PagePlan } from '../render/pagePlan';
 import { PageDrawer } from '../render/drawPage';
 import { AssetCache } from '../render/assets';
+import { siteFile } from './siteFiles';
 import type { PageText } from '../render/pageText';
 import { BUNDLED_FONTS, bundledFace } from '../render/fontTable';
 
@@ -130,8 +132,9 @@ export async function drawPageImage(Sk: Skia, text: PageText, req: PageRequest, 
   if (!surface) throw new Error(`could not make a ${req.width}×${height} drawing surface`);
   const canvas = surface.getCanvas();
   canvas.scale(scale, scale);
-  // The album's own pictures (data: URLs) only: no files from the website yet.
-  const assets = new AssetCache(Sk);
+  // The album's own pictures (data: URLs), and the website's mask pictures
+  // the app carries (siteFiles.ts).
+  const assets = new AssetCache(Sk, siteFile);
   const unavailable = new Set<string>();
   const drawer = new PageDrawer(Sk, text);
   try {
@@ -148,7 +151,8 @@ export async function drawPageImage(Sk: Skia, text: PageText, req: PageRequest, 
 }
 
 /** A picture the page names that the app could not open, for notDrawn. */
-function pictureNotDrawn(src: string): string {
+export function pictureNotDrawn(src: string): string {
+  if (typeof src !== 'string' || !src) return 'a picture that is missing from the album';
   return src.startsWith('data:') ? 'a picture kept in the album that could not be opened' : `picture file ${src.length > 80 ? `${src.slice(0, 77)}...` : src}`;
 }
 

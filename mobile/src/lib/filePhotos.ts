@@ -11,7 +11,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { getDocumentAsync, type DocumentPickerAsset } from 'expo-document-picker';
 import { kindOfPick, leftOutNote } from '@web/lib/pickedFiles';
-import { describePickedFiles, type PickedFileInfo } from '../../modules/photo-files';
+import { describePickedFiles, pickPhotoFiles, type PickedFileInfo } from '../../modules/photo-files';
 import { photoKey, type DraftPhoto } from './photoDraft';
 import { parseExifDateTime } from './photoTime';
 
@@ -66,10 +66,30 @@ export function accessToGiveBack(kept: readonly string[], album: readonly DraftP
   return kept.filter((uri) => !inAlbum.has(uri));
 }
 
-/** Opens Android's file picker for photos (many at once). Null = closed
- *  without picking. */
+/** The picker's answer, as expo-document-picker gives it. */
+async function openFilesPicker(): Promise<{ canceled: boolean; assets: DocumentPickerAsset[] | null }> {
+  // The app's own: opens in the phone's camera folder (owner, 2026-11-02).
+  const own = await pickPhotoFiles();
+  if (own) {
+    return {
+      canceled: own.canceled,
+      assets: own.assets.map((a) => ({
+        uri: a.uri,
+        name: a.name,
+        ...(a.mimeType ? { mimeType: a.mimeType } : {}),
+        ...(typeof a.size === 'number' ? { size: a.size } : {}),
+        lastModified: a.lastModified ?? 0,
+      }) as DocumentPickerAsset),
+    };
+  }
+  // An APK without it: Android's picker opens where it likes.
+  return getDocumentAsync({ type: 'image/*', multiple: true, copyToCacheDirectory: false });
+}
+
+/** Opens Android's file picker for photos (many at once), in the phone's
+ *  camera folder. Null = closed without picking. */
 export async function pickFromFiles(now = Date.now()): Promise<FilesPick | null> {
-  const res = await getDocumentAsync({ type: 'image/*', multiple: true, copyToCacheDirectory: false });
+  const res = await openFilesPicker();
   if (res.canceled || !res.assets?.length) return null;
   // Only images go to the native module: it keeps access to each one.
   const images = res.assets.filter((a) => kindOfPick({ type: a.mimeType ?? '', name: a.name ?? '' }) === 'photo');

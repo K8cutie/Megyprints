@@ -8,15 +8,12 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 describe('sign-in words', () => {
-  it('a wrong password says what the website says (shared accountErrors), without the Google button hint', () => {
+  it('a wrong password says what the website says (shared accountErrors), word for word now that Google sign-in is in the app', () => {
     const web = signInErrorText('Invalid login credentials').text;
     const text = signInFailureText({ message: 'Invalid login credentials' });
-    expect(GOOGLE_SIGN_IN_IN_APP).toBe(false);
-    expect(text).toBe('Wrong email or password. Check the email for a typo.');
-    // The app's words are the website's, minus the sentence about a Google button the app does not have yet.
-    expect(web.startsWith(text)).toBe(true);
-    expect(web).toMatch(/Sign in with Google/);
-    expect(text).not.toMatch(/Google/);
+    expect(GOOGLE_SIGN_IN_IN_APP).toBe(true);
+    expect(text).toBe(web);
+    expect(text).toMatch(/Sign in with Google/);
   });
 
   it('no connection says so in plain words', () => {

@@ -1,0 +1,27 @@
+// The app's own small native module that keeps an order going while the
+// person uses other apps (see ../index.ts). Built from source by Expo
+// autolinking, which finds every folder under mobile/modules.
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.megyprints'
+version = '1.0.0'
+
+android {
+  namespace "expo.modules.megyorderkeeper"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+  }
+}
+
+dependencies {
+  // React Native's headless task (keeps the app's timers going while it is
+  // out of sight); the version is the app's own React Native.
+  implementation "com.facebook.react:react-android"
+  // NotificationCompat and ServiceCompat (the app already has a newer copy:
+  // Gradle keeps the newest).
+  implementation "androidx.core:core:1.13.1"
+}

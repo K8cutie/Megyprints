@@ -8,7 +8,7 @@
 
    Every file here runs anywhere JavaScript runs: no browser (document,
    window, localStorage, canvas…), no web-only package (fabric, jsPDF,
-   pdf-lib, Supabase…). A listed file imports only other listed files, or a
+   pdf.js, Supabase…). A listed file imports only other listed files, or a
    package in SHARED_NPM_PACKAGES, or types only from one in
    SHARED_TYPE_ONLY_PACKAGES. sharedModules.spec.ts checks all of it on
    every test run, and names the file and line that breaks it.
@@ -44,6 +44,11 @@
    the step words and made-album rules moved into assistant/wizardSteps, and
    sizeOffer (the sizes a customer may pick, split out of albumSizeOptions).
 
+   Phase 6 (Your orders and Profile) added myOrdersCloud (a customer's own
+   orders, read and cancelled through the client handed in, split out of
+   myOrders) and accountDeletionRules (what deleting an account touches and
+   the call to the endpoint, split out of accountDeletion).
+
    A TWIN: a file listed as name.native.ts stands in for name.ts in the app.
    The app's bundler (Metro) and type check (tsconfig moduleSuffixes) pick
    the .native.ts file, so a listed file may import name.ts (the website's,
@@ -55,6 +60,7 @@ export const SHARED_MODULES = [
   'src/assistant/rebuildQuestion.ts',
   'src/assistant/types.ts',
   'src/assistant/wizardSteps.ts',
+  'src/lib/accountDeletionRules.ts',
   'src/lib/accountErrors.ts',
   'src/lib/albumCloud.ts',
   'src/lib/albumName.ts',
@@ -70,6 +76,7 @@ export const SHARED_MODULES = [
   'src/lib/limit.ts',
   'src/lib/localDraftRules.ts',
   'src/lib/megyMascot.ts',
+  'src/lib/myOrdersCloud.ts',
   'src/lib/orderExpiry.ts',
   'src/lib/orderTracker.ts',
   'src/lib/passwordReset.ts',
@@ -79,6 +86,8 @@ export const SHARED_MODULES = [
   'src/lib/photoRelink.ts',
   'src/lib/pickedFiles.ts',
   'src/lib/placeProgress.ts',
+  'src/lib/pressSheetWords.ts',
+  'src/lib/pressSheetZip.ts',
   'src/lib/pricing.ts',
   'src/lib/qrGeometry.ts',
   'src/lib/rgbaPng.ts',
@@ -117,8 +126,10 @@ export const SHARED_MODULES = [
   'src/pages/builder/pageTurnStyles.ts',
   'src/pages/builder/photoAnalyzer.ts',
   'src/pages/builder/previewPaging.ts',
+  'src/pages/builder/printFileSpec.ts',
   'src/pages/builder/printFrameSpec.ts',
   'src/pages/builder/printSheet.ts',
+  'src/pages/builder/printSheetPdf.ts',
   'src/pages/builder/printSize.ts',
   'src/pages/builder/quoteBank.ts',
   'src/pages/builder/rectTemplates.ts',
@@ -150,6 +161,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/useEndOfAlbumPrompt.ts',
   'src/pages/builder/varietyTracker.ts',
   'src/pages/builder/wordArtRules.ts',
+  'src/pages/builder/wordPatches.ts',
   'src/shared/platform.ts',
 ] as const;
 
@@ -157,8 +169,13 @@ export const SHARED_MODULES = [
  *  browser and in React Native.
  *  - react: React Native runs the same React. Used for a few hooks
  *    (settleGuard, useEndOfAlbumPrompt, useBuilderState) and the
- *    CSSProperties type. (react-dom is web-only and is never allowed.) */
-export const SHARED_NPM_PACKAGES = ['react'] as const;
+ *    CSSProperties type. (react-dom is web-only and is never allowed.)
+ *  - pdf-lib: plain JavaScript that reads and writes PDF bytes (no DOM, no
+ *    canvas; pako and its own PNG reader inside). The console lays the
+ *    print files out on press sheets with it (printSheetPdf.ts), and the
+ *    2.0 app makes the same sheets on the phone with the same file (Phase 5).
+ *    The app's package.json pins the website's exact version. */
+export const SHARED_NPM_PACKAGES = ['react', 'pdf-lib'] as const;
 
 /** npm packages a shared file may import TYPES from (`import type`), and
  *  nothing else. A type import is erased when the code is built, so nothing

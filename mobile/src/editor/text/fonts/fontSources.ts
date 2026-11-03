@@ -8,14 +8,15 @@
 
      • bundled: the theme fonts, inside the app (render/fontTable.ts
        BUNDLED_FONTS: Playfair Display, DM Sans, Dancing Script, and Cinzel,
-       the cover title's face). Megy's own text uses only these.
+       the cover title's face), and Georgia, the default text font, drawn
+       with its stand-in Gelasio (same letter widths). Megy's own text uses
+       only these.
      • google: every other font, downloaded from Google Fonts the first time
        it is picked (or a page on screen uses it), then kept on the phone for
        good (fontStore.ts). About 40–400 KB a font; all 70 of them together
        are about 7 MB, which nobody needs at once.
-     • phone: Georgia, a Microsoft font that is not on Google Fonts and not
-       on Android phones. The website on an Android phone draws it in the
-       phone's own serif, and so does the app (render/fontTable.ts).
+     • phone: a font not on Google Fonts and not in the app: the phone's
+       own font. None of the 74 now (Georgia was, until Gelasio came in).
 
    The styles fetched for a font are the ones the website loads for it
    (index.html's caption-font links and src/index.css): regular and bold,
@@ -114,7 +115,9 @@ export const WEBSITE_STYLES: Readonly<Record<string, readonly StyleKey[]>> = {
   'Cutive Mono': ['400', '700'],
 };
 
-/** Not on Google Fonts (and not on Android phones): the phone's own serif. */
+/** Not on Google Fonts and not in the app: the phone's own font. Georgia,
+ *  a Microsoft font, is in the app as Gelasio (render/fontTable.ts), which
+ *  fontSource finds first. */
 const PHONE_ONLY = new Set(['georgia']);
 
 export type FontSource = 'bundled' | 'google' | 'phone';

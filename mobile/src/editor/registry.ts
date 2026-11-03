@@ -111,6 +111,9 @@ export interface Tool {
   order?: number;
   /** A row of its own under the tools (the website's "Add memory video"). */
   wide?: boolean;
+  /** 'gold': the website's gold button (core/GoldButton: "Add a video
+   *  memory"), in its own row just over the page turn. */
+  look?: 'gold';
   shown?(ctx: EditorContext): boolean;
   onPress(ctx: EditorContext): void;
 }

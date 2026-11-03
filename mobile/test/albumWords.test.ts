@@ -103,7 +103,7 @@ describe("the app's album steps use the website's words", () => {
   });
 
   it('the preview (BuilderPreview.tsx, PreviewTurnBar.tsx)', () => {
-    for (const w of ['See it as an open book', 'One page at a time', 'Inside of the ']) {
+    for (const w of ['See it as an open book', 'One page at a time', 'Inside of the ', 'or turn your phone sideways']) {
       expect(web.preview).toContain(w);
       expect(app.preview).toContain(w);
     }

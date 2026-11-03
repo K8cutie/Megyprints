@@ -62,6 +62,15 @@ export interface DrawableCopyResult {
   converted: boolean;
 }
 
+/** One photo picked in "Choose from Files" (the shape expo-document-picker gives). */
+export interface PickedPhotoFile {
+  uri: string;
+  name: string;
+  mimeType: string | null;
+  size: number | null;
+  lastModified: number | null;
+}
+
 interface PhotoFilesNative {
   describe(uris: string[]): Promise<PickedFileInfo[]>;
   release(uris: string[]): Promise<number>;
@@ -69,6 +78,7 @@ interface PhotoFilesNative {
   srgbCopy(source: string, target: string): Promise<SrgbCopyResult>;
   inspect?(uris: string[]): Promise<PhotoInspection[]>;
   drawableCopy?(source: string, target: string, maxSide: number): Promise<DrawableCopyResult>;
+  pickPhotos?(): Promise<{ canceled: boolean; assets: PickedPhotoFile[] }>;
 }
 
 const native = requireOptionalNativeModule<PhotoFilesNative>('MegyPhotoFiles');
@@ -115,4 +125,12 @@ export async function inspectPhotos(uris: string[]): Promise<PhotoInspection[] |
 export async function drawableCopy(source: string, target: string, maxSide: number): Promise<DrawableCopyResult | null> {
   if (!native || typeof native.drawableCopy !== 'function') return null;
   return native.drawableCopy(source, target, maxSide);
+}
+
+/** "Choose from Files": Android's document picker for photos, many at once,
+ *  opened in the phone's camera folder. Null when the build has no native
+ *  half for it (jest, an older APK): then the app's older picker is used. */
+export async function pickPhotoFiles(): Promise<{ canceled: boolean; assets: PickedPhotoFile[] } | null> {
+  if (!native || typeof native.pickPhotos !== 'function') return null;
+  return native.pickPhotos();
 }

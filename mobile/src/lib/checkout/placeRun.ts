@@ -6,12 +6,12 @@
    The print file's pages are most of the bar, one step per page made;
    sending the file can't be measured, so that step shows a moving band.
 
-   THIS BUILD makes no files and sends nothing (the page drawer is still in a
-   held PR, and the write path is off), so `placeFrames` is played back with
-   short waits: the screen shows how the bar will move for this album's page
-   count. Each frame says what the real step will be.
+   Ordering your own album, the bar follows the real steps (sendFrame, from
+   sendOrder.ts's steps). The test album still plays `placeFrames` back with
+   short waits: how the bar moves for its page count, nothing made or sent.
    ══════════════════════════════════════════════════════════════════════════ */
 import { forward, pagesAt, pagesLabel, PLACE_AT, videosAt, type PlaceProgress } from '@web/lib/placeProgress';
+import type { SendStep } from './sendOrder';
 
 export interface PlaceFrame {
   progress: PlaceProgress;
@@ -60,6 +60,31 @@ export function placeFrames(s: PlaceShape): PlaceFrame[] {
   if (s.memories > 0) step(PLACE_AT.saving, 'Saving your memories…');
   if (s.tester) step(PLACE_AT.finishing, 'Finishing your test order…');
   return out;
+}
+
+/** A real step of sending the order (sendOrder.ts), as the bar and the words
+ *  the website shows for it (placeOrder's advance and setPrepMsg). */
+export function sendFrame(prev: PlaceProgress | null, s: SendStep): { progress: PlaceProgress; message: string } {
+  switch (s.step) {
+    case 'order': return { progress: forward(prev, PLACE_AT.start), message: 'Placing your order…' };
+    case 'cover': return { progress: forward(prev, PLACE_AT.cover), message: 'Making your cover…' };
+    case 'pages': return s.total > 0
+      ? { progress: forward(prev, pagesAt(s.done, s.total, s.smaller)), message: pagesLabel(s.done, s.total, s.smaller) }
+      : { progress: forward(prev, PLACE_AT.pages), message: 'Making your print file…' };
+    case 'sending': return { progress: forward(prev, PLACE_AT.sending, true), message: 'Sending your print file…' };
+    case 'memories': return { progress: forward(prev, PLACE_AT.saving), message: 'Saving your memories…' };
+    case 'finishing': return { progress: forward(prev, PLACE_AT.finishing), message: 'Finishing your test order…' };
+    case 'booking': return { progress: forward(prev, PLACE_AT.finishing), message: 'Paying with your event booking…' };
+    case 'videosCheck': return s.before
+      ? { progress: forward(prev, PLACE_AT.start), message: 'Checking your memory videos…' }
+      : { progress: forward(prev, PLACE_AT.checking), message: 'Checking your memory videos…' };
+    case 'videos': {
+      // Order.tsx 2b: advance(videosAt(d, t)); the line names the next video.
+      const progress = forward(prev, s.total > 0 ? videosAt(s.done, s.total) : PLACE_AT.videos);
+      if (s.total <= 0 || s.done >= s.total) return { progress, message: 'Uploading your memory videos…' };
+      return { progress, message: s.phase === 'compress' ? `Preparing memory video ${s.done + 1} of ${s.total}…` : `Uploading memory video ${s.done + 1} of ${s.total}…` };
+    }
+  }
 }
 
 /** The note under the bar, as on the website (PlaceOrderProgress). */

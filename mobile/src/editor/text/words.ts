@@ -78,6 +78,8 @@ export const SIGN_IN_FIRST = 'Sign in first';
 export const signInFor = (many: boolean) => `to have Megy write lines for ${many ? 'these photos' : 'this photo'}.`;
 export const SIGN_IN = 'Sign in';
 /** QuotePickerModal PHOTO_QUOTE_MESSAGES: every way "Write a line" can end. */
+/** The test app's line under a failed write (never in the Play app): what the server said. */
+export const testAppDetail = (detail: string) => `(Test app: the server said "${detail}".)`;
 export const PHOTO_QUOTE_MESSAGES: Record<'limit_user' | 'limit_all' | 'refused' | 'failed' | 'no_fit', string> = {
   limit_user: 'You have used today’s lines for photos. Try again tomorrow, or type your own words.',
   limit_all: 'Lines for photos are busy today. Try again tomorrow, or type your own words.',

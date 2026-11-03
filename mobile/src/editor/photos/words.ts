@@ -39,10 +39,9 @@ export const STUDIO_FIXED = 'Back to Megy’s layout. Your photos stayed where t
 export const LAYOUT_TITLE = 'Choose a layout';
 export const LAYOUT_CURRENT = '✓ Current';
 export const LAYOUT_NONE = 'No other layouts fit this page.';
-/** The website's line ends "To use a layout with more photos, tap the QR and
- *  remove the video first." The app can't change a video memory yet (a tap
- *  on the QR only outlines it), so its own words say what is true here. */
-export const LAYOUT_MEMORY_NOTE = 'This page has a video memory, so it stays one full photo with the QR in the corner. To use a layout with more photos, remove the video on the website first.';
+/** LayoutPicker.tsx's note on a page with a video memory (a tap on the QR
+ *  opens "Change this memory": editor/memories). */
+export const LAYOUT_MEMORY_NOTE = 'This page has a video memory, so it stays one full photo with the QR in the corner. To use a layout with more photos, tap the QR and remove the video first.';
 
 /** LayoutPicker.tsx LeftoverQuestion: a layout that can't hold every photo
  *  (or caption) on the page asks first where they go. */

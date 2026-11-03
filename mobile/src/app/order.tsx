@@ -3,27 +3,35 @@
 
    form → Place order → placing (the bar, screen kept on) → payment
    (GoTyme / InstaPay QR, the amount, the order number for the transfer note
-   once there is one, "Attach the transfer receipt", "I've sent ₱X").
+   once there is one, "Attach the transfer receipt", "I've sent ₱X"). The
+   payment step is components/checkout/PaymentStep.tsx (Your orders opens it
+   too, for an order waiting for payment).
 
    Everything a customer reads is the website's (src/pages/Order.tsx), and
    every rule is the website's: shared code (prices, contact and address
    rules, 40 photos, the cover that fits the press, the bar) or a mirror
    that a test runs beside the website's own function (see lib/checkout/).
 
-   THIS TEST VERSION WRITES NOTHING. The album is the test album
-   (fixtureAlbum.ts) until Phase 3; Place order runs the website's checks,
+   Opened from the Preview's "Order this album" (with the album's id), it
+   orders that album FOR REAL: its pages from the app's album, its copy in
+   the account read back by its id (lib/checkout/orderStart.ts, the
+   website's selectOrderAlbum); Place order makes the print files on the
+   phone and sends the order (lib/checkout/phoneSend.ts, sendOrder.ts), the
+   bar following the real steps; a tester order ends "Test order placed", a
+   paid one opens its payment step, where "I've sent" records the payment.
+
+   Opened from the home screen's test button (no id): the test album
+   (fixtureAlbum.ts), and THAT WRITES NOTHING: Place order runs the website's checks,
    builds exactly what the website would send (the order row, the memory
    rows, the files), shows it in a test panel, and stops: no order, no
    upload, no tester-code check (that call counts tries in the database).
    The price is real: the live price list, read only.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router } from 'expo-router';
-import { Image } from 'expo-image';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
-import { PAY_WITHIN_MESSAGE } from '@web/lib/orderExpiry';
 import { trackOf } from '@web/lib/orderTracker';
 import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
@@ -33,25 +41,34 @@ import { Button } from '../components/Button';
 import { AddressFields } from '../components/checkout/AddressFields';
 import { CoverThumb } from '../components/checkout/CoverThumb';
 import { Field } from '../components/checkout/Field';
+import { PaymentStep } from '../components/checkout/PaymentStep';
 import { PlaceProgressBar } from '../components/checkout/PlaceProgressBar';
+import { Sending } from '../components/checkout/Sending';
 import { TestPanel } from '../components/checkout/TestPanel';
 import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
+import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
-import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payByLine, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
-import { albumQrFills, ORDER_ID, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
-import { PAYEE, PAYEE_QR_URL, paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../lib/checkout/payment';
+import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
+import { useOptionalBuilder } from '../builder/BuilderProvider';
+import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
+import { TesterCodeGoneError } from '../lib/checkout/testerCode';
+import type { PlacedOrder } from '../lib/checkout/sendOrder';
+import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
+import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
 import { checkoutPrice, peso, placeOrderLabel } from '../lib/checkout/price';
 import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
-import { pickReceipt, receiptLabel, type PickedReceipt } from '../lib/checkout/receipt';
-import { siteFile } from '../lib/checkout/site';
 import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
+import { albumClipTier } from '../lib/memories/albumTier';
+import { dropEventLink, readEventLink, saveEventLink } from '../lib/events/albumEventLink';
+import * as EV from '../lib/events/eventDeal';
+import { MissingClipError, missingClipMessage, type ClipQuality } from '../lib/memories/clips';
 
-type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing';
+type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing' | 'done';
 
 const DEFAULT_MATERIAL: MaterialType = 'matte';
 const DEFAULT_COVER: CoverType = 'softcover';
@@ -59,8 +76,39 @@ const DEFAULT_COVER: CoverType = 'softcover';
 export default function OrderScreen() {
   const { session } = useAuth();
   const userId = session?.user.id ?? null;
-  // Until Phase 3: the test album (48 sample photos, made by the shared album maker).
-  const album = useMemo(() => fixtureCheckoutAlbum(), []);
+  // The album "Order this album" opened checkout with (its id), or the test
+  // album (48 sample photos, made by the shared album maker) from the home
+  // screen's test button.
+  const { albumId: ownId } = useLocalSearchParams<{ albumId?: string }>();
+  const own = useOptionalBuilder();
+  const ordersOwn = !!ownId && !!own;
+  // The account's copy of it, read by its id once signed in (never another album).
+  const [ownRow, setOwnRow] = useState<OrderAlbumRow | null>(null);
+  const [ownRowError, setOwnRowError] = useState('');
+  useEffect(() => {
+    if (!ordersOwn || !userId || !ownId) return;
+    let live = true;
+    setOwnRowError('');
+    loadOrderAlbumRow(supabase, userId, ownId)
+      .then((row) => { if (live) setOwnRow(row); })
+      .catch((e: unknown) => { if (live) setOwnRowError(e instanceof Error ? e.message : String(e)); });
+    return () => { live = false; };
+  }, [ordersOwn, userId, ownId]);
+  const fixture = useMemo(() => (ordersOwn ? null : fixtureCheckoutAlbum()), [ordersOwn]);
+  // Ordering your own album sends it for real (the test album never does).
+  const live = ordersOwn;
+  const ownText = own?.text ?? null;
+  // The order a try made: Place order again reuses it (never a second order).
+  const placedRef = useRef<PlacedOrder | null>(null);
+  const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
+  // The end: a tester order placed, or a payment sent.
+  const [done, setDone] = useState<{ number: string; test: boolean; receiptError: string | null; booking?: string } | null>(null);
+  const b = own?.builder;
+  const album = useMemo(() => (ordersOwn && b
+    // Until the account's copy is read, a stand-in row with the album's id:
+    // Place order waits for the real one (startPlacing).
+    ? checkoutAlbumFrom(b, ownRow ?? { id: ownId!, title: b.albumTitle, album_type: null, album_size: b.albumSize, selected_template: null, photos_per_page: null, pages: b.albumPages, photos: [], cover_photo: null })
+    : fixture!), [ordersOwn, b, b?.albumPages, b?.coverFront, b?.albumTitle, ownRow, ownId, fixture]);
   const loadSchedule = useCallback(() => loadPriceSchedule(supabase, supabaseConfigured), []);
   const prices = usePriceSchedule(loadSchedule);
 
@@ -73,6 +121,8 @@ export default function OrderScreen() {
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const [addressErrors, setAddressErrors] = useState<AddressErrors>({});
   const [tester, setTester] = useState<TesterCode | null>(null);
+  // How long the memories stay live (the website's hostingYears): null = the included term.
+  const [hostingYears, setHostingYears] = useState<number | null>(null);
   const [message, setMessage] = useState('');
   const [signInAsk, setSignInAsk] = useState(false);
   const [openAlbumAsk, setOpenAlbumAsk] = useState(false);
@@ -110,13 +160,78 @@ export default function OrderScreen() {
   const coverFits = coverFitsSheet(albumSize, cover, pageCount, { material });
   const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type), { material });
   const firstChoice = coverChoices[0]?.type;
+  // An event album's cover is its deal's (below).
+  const [eventLink, setEventLink] = useState<EV.EventAlbumLink | null | undefined>(undefined);
   useEffect(() => {
-    if (coverFits || !firstChoice || step !== 'form') return;
+    if (eventLink || coverFits || !firstChoice || step !== 'form') return;
     setCover(firstChoice);
-  }, [coverFits, firstChoice, step]);
+  }, [coverFits, firstChoice, step, eventLink]);
 
-  // No memory videos in the app yet (Phase 4+): standard quality, the included term.
-  const price = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: null, hdMemories: false, tester });
+  // AN EVENT'S ALBUM (the website's Order.tsx; lib/events/eventDeal.ts). The
+  // link is kept on this phone; without one, the host's bookings still
+  // waiting for their album are offered ("Use booking EV-… for this album").
+  const eventAlbumId = ordersOwn ? album.albumId : null;
+  useEffect(() => {
+    if (!eventAlbumId) { setEventLink(null); return; }
+    let alive = true;
+    void readEventLink(eventAlbumId).then((l) => { if (alive) setEventLink(l); });
+    return () => { alive = false; };
+  }, [eventAlbumId]);
+  const [waitingBookings, setWaitingBookings] = useState<EV.EventBooking[]>([]);
+  useEffect(() => {
+    if (eventLink !== null || !userId || !eventAlbumId) return;
+    let alive = true;
+    EV.listMyBookings(supabase as never, userId)
+      .then((all) => { if (alive) setWaitingBookings(EV.bookingsWaitingForAlbum(all)); })
+      .catch(() => { /* no offer: checkout works as a normal album */ });
+    return () => { alive = false; };
+  }, [userId, eventAlbumId, eventLink]);
+  const [eventBooking, setEventBooking] = useState<EV.EventBooking | null | undefined>(undefined);
+  useEffect(() => {
+    if (!eventLink || !userId) return;
+    let alive = true;
+    setEventBooking(undefined);
+    EV.getMyBooking(supabase as never, userId, eventLink.bookingId)
+      .then((bk) => { if (alive) setEventBooking(bk); })
+      .catch(() => { if (alive) setEventBooking(null); });
+    return () => { alive = false; };
+  }, [eventLink?.bookingId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const eventDeal = eventLink && eventBooking !== undefined ? EV.eventDealState(eventLink, eventBooking, { size: albumSize, pages: pageCount }) : null;
+  const coveredByBooking = eventDeal?.state === 'covered';
+  // The deal fixes the cover; undoing gives back the one they had picked.
+  useEffect(() => { if (eventLink) setCover(EV.dealCover(eventLink.cover)); }, [eventLink?.cover]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coverBeforeLink = useRef<CoverType | null>(null);
+  const linkThisBooking = (bk: EV.EventBooking) => {
+    const link = EV.linkFromBooking(bk);
+    if (!link || !eventAlbumId) return;
+    coverBeforeLink.current = cover;
+    void saveEventLink(eventAlbumId, link);
+    setEventLink(link);
+  };
+  const notMyEventAlbum = () => {
+    if (!eventAlbumId) return;
+    void dropEventLink(eventAlbumId);
+    if (coverBeforeLink.current) setCover(coverBeforeLink.current);
+    setEventLink(null);
+    setEventBooking(undefined);
+    setMessage('');
+  };
+
+  // HD memories: the quality the album's videos were made for (the website's
+  // albumTier), read before the price is shown.
+  const clipKey = albumQrFills(album.pages).filter((f) => f?.kind === 'clip').map((f) => f!.code).join(',');
+  const [clipTier, setClipTier] = useState<{ key: string; tier: ClipQuality } | null>(null);
+  useEffect(() => {
+    if (!clipKey) return;
+    let alive = true;
+    void albumClipTier(clipKey.split(',')).then((tier) => { if (alive) setClipTier({ key: clipKey, tier }); });
+    return () => { alive = false; };
+  }, [clipKey]);
+  const clipTierReady = !clipKey || clipTier?.key === clipKey;
+  const hdMemories = !eventLink && qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
+  // An event album: the included term, no tester code (its booking pays).
+  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, tester: eventLink ? null : tester });
+  const price = clipTierReady ? priced : { ...priced, ready: false };
 
   // The bar's steps for this album (made once: a re-render must not restart the bar).
   const frames = useMemo(() => {
@@ -138,6 +253,16 @@ export default function OrderScreen() {
 
   const startPlacing = (cleanName: string, cleanPhone: string) => {
     if (!userId) return;
+    // The order freezes the account's copy: not until it is read.
+    if (ordersOwn && !ownRow) {
+      setMessage(ownRowError || 'Getting your album from your account… Tap Place order again in a moment.');
+      return;
+    }
+    // The print files are drawn with the album's fonts: not until they are ready.
+    if (live && !ownText) {
+      setMessage('Getting your album ready… Tap Place order again in a moment.');
+      return;
+    }
     try {
       const p = placeOrderPlan({
         userId,
@@ -146,9 +271,10 @@ export default function OrderScreen() {
         specs: { material, cover, size: albumSize },
         shipping: { name: cleanName, phone: cleanPhone, address },
         hostingYears: price.effectiveYears,
-        hdMemories: false,
-        testerCode: tester?.code ?? null,
+        hdMemories,
+        testerCode: eventLink ? null : tester?.code ?? null,
         includedYears: price.includedYears,
+        eventBookingId: eventLink && coveredByBooking ? eventLink.bookingId : null,
       });
       setPlan(p);
       setPlacedAmount(price.payTotal);
@@ -159,6 +285,11 @@ export default function OrderScreen() {
   };
 
   const onPlace = () => {
+    // An event album its booking can't pay for (yet): say why, place nothing.
+    if (eventLink && eventDeal?.state !== 'covered') {
+      setMessage(eventDeal?.state === 'blocked' ? eventDeal.message : EV.CHECKING_TRY_AGAIN);
+      return;
+    }
     if (!price.ready) { prices.retry(); return; }
     setMessage('');
     setSignInAsk(false);
@@ -195,8 +326,36 @@ export default function OrderScreen() {
     setStep('existing');
   };
 
+  if (step === 'placing' && plan && live && ownText) {
+    return (
+      <Sending
+        plan={plan} album={album} cover={cover} material={material} text={ownText} placed={placedRef.current}
+        bookingNumber={eventLink?.bookingNumber ?? null}
+        onOrder={(o) => { placedRef.current = o; }}
+        onSent={(r) => {
+          placedRef.current = r.order;
+          setPlacedOrder(r.order);
+          if (r.paidByTester) { setDone({ number: r.order.order_number, test: true, receiptError: null }); setStep('done'); return; }
+          if (r.paidByBooking && eventLink) { setDone({ number: r.order.order_number, test: false, receiptError: null, booking: eventLink.bookingNumber }); setStep('done'); return; }
+          setStep('payment');
+        }}
+        onFailed={(e) => {
+          if (e instanceof TesterCodeGoneError) setTester(null);
+          // A memory video that's gone: the website's words, naming its pages.
+          if (e instanceof MissingClipError) { setMessage(missingClipMessage(album.pages, e.codes)); setStep('form'); return; }
+          setMessage(e instanceof Error ? e.message : 'Something went wrong placing your order.');
+          setStep('form');
+        }}
+      />
+    );
+  }
+
   if (step === 'placing' && plan) {
     return <Placing frames={frames} onDone={() => setStep('placed')} />;
+  }
+
+  if (step === 'done' && done) {
+    return <Done number={done.number} test={done.test} receiptError={done.receiptError} booking={done.booking} />;
   }
 
   if (step === 'placed' && plan) {
@@ -225,14 +384,21 @@ export default function OrderScreen() {
 
   if (step === 'existing' && shownOrder) {
     if (openOrderView(shownOrder) === 'pay') {
-      return <Payment amount={askedToPay(shownOrder)} order={shownOrder} onBack={() => setStep('form')} />;
+      return <PaymentStep amount={askedToPay(shownOrder)} order={shownOrder} live={live} onBack={() => setStep('form')}
+        onPaid={(receiptError) => { setDone({ number: shownOrder.order_number, test: false, receiptError }); setStep('done'); }} />;
     }
     return <ExistingOrder order={shownOrder} onBack={() => setStep('form')} />;
   }
 
   if (step === 'payment') {
     const albumLine = [ALBUM_SIZES.find((s) => s.preset === albumSize)?.name, MATERIALS.find((m) => m.type === material)?.name, COVERS.find((c) => c.type === cover)?.name].join(' · ');
-    return <Payment amount={placedAmount} order={null} summary={{ albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal }} onBack={() => setStep('form')} />;
+    const summary = { albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal };
+    if (live && placedOrder) {
+      return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={summary} live
+        onBack={() => setStep('form')}
+        onPaid={(receiptError) => { setDone({ number: placedOrder.order_number, test: false, receiptError }); setStep('done'); }} />;
+    }
+    return <PaymentStep amount={placedAmount} order={null} summary={summary} onBack={() => setStep('form')} />;
   }
 
   /* ══════════════ FORM ══════════════ */
@@ -243,6 +409,13 @@ export default function OrderScreen() {
 
   return (
     <ScrollView ref={scrollRef} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+      {ordersOwn && <View testID="order-own-album" />}
+      {!!ownRowError && (
+        <View style={styles.notice} testID="order-not-saved">
+          <Text style={styles.noticeBody}>{ownRowError}</Text>
+          <Button label="Back to my album" kind="plain" onPress={() => router.back()} testID="order-back-to-album" />
+        </View>
+      )}
       {album.fixture && (
         <View style={styles.testNote} testID="order-test-album">
           <Text style={styles.testNoteText}>Test version: this is a test album of {photosIn} sample photos. Place order shows what it would send, and sends nothing.</Text>
@@ -257,6 +430,25 @@ export default function OrderScreen() {
           <Text style={styles.noticeBody}>{words.body}</Text>
           {/* Outlined: Place order below is the one filled button on the form. */}
           <Button label={words.button} kind="plain" onPress={openExistingOrder} testID="order-open-existing" />
+        </View>
+      )}
+
+      {!!eventLink && (
+        <View style={[styles.notice, coveredByBooking && styles.dealOk]} testID="order-event-deal">
+          <Text style={styles.noticeHead}>{EV.dealTitle(eventLink.bookingNumber)}</Text>
+          <Text style={styles.noticeBody} testID="order-event-deal-text">
+            {eventDeal === null ? EV.CHECKING_BOOKING : eventDeal.state === 'covered' ? EV.COVERED : eventDeal.state === 'blocked' ? eventDeal.message : ''}
+          </Text>
+          {eventLink.atCheckout && <Button label={EV.NOT_MINE} kind="plain" onPress={notMyEventAlbum} testID="order-event-unlink" />}
+        </View>
+      )}
+      {!eventLink && waitingBookings.length > 0 && (
+        <View style={styles.notice} testID="order-event-offer">
+          <Text style={styles.noticeHead}>{EV.OFFER_TITLE}</Text>
+          <Text style={styles.noticeBody}>{EV.OFFER_BODY}</Text>
+          {waitingBookings.map((bk) => (
+            <Button key={bk.id} label={EV.useBooking(bk.booking_number)} kind="plain" onPress={() => linkThisBooking(bk)} testID={`order-event-use-${bk.booking_number}`} />
+          ))}
         </View>
       )}
 
@@ -278,8 +470,8 @@ export default function OrderScreen() {
       </Section>
 
       <Section title="Cover Type">
-        {coverChoices.map((c) => (
-          <Choice key={c.type} on={cover === c.type} title={c.name} body={c.description} onPress={() => setCover(c.type)} />
+        {(eventLink ? COVERS.filter((c) => c.type === cover) : coverChoices).map((c) => (
+          <Choice key={c.type} on={cover === c.type} title={c.name} body={c.description} onPress={() => { if (!eventLink) setCover(c.type); }} />
         ))}
         {!!coverNote && <Text style={styles.small} testID="order-cover-note">{coverNote}</Text>}
       </Section>
@@ -316,30 +508,56 @@ export default function OrderScreen() {
         <Row label="Cover" value={coverName} accent />
         <Row label="Size" value={sizeName} accent />
         <View style={styles.rule} />
-        {price.breakdown.items.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
+        {/* An event album is part of its booking's deal: it never shows the album price. */}
+        {eventLink
+          ? <Row label={EV.albumLine(eventLink.bookingNumber)} value="₱0" testID="order-event-line" />
+          : price.breakdown.items.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
         <Row label="Shipping" value="Free" good testID="order-shipping" />
-        {tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
+        {!eventLink && tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
         <View style={styles.totalRow}>
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
-            {price.ready && tester && <Text style={styles.was}>{peso(price.total)}  </Text>}
-            {price.ready && !tester && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
-            {price.ready ? peso(price.payTotal) : '—'}
+            {!eventLink && price.ready && tester && <Text style={styles.was}>{peso(price.total)}  </Text>}
+            {!eventLink && price.ready && !tester && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
+            {eventLink ? '₱0' : price.ready ? peso(price.payTotal) : '—'}
           </Text>
         </View>
-        {price.ready && !tester && price.wasTotal !== null && (
+        {coveredByBooking && <Text style={styles.savings} testID="order-covered">{EV.COVERED_LINE}</Text>}
+        {!!eventLink && !coveredByBooking && <Text style={styles.small} testID="order-covered-later">{EV.COVERED_LATER}</Text>}
+        {!eventLink && price.ready && !tester && price.wasTotal !== null && (
           <Text style={styles.savings} testID="order-savings">New lower price: you save {peso(price.wasTotal - price.total)}</Text>
         )}
-        {price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => checkTesterCodeOffline(typed, !!userId)} />}
+        {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => checkTesterCodeOffline(typed, !!userId)} />}
         <View style={styles.included} testID="order-included">
           <Text style={styles.strongSmall}>Included with your album</Text>
           <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>
           <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>
           {price.includedYears !== null && <Text style={styles.small}>✓ {price.includedYears} years of memory hosting</Text>}
         </View>
+        {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
+          // Order.tsx: "How long should your memories stay live?"
+          <View style={styles.terms} testID="order-terms">
+            <Text style={styles.strongSmall}>How long should your memories stay live?</Text>
+            <Text style={styles.small}>Your videos play from the printed QR for the whole term. Renew anytime after.</Text>
+            <View style={styles.termRow} accessibilityRole="radiogroup" accessibilityLabel="Memory hosting term">
+              {price.tiers.map((t) => {
+                const active = (hostingYears ?? price.includedYears) === t.years;
+                return (
+                  <Pressable key={t.years} accessibilityRole="radio" accessibilityState={{ checked: active }} onPress={() => setHostingYears(t.years)}
+                    style={[styles.term, active && styles.termOn]} testID={`order-term-${t.years}`}>
+                    <Text style={styles.termYears}>{t.years} years</Text>
+                    <Text style={styles.small}>{t.price > 0 ? `+₱${t.price}` : 'Included'}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
         <View style={styles.qrNote} testID="order-qr-note">
           <Text style={styles.qrNoteText}>
-            <Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
+            {eventLink
+              ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
+              : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
         </View>
@@ -348,12 +566,16 @@ export default function OrderScreen() {
       {tooFew ? (
         <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn)}</Text></View>
       ) : askSecond && openOrder ? null : (
-        <Button
-          label={placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
-          busy={!price.ready && (prices.loading || prices.retrying)}
-          onPress={onPlace}
-          testID="order-place"
-        />
+        <>
+          <Button
+            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
+            busy={!price.ready && (prices.loading || prices.retrying)}
+            onPress={onPlace}
+            testID="order-place"
+          />
+          {/* The website's line under Place order (Order.tsx, #233). */}
+          <TermsAgreeLine by="placing an order" testID="order-agree" />
+        </>
       )}
 
       {/* The question takes Place order's place: its filled button is the order
@@ -396,132 +618,23 @@ function Placing({ frames, onDone }: { frames: PlaceFrame[]; onDone: () => void 
   );
 }
 
-/* ══════════════ PAYMENT: QR, amount, reference, receipt ══════════════ */
-interface PaySummary { albumLine: string; breakdown: { label: string; amount: number }[]; total: number; wasTotal: number | null }
-
-/** The payment step. `order` is an order already placed (opened from "this
- *  album already has an order"): its number is said, as the website says it
- *  once there is one. Without it (this version places nothing) those lines
- *  are left out, as the website does. `amount` is null only for an order
- *  that has no saved total (placed before the database saved it, 0055): the
- *  step says so, and how to learn it, instead of making a total up. */
-function Payment({ amount, order, summary, onBack }: {
-  amount: number | null; order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at'> | null; summary?: PaySummary; onBack: () => void;
-}) {
-  const [qrMissing, setQrMissing] = useState(false);
-  const [receipt, setReceipt] = useState<PickedReceipt | null>(null);
-  const [receiptError, setReceiptError] = useState('');
-  const [payRef, setPayRef] = useState('');
-  const [refError, setRefError] = useState('');
-  const [sent, setSent] = useState<PaymentSubmitPlan | null>(null);
-  const [showSummary, setShowSummary] = useState(false);
-  const amountLabel = amount !== null ? peso(amount) : '';
-
-  const addReceipt = async () => {
-    setReceiptError('');
-    try {
-      const r = await pickReceipt();
-      if (!r) return;
-      if ('problem' in r) { setReceiptError(r.problem); setReceipt(null); return; }
-      setReceipt(r.picked);
-    } catch {
-      setReceiptError("We couldn't open your photos. Try again.");
-    }
-  };
-  const sentIt = () => {
-    const bad = referenceProblem(payRef);
-    if (bad) { setRefError(bad); return; }
-    setSent(paymentSubmitPlan(order?.id ?? ORDER_ID, payRef, receipt));
-  };
-
+/** The end of checkout, in the website's words (its tracking step's
+ *  headline): a tester order placed, or a payment sent for the shop to
+ *  confirm. */
+function Done({ number, test, receiptError, booking }: { number: string; test: boolean; receiptError: string | null; booking?: string }) {
+  // An event album its booking paid for: the order is paid (the website's tracking headline for it).
+  const title = booking ? trackOf({ status: 'paid' }).headline : test ? 'Test order placed' : "Thank you — we're confirming your payment";
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <View style={styles.testNote}>
-        <Text style={styles.testNoteText} testID="pay-test-note">{order
-          ? `Test version: this is how paying order ${order.order_number} looks. The "I've sent" button only shows what it would send. It sends nothing.`
-          : 'Test version: no order was placed. This is how the payment step looks for this album. Do not send money: there is no order.'}</Text>
-      </View>
-      <Text style={[styles.h1, styles.center]}>{amount !== null ? `Send ${amountLabel}` : `Pay order ${order?.order_number ?? ''}`}</Text>
-      {order && <Text style={[styles.small, styles.center]} testID="pay-order-placed">Order {order.order_number} is placed. Pay by bank transfer to finish.</Text>}
-
-      <View style={styles.card}>
-        <View style={styles.qrBox}>
-          <Text style={styles.payee}>{PAYEE.bank} · {PAYEE.rail}</Text>
-          {!qrMissing ? (
-            <View>
-              <Image source={{ uri: PAYEE_QR_URL }} style={styles.qr} contentFit="contain" onError={() => setQrMissing(true)}
-                accessibilityLabel={`${PAYEE.bank} InstaPay QR for ${PAYEE.name}`} />
-              {/* No order behind it: a band across the code, so nobody pays for nothing. */}
-              {!order && (
-                <View style={styles.qrBand} testID="pay-qr-test-band">
-                  <Text style={styles.qrBandText}>Test only. Do not pay.</Text>
-                </View>
-              )}
-            </View>
-          ) : (
-            <View style={[styles.qr, styles.qrMissing]}>
-              <Text style={styles.small}>The QR code isn't available right now — message us and we'll send the account details.</Text>
-            </View>
-          )}
-          <Text style={styles.strong}>{PAYEE.name}</Text>
-          <Text style={styles.small}>Account ending in {PAYEE.accountLast4}</Text>
-          {amount !== null ? (
-            <Text style={styles.payAmount}>{amountLabel}</Text>
-          ) : (
-            <View style={styles.noTotal} testID="pay-no-total">
-              <Text style={[styles.small, styles.center]}>This order is older, so its total is not saved here. Message us and we will tell you how much to send.</Text>
-              <Button label="Message us" kind="plain" onPress={() => { void Linking.openURL(siteFile('contact')); }} testID="pay-message-us" />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.steps}>
-          <Text style={styles.small}>1. Open your bank or e-wallet app (GCash, Maya, BPI, BDO, UnionBank…).</Text>
-          <Text style={styles.small}>2. Choose Scan QR / InstaPay and scan the code above.</Text>
-          <Text style={styles.small}>3. {amount !== null ? `Send exactly ${amountLabel}` : 'Send the total we tell you'}{order ? ` and put ${order.order_number} in the note if your app asks` : ''}.</Text>
-          <Text style={styles.small}>4. Attach your receipt below — it speeds up confirmation.</Text>
-        </View>
-        <Text style={styles.tiny}>Your app may charge a small InstaPay fee. We don't add any.</Text>
-
-        <View style={styles.receiptBox}>
-          <Text style={styles.strongSmall}>Receipt screenshot <Text style={styles.tiny}>(optional)</Text></Text>
-          <Button label={receipt ? receiptLabel(receipt) : 'Attach the transfer receipt (JPG, PNG or PDF)'} kind="plain" onPress={() => void addReceipt()} testID="pay-receipt" />
-          {!!receiptError && <Text style={styles.error}>{receiptError}</Text>}
-          <Field label="Reference no. (optional — from your bank's receipt)" value={payRef} onChangeText={(t) => { setPayRef(t); setRefError(''); }}
-            autoComplete="off" autoCorrect={false} placeholder="e.g. 2026091012345678" maxLength={64} error={refError} testID="pay-reference" />
-        </View>
-
-        <Button label={amount !== null ? `I've sent ${amountLabel}` : "I've sent the payment"} onPress={sentIt} testID="pay-sent" />
-        <Text style={[styles.tiny, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>
-        {/* An order already placed: its own last day, as the website's Orders page says it. */}
-        <Text style={[styles.tiny, styles.center]} testID="pay-within">{order?.created_at ? payByLine(order.created_at) : PAY_WITHIN_MESSAGE}</Text>
-
-        {summary && (
-          <Pressable accessibilityRole="button" onPress={() => setShowSummary((v) => !v)}>
-            <Text style={[styles.tiny, styles.center, styles.underline]}>Order summary</Text>
-          </Pressable>
-        )}
-        {summary && showSummary && (
-          <View style={styles.summary}>
-            <Row label="Album" value={summary.albumLine} accent />
-            {summary.breakdown.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
-            <Row label="Shipping" value="Free" good />
-            <View style={styles.totalRow}>
-              <Text style={styles.strong}>Total</Text>
-              <Text style={styles.total}>{summary.wasTotal !== null && <Text style={styles.was}>{peso(summary.wasTotal)}  </Text>}{peso(summary.total)}</Text>
-            </View>
-          </View>
-        )}
-      </View>
-
-      {sent && (
-        <TestPanel
-          title="Test version: what I've sent would send"
-          note="Nothing was sent. With ordering on, the receipt goes to the private payment-proofs folder (create-only) and the order is marked as paid by you, for the shop to confirm."
-          data={sent}
-        />
-      )}
-      <Button label="Back to your order" kind="plain" onPress={onBack} testID="pay-back" />
+    <ScrollView contentContainerStyle={styles.page} testID="order-done">
+      <Text style={[styles.h1, styles.center]}>{title}</Text>
+      <Text style={[styles.strong, styles.center]} testID="order-done-number">Order {number}</Text>
+      {booking
+        ? <Text style={[styles.small, styles.center]} testID="order-paid-by-booking">{EV.paidByBooking(booking)}</Text>
+        : test
+          ? <Text style={[styles.small, styles.center]}>Thank you for testing Megy Prints!</Text>
+          : <Text style={[styles.small, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>}
+      {!!receiptError && <Text style={styles.error}>{receiptError}</Text>}
+      <Button label="Done" onPress={() => { if (router.canDismiss?.()) router.dismissAll(); else router.replace('/'); }} testID="order-done-close" />
     </ScrollView>
   );
 }
@@ -575,17 +688,15 @@ function Row({ label, value, accent, good, testID }: { label: string; value: str
 }
 
 const styles = StyleSheet.create({
+  center: { textAlign: 'center' },
   page: { padding: space.md, gap: space.md, paddingBottom: space.xl * 2, backgroundColor: colors.background },
   flex: { flex: 1 },
-  center: { textAlign: 'center' },
   h1: { fontSize: 28, fontWeight: '800', color: colors.text },
   h2: { fontSize: 19, fontWeight: '800', color: colors.text },
   body: { fontSize: 17, lineHeight: 24, color: colors.text },
   strong: { fontSize: 16, fontWeight: '700', color: colors.text },
   strongSmall: { fontSize: 14, fontWeight: '700', color: colors.text },
   small: { fontSize: 14, lineHeight: 20, color: colors.muted },
-  tiny: { fontSize: 12, lineHeight: 17, color: colors.muted, fontWeight: '400' },
-  underline: { textDecorationLine: 'underline' },
   card: { backgroundColor: colors.card, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: space.md, gap: space.sm },
   sectionBody: { gap: space.sm },
   coverRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
@@ -603,6 +714,12 @@ const styles = StyleSheet.create({
   savings: { fontSize: 13, fontWeight: '700', color: colors.good, textAlign: 'right' },
   included: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 2 },
   qrNote: { borderWidth: 1, borderColor: '#E9B8A0', backgroundColor: '#FBF0EA', borderRadius: 12, padding: 12 },
+  dealOk: { borderColor: '#BFE3C8', backgroundColor: '#EEF8F1' },
+  terms: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 4 },
+  termRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  term: { width: '48%', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  termOn: { borderColor: colors.accent, backgroundColor: '#FBF0EA' },
+  termYears: { fontSize: 14, fontWeight: '700', color: colors.text },
   qrNoteText: { fontSize: 14, lineHeight: 20, color: '#6B4A3A' },
   notice: { borderWidth: 1, borderColor: '#E9B8A0', backgroundColor: '#FBF0EA', borderRadius: 14, padding: space.md, gap: space.sm },
   noticeHead: { fontSize: 15, fontWeight: '700', color: colors.text },
@@ -614,15 +731,4 @@ const styles = StyleSheet.create({
   testNoteText: { fontSize: 13, lineHeight: 18, color: '#8A5A12' },
   placing: { flex: 1, justifyContent: 'center', padding: space.lg, gap: space.lg, backgroundColor: colors.background },
   placingStep: { fontSize: 20, fontWeight: '700', color: colors.text, minHeight: 28 },
-  qrBox: { borderWidth: 1, borderColor: colors.border, backgroundColor: '#FFFDFB', borderRadius: 12, padding: space.md, alignItems: 'center', gap: 4 },
-  payee: { fontSize: 12, fontWeight: '700', letterSpacing: 0.5, color: colors.muted, textTransform: 'uppercase' },
-  qr: { width: 224, height: 224, borderRadius: 8, backgroundColor: colors.card, marginVertical: space.sm },
-  qrMissing: { backgroundColor: '#F7F1EC', alignItems: 'center', justifyContent: 'center', padding: space.md },
-  qrBand: { position: 'absolute', left: -space.sm, right: -space.sm, top: '42%', paddingVertical: 10, backgroundColor: '#FFF6E5', borderWidth: 1, borderColor: '#8A5A12', borderRadius: 8, alignItems: 'center' },
-  qrBandText: { fontSize: 16, fontWeight: '800', color: '#8A5A12' },
-  noTotal: { gap: space.sm, alignSelf: 'stretch', marginTop: space.xs },
-  payAmount: { fontSize: 26, fontWeight: '800', color: colors.accent, marginTop: space.xs },
-  steps: { gap: 4 },
-  receiptBox: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: space.sm },
-  summary: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: space.sm },
 });

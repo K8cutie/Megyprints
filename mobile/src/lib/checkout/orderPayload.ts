@@ -30,6 +30,7 @@ import {
   type AddressValue,
 } from '@web/lib/contact';
 import type { AlbumPage, AlbumSizePreset, QrFill } from '@web/pages/builder/types';
+import { qrPagesOnOuterSide } from '../memories/qrSide';
 
 /** An albums row as select('*') returns it (the columns an order freezes,
  *  and whatever else the row has). */
@@ -55,6 +56,8 @@ export interface CheckoutAlbum {
   pages: AlbumPage[];
   /** Where each photo is (index = slotFills value). */
   photoUris: string[];
+  /** Each photo's id, in the same order (a picture background names its photo by id). */
+  photoIds?: string[];
   coverFront: AlbumPage | null;
   /** The cover's photo, for the summary's small cover. */
   coverPhotoUri: string | null;
@@ -70,12 +73,15 @@ export interface ShippingDetails { name: string; phone: string; address: Address
 /** createOrderFromAlbum's own message for details that don't pass. */
 export const SHIPPING_INVALID = 'Please provide a valid name, PH mobile number, and complete delivery address.';
 
-/** The frozen copy of the album the order keeps (album_snapshot). */
+/** The frozen copy of the album the order keeps (album_snapshot). Its
+ *  pages carry each video memory's QR on the outer edge, as the print files
+ *  do (lib/memories/qrSide.ts); nothing else differs from the saved row. */
 export function albumSnapshot(row: OrderAlbumRow) {
   return {
     id: row.id, title: row.title, album_type: row.album_type, album_size: row.album_size,
     selected_template: row.selected_template, photos_per_page: row.photos_per_page,
-    pages: row.pages, photos: row.photos, cover_photo: row.cover_photo,
+    pages: Array.isArray(row.pages) ? qrPagesOnOuterSide(row.pages as AlbumPage[]) : row.pages,
+    photos: row.photos, cover_photo: row.cover_photo,
     cover_front: row.cover_front ?? null,
   };
 }
@@ -174,6 +180,8 @@ export interface PlanInput extends OrderInsertInput {
   pages: readonly AlbumPage[];
   /** The included hosting term (stamped on clip memory rows). */
   includedYears: number | null;
+  /** An event album its booking pays for (0045, cover_order_with_booking). */
+  eventBookingId?: string | null;
 }
 
 /** Place order, as the website runs it, as data. Nothing is sent. */
@@ -190,9 +198,11 @@ export function placeOrderPlan(input: PlanInput): PlaceOrderPlan {
     ...clipCodes.map((code): PlanStep => ({ kind: 'upload', what: 'A memory video', bucket: 'memory-clips', path: `${code}.<mp4|webm>`, contentType: 'video/*', mode: 'create-only' })),
     { kind: 'upload', what: 'The album pages, made on the phone page by page', bucket: 'print-pdfs', path: `${ORDER_ID}.pdf`, contentType: 'application/pdf', mode: 'create-only' },
     ...(rows.length ? [{ kind: 'upsert', what: 'The QR memories the album prints', table: 'qr_memories', rows, onConflict: 'code', ignoreDuplicates: true } as PlanStep] : []),
-    input.testerCode
-      ? { kind: 'rpc', what: 'A tester order: the database marks it paid. Nothing is printed or sent.', name: 'claim_tester_order', args: { p_order_id: ORDER_ID } }
-      : { kind: 'next', what: 'The payment step: the QR, the amount, and the receipt' },
+    input.eventBookingId
+      ? { kind: 'rpc', what: 'An event album: its booking pays for it (Order.tsx 5a).', name: 'cover_order_with_booking', args: { p_order_id: ORDER_ID, p_booking_id: input.eventBookingId } }
+      : input.testerCode
+        ? { kind: 'rpc', what: 'A tester order: the database marks it paid. Nothing is printed or sent.', name: 'claim_tester_order', args: { p_order_id: ORDER_ID } }
+        : { kind: 'next', what: 'The payment step: the QR, the amount, and the receipt' },
   ];
   const files = steps.flatMap((s) => (s.kind === 'upload' ? [{ bucket: s.bucket, path: s.path, contentType: s.contentType }] : []));
   return { steps, orderRow, files };

@@ -4,8 +4,16 @@
 
    One page at a time, large, drawn by the page renderer; a swipe, the page
    turn in words (PageTurnBar: "Previous page", "Next page", "Done — Preview
-   my album", "Back to preview") or a page number in the strip moves through
-   the album. A tap on the page asks hitTest.ts what it landed on (the same
+   my album", "Back to preview") or a tap on "Page 13 of 72" (a list of every
+   page: PagePicker.tsx) moves through the album.
+
+   The layout (owner, 2026-11-03): upright, the page count big over the
+   page, the page, then the guide ("Select a photo to edit.") or the picked
+   thing's buttons in rows, the tools and the page turn. On its side (it
+   turns with the phone, as the Preview does): the page on the left, all of
+   that in a panel down the right, with the way back to the Preview and
+   Undo at its top, and the sheets open in that panel's place
+   (core/EditorSheet SheetPlacement). A tap on the page asks hitTest.ts what it landed on (the same
    boxes the renderer draws in): a photo, words, an empty frame or caption
    box, a free text. The selection lives in the website's own album builder
    (selection.ts), and so does every change: a part's button calls
@@ -28,21 +36,29 @@
    the cover: the cover step below it in the stack keeps its cover scope
    only while it is the screen on top (see album-cover.tsx).
    ══════════════════════════════════════════════════════════════════════════ */
-import { router, Stack, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect, useIsFocused } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
+import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALBUM_SIZES, dealtBoxRoll } from '@web/pages/builder/types';
 import { useSettleGuard } from '@web/lib/settleGuard';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
+import { isSideways } from '../builder/previewLayout';
+import { useTurnsWithThePhone } from '../lib/screenTurning';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { colors, space } from '../lib/theme';
-import { A11Y, BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, NEXT_PAGE, pageLine, PREVIOUS_PAGE, REDO, ROLL_LABELS, UNDO } from './editorWords';
+import { SheetPlacement, sidePanelWidth } from './core/EditorSheet';
+import { GoldButton } from './core/GoldButton';
+import { A11Y, BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, GO_TO_PAGE, NEXT_PAGE, pageCount, PREVIEW_SHORT, PREVIOUS_PAGE, REDO, ROLL_LABELS, UNDO } from './editorWords';
+import { dangerLast } from './actionRows';
+import { pageHint, pickedHint } from './editorHint';
 import { EMPTY_KINDS, hitTest, pageTargets, type Target } from './hitTest';
+import { PagePicker } from './PagePicker';
 import { PageStage, type EmptyHintInfo, type ReachInfo } from './PageStage';
-import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registryVersion, runTap, selectedActionsFor, sheetById, stripTiles, toolsFor, type EditorContext } from './registry';
+import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registryVersion, runTap, selectedActionsFor, sheetById, toolsFor, type EditorContext } from './registry';
 import { editThePages } from './scope';
 import { selectedTarget, selectTarget } from './selection';
 import { renderedLines } from './textLines';
@@ -53,8 +69,6 @@ import './parts';
 const NOTE_MS = 2600;
 /** Saved on the phone this long after the last change. */
 const SAVE_AFTER_MS = 2000;
-const TILE = 48;
-const TILE_GAP = 8;
 
 function HeaderUndo({ canUndo, canRedo, undo, redo }: { canUndo: boolean; canRedo: boolean; undo: () => void; redo: () => void }) {
   // Shown only when there is something to undo or redo: never a greyed
@@ -81,7 +95,11 @@ function HeaderUndo({ canUndo, canRedo, undo, redo }: { canUndo: boolean; canRed
 export default function EditPagesScreen() {
   useSyncExternalStore(onRegistryChange, registryVersion);
   const { builder, platform, text } = useBuilder();
-  const { width: screenW } = useWindowDimensions();
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  // It turns with the phone while it is the screen on top (screenTurning.ts).
+  const focused = useIsFocused();
+  useTurnsWithThePhone('edit-pages', focused);
+  const sideways = isSideways(screenW, screenH);
   const pages = builder.albumPages;
   const total = pages.length;
   const index = Math.min(Math.max(0, builder.currentPageIndex), Math.max(0, total - 1));
@@ -160,10 +178,11 @@ export default function EditPagesScreen() {
   const shownW = Math.max(1, Math.floor(Math.min(area.w - space.md * 2, (area.h - space.sm) * aspect)));
   const shownH = Math.max(1, Math.round(shownW / aspect));
 
-  // The picture is drawn for the widest the page can be on this phone, so a
-  // bar coming or going never draws it again; while a changed page is being
+  // The picture is drawn for the widest the page can be on this phone (the
+  // short side: the same either way up), so a bar coming or going or the
+  // phone turning never draws it again; while a changed page is being
   // drawn, the last picture of it stays on show.
-  const px = Math.min(1400, Math.round((screenW - space.md * 2) * PixelRatio.get()));
+  const px = Math.min(1400, Math.round((Math.min(screenW, screenH) - space.md * 2) * PixelRatio.get()));
   const req = page ? { page, pageIndex: index, albumSize: builder.albumSize, photos: builder.uploadedPhotos, width: px } : null;
   const picture = usePagePicture(text, req, PRIORITY.editing);
   const lastShown = useRef<{ index: number; uri: string } | null>(null);
@@ -180,6 +199,7 @@ export default function EditPagesScreen() {
   const select = (t: Target | null) => selectTarget(builder, index, t, builder.uploadedPhotos);
 
   const [sheet, setSheet] = useState<{ id: string; params: unknown } | null>(null);
+  const [picking, setPicking] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const say = (message: string) => {
@@ -211,20 +231,14 @@ export default function EditPagesScreen() {
   const goNext = () => { if (index < total - 1) builder.goToPage(index + 1); };
   const backToPreview = () => { if (router.canGoBack()) router.back(); else router.replace('/preview'); };
 
-  // The page strip follows the page.
-  const strip = useRef<ScrollViewInstance>(null);
-  const before = stripTiles();
-  useEffect(() => {
-    const x = (before.length + index) * (TILE + TILE_GAP) - (screenW / 2 - TILE / 2);
-    strip.current?.scrollTo({ x: Math.max(0, x), animated: true });
-  }, [index, before.length, screenW]);
-
   const canUndo = undoShown(builder.canUndo, builder.albumPages, start);
   const canRedo = redoShown(builder.canRedo, redoHeld);
   const header = useMemo(() => ({
     title: EDIT_PAGES,
+    // On its side the page takes the whole height: Undo moves into the panel.
+    headerShown: !sideways,
     headerRight: () => <HeaderUndo canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo} />,
-  }), [canUndo, canRedo, undo, redo]);
+  }), [canUndo, canRedo, undo, redo, sideways]);
 
   if (!page || !ctx || !plan) {
     return (
@@ -257,19 +271,30 @@ export default function EditPagesScreen() {
                   : t.kind === 'sticker' ? A11Y.sticker : A11Y.graphic;
     return { target: t, label, selected: selected?.key === t.key };
   });
-  const actions = selected ? selectedActionsFor(selected, ctx) : [];
+  // The picked thing's buttons in rows, all in view (no sideways scroll);
+  // one that removes (red) comes last, so it is never tapped by mistake.
+  const actions = dangerLast(selected ? selectedActionsFor(selected, ctx) : []);
   const allTools = toolsFor(ctx);
   const tools = allTools.filter((t) => !t.wide);
-  const wideTools = allTools.filter((t) => t.wide);
+  const wideTools = allTools.filter((t) => t.wide && t.look !== 'gold');
+  // The gold one ("Add a video memory"), its own row just over the page turn.
+  const goldTools = allTools.filter((t) => t.look === 'gold');
   const banners = bannersFor();
   const isLast = index >= total - 1;
   const Sheet = sheet ? sheetById(sheet.id) : null;
   const overlays = overlayComponents();
 
-  return (
-    <View style={styles.page}>
-      <Stack.Screen options={header} />
-      <Text style={styles.line} testID="edit-counter">{pageLine(index, total)}</Text>
+  // "Page 13 of 72": big, and a tap opens every page to jump to.
+  const counter = (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${pageCount(index, total)}. ${GO_TO_PAGE}`} onPress={() => setPicking(true)}
+      hitSlop={6} style={({ pressed }) => [styles.counter, pressed && styles.pressed]} testID="edit-counter">
+      <Text style={styles.count}>{pageCount(index, total)}</Text>
+    </Pressable>
+  );
+
+  // The page, the parts' lines over it, and the line under it.
+  const stage = (
+    <>
       {/* The parts' lines over the page, in order: photos missing on this
           phone, a swap waiting, "This page is yours", the blank pages… */}
       {banners.map(({ id, Component }) => <Component key={id} ctx={ctx} />)}
@@ -287,67 +312,113 @@ export default function EditPagesScreen() {
             onActivate={(t) => runTap(t, ctx)}
           />
         )}
-        <Text style={styles.notDrawn} numberOfLines={2} testID="edit-not-drawn">{picture.notDrawn.length > 0 ? NOT_DRAWN_LINE : ''}</Text>
+        {picture.notDrawn.length > 0
+          ? <Text style={styles.notDrawn} numberOfLines={2} testID="edit-not-drawn">{NOT_DRAWN_LINE}</Text>
+          : <Text style={styles.notDrawn} numberOfLines={2} testID="edit-picked-hint">{pickedHint(selected)}</Text>}
       </View>
+    </>
+  );
 
-      <SafeAreaView edges={['bottom']} style={styles.bar}>
-        {/* The selected element's buttons, from the parts (the row keeps its
-            place, so the page never jumps when something is picked). */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} overScrollMode="never" style={styles.actionsRow} contentContainerStyle={styles.actions} testID="edit-selected-actions">
+  // The buttons: the guide or the picked thing's buttons, the tools, the turn.
+  const controls = (
+    <>
+      {/* Nothing picked: the guide in their place (editorHint.ts), so the
+          page never jumps when something is picked. */}
+      {actions.length > 0 ? (
+        <View style={styles.actions} testID="edit-selected-actions">
           {actions.map((a) => (
             <Pressable key={a.id} accessibilityRole="button" accessibilityLabel={a.label} onPress={() => a.onPress(selected!, ctx)} testID={`edit-action-${a.id}`}
               style={({ pressed }) => [styles.action, a.danger && styles.actionDanger, pressed && styles.pressed]}>
-              <Text style={[styles.actionText, a.danger && styles.actionDangerText]}>{a.label}</Text>
+              <Text style={[styles.actionText, a.danger && styles.actionDangerText]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{a.label}</Text>
             </Pressable>
           ))}
-        </ScrollView>
-
-        <ScrollView ref={strip} horizontal showsHorizontalScrollIndicator={false} overScrollMode="never" contentContainerStyle={styles.strip} testID="edit-strip">
-          {before.map((t) => (
-            <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={t.label} onPress={() => t.onPress(ctx)} style={[styles.tile, styles.tileWide]} testID={`edit-strip-${t.id}`}>
-              <Text style={styles.tileText}>{t.label}</Text>
-            </Pressable>
-          ))}
-          {pages.map((_p, i) => (
-            <Pressable key={i} accessibilityRole="button" accessibilityLabel={`Page ${i + 1}`} accessibilityState={{ selected: i === index }}
-              onPress={() => builder.goToPage(i)} style={[styles.tile, i === index && styles.tileNow]} testID={`edit-strip-page-${i + 1}`}>
-              <Text style={[styles.tileText, i === index && styles.tileTextNow]}>{i + 1}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        {tools.length > 0 && (
-          <View style={styles.tools} testID="edit-tools">
-            {tools.map((t) => (
-              <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={t.label} onPress={() => t.onPress(ctx)} testID={`edit-tool-${t.id}`}
-                style={({ pressed }) => [styles.tool, pressed && styles.pressed]}>
-                <Text style={styles.toolText}>{t.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-        {wideTools.map((t) => (
-          <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={t.label} onPress={() => t.onPress(ctx)} testID={`edit-tool-${t.id}`}
-            style={({ pressed }) => [styles.tool, styles.toolWide, pressed && styles.pressed]}>
-            <Text style={styles.toolText}>{t.label}</Text>
-          </Pressable>
-        ))}
-
-        <View style={styles.turnRow}>
-          {index > 0 && <Button label={`‹ ${PREVIOUS_PAGE}`} kind="plain" onPress={turn(goPrev)} style={styles.turnButton} testID="edit-prev" />}
-          {isLast
-            ? <Button label={DONE_PREVIEW} onPress={turn(backToPreview)} style={styles.turnButton} testID="edit-done" />
-            : <Button label={`${NEXT_PAGE} ›`} onPress={turn(goNext)} style={styles.turnButton} testID="edit-next" />}
         </View>
-        {!isLast && (
-          <Pressable accessibilityRole="button" accessibilityLabel={BACK_TO_PREVIEW} onPress={turn(backToPreview)} style={styles.back} testID="edit-back-to-preview">
-            <Text style={styles.backText}>{BACK_TO_PREVIEW}</Text>
-          </Pressable>
-        )}
-      </SafeAreaView>
+      ) : (
+        <View style={styles.hintRow} testID="edit-selected-actions">
+          <Text style={styles.hint} numberOfLines={2} testID="edit-hint">{pageHint(targets)}</Text>
+        </View>
+      )}
 
+      {tools.length > 0 && (
+        <View style={styles.tools} testID="edit-tools">
+          {tools.map((t) => (
+            <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={t.label} onPress={() => t.onPress(ctx)} testID={`edit-tool-${t.id}`}
+              style={({ pressed }) => [styles.tool, pressed && styles.pressed]}>
+              <Text style={styles.toolText}>{t.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+      {wideTools.map((t) => (
+        <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={t.label} onPress={() => t.onPress(ctx)} testID={`edit-tool-${t.id}`}
+          style={({ pressed }) => [styles.tool, styles.toolWide, pressed && styles.pressed]}>
+          <Text style={styles.toolText}>{t.label}</Text>
+        </Pressable>
+      ))}
+
+      {goldTools.map((t) => <GoldButton key={t.id} label={t.label} onPress={() => t.onPress(ctx)} testID={`edit-tool-${t.id}`} />)}
+
+      <View style={styles.turnRow}>
+        {index > 0 && <Button label={`‹ ${PREVIOUS_PAGE}`} kind="plain" onPress={turn(goPrev)} style={styles.turnButton} testID="edit-prev" />}
+        {isLast
+          ? <Button label={DONE_PREVIEW} onPress={turn(backToPreview)} style={styles.turnButton} testID="edit-done" />
+          : <Button label={`${NEXT_PAGE} ›`} onPress={turn(goNext)} style={styles.turnButton} testID="edit-next" />}
+      </View>
+    </>
+  );
+
+  const sheets = (
+    <>
       {Sheet && sheet && <Sheet ctx={ctx} params={sheet.params} close={() => setSheet(null)} />}
-    </View>
+      {picking && <PagePicker ctx={ctx} total={total} index={index} close={() => setPicking(false)} />}
+    </>
+  );
+
+  // ON ITS SIDE: the page on the left, everything else in a panel down the
+  // right; the sheets open in the panel's place.
+  if (sideways) {
+    return (
+      <SheetPlacement.Provider value="side">
+        <View style={[styles.page, styles.sideways]} testID="edit-sideways">
+          <Stack.Screen options={header} />
+          {focused && <StatusBar hidden />}
+          <SafeAreaView edges={['top', 'left', 'bottom']} style={styles.sideStage}>{stage}</SafeAreaView>
+          <SafeAreaView edges={['top', 'right', 'bottom']} style={[styles.panel, { width: sidePanelWidth(screenW) }]}>
+            <ScrollView contentContainerStyle={styles.panelBody} overScrollMode="never" testID="edit-panel">
+              <View style={styles.panelTop}>
+                <Pressable accessibilityRole="button" accessibilityLabel={BACK_TO_PREVIEW} onPress={turn(backToPreview)} hitSlop={6} style={styles.panelBack} testID="edit-back-to-preview">
+                  <Text style={styles.backText}>{PREVIEW_SHORT}</Text>
+                </Pressable>
+                {counter}
+                <HeaderUndo canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo} />
+              </View>
+              {controls}
+            </ScrollView>
+          </SafeAreaView>
+          {sheets}
+        </View>
+      </SheetPlacement.Provider>
+    );
+  }
+
+  // UPRIGHT: the count over the page, the page, the buttons under it.
+  return (
+    <SheetPlacement.Provider value="bottom">
+      <View style={styles.page}>
+        <Stack.Screen options={header} />
+        {counter}
+        {stage}
+        <SafeAreaView edges={['bottom']} style={styles.bar}>
+          {controls}
+          {!isLast && (
+            <Pressable accessibilityRole="button" accessibilityLabel={BACK_TO_PREVIEW} onPress={turn(backToPreview)} style={styles.back} testID="edit-back-to-preview">
+              <Text style={styles.backText}>{BACK_TO_PREVIEW}</Text>
+            </Pressable>
+          )}
+        </SafeAreaView>
+        {sheets}
+      </View>
+    </SheetPlacement.Provider>
   );
 }
 
@@ -361,22 +432,25 @@ const styles = StyleSheet.create({
   headerButton: { width: 74, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
   headerText: { fontSize: 15, fontWeight: '700', color: colors.accent },
   line: { fontSize: 13, fontWeight: '600', color: colors.muted, textAlign: 'center', paddingVertical: space.sm, paddingHorizontal: space.md },
+  counter: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: space.md, paddingTop: space.sm },
+  count: { fontSize: 19, fontWeight: '800', color: colors.text, textAlign: 'center' },
+  sideways: { flexDirection: 'row' },
+  sideStage: { flex: 1 },
+  panel: { backgroundColor: colors.card, borderLeftWidth: 1, borderLeftColor: colors.border },
+  panelBody: { paddingHorizontal: space.md, paddingVertical: space.sm, gap: space.sm },
+  panelTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  panelBack: { minHeight: 44, justifyContent: 'center', paddingRight: space.sm },
   area: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   notDrawn: { height: NOTE_LINE, fontSize: 12, color: colors.muted, textAlign: 'center', paddingHorizontal: space.md, paddingTop: 4 },
   bar: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card, paddingHorizontal: space.md, paddingTop: space.sm, paddingBottom: space.sm, gap: space.sm },
-  actionsRow: { flexGrow: 0, minHeight: 48 },
-  actions: { gap: space.sm, alignItems: 'center' },
-  action: { minHeight: 48, paddingHorizontal: space.md, borderRadius: 12, borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  hintRow: { minHeight: 52, justifyContent: 'center' },
+  hint: { fontSize: 15, lineHeight: 20, color: colors.muted, textAlign: 'center' },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  action: { flexGrow: 1, flexBasis: '30%', minHeight: 44, paddingHorizontal: space.sm, borderRadius: 12, borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   actionDanger: { borderColor: colors.bad },
   actionText: { fontSize: 15, fontWeight: '700', color: colors.accent },
   actionDangerText: { color: colors.bad },
   pressed: { opacity: 0.85 },
-  strip: { gap: TILE_GAP, paddingVertical: 2 },
-  tile: { width: TILE, height: TILE, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' },
-  tileWide: { width: undefined, paddingHorizontal: space.md },
-  tileNow: { borderWidth: 2, borderColor: colors.accent, backgroundColor: '#FFF1EA' },
-  tileText: { fontSize: 15, fontWeight: '600', color: colors.text },
-  tileTextNow: { fontWeight: '800', color: colors.accent },
   tools: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   tool: { flexGrow: 1, flexBasis: '30%', minHeight: 52, borderRadius: 12, backgroundColor: '#F5EEE6', alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.sm },
   toolWide: { flexBasis: 'auto', minHeight: 48 },

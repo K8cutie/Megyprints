@@ -1,0 +1,107 @@
+# A test APK of the 2.0 app, built by GitHub for every pull request into
+# native-2.0 (and on demand: Actions → "2.0 test APK" → Run workflow).
+#
+# What it builds: the TEST app, "Megy Prints 2.0 (dev)" (com.megyprints.app.dev),
+# with the app's code inside (no computer needed to run it), signed with the
+# public debug key: it installs NEXT TO the 1.x app, never over it. Google
+# sign-in comes back only to the real Play app, so it is not in this one.
+# The real Play app is still built on the owner's PC with the upload key
+# (mobile/scripts/build-android.ps1 -Play).
+#
+# Where to get it: the pull request's "Checks" → "2.0 test APK" → Summary →
+# Artifacts → megyprints-2.0-dev-apk (a .zip with the .apk inside). Kept 14 days.
+#
+# Needs two repository secrets (Settings → Secrets and variables → Actions),
+# the same public values as mobile/.env.local:
+#   EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY
+# Without them the app is still BUILT (so a mistake in the app's own Android
+# code shows here), but no APK is kept: an app that can't sign in is no use
+# to test. The run says so.
+
+name: 2.0 test APK
+
+on:
+  pull_request:
+    branches: [native-2.0]
+    paths: ['mobile/**', 'src/**', '.github/workflows/android-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: 2.0 test APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Are the app's server settings set?
+        id: server
+        env:
+          URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::warning::No APK kept: add the repository secrets EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY (Settings → Secrets and variables → Actions), the same values as mobile/.env.local. The app is still built, to check it builds."
+            echo "set=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install the app's packages
+        working-directory: mobile
+        run: npm ci
+
+      - name: The app's server settings (from the secrets, never in git)
+        if: steps.server.outputs.set == 'true'
+        working-directory: mobile
+        env:
+          URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          printf 'EXPO_PUBLIC_SUPABASE_URL=%s\nEXPO_PUBLIC_SUPABASE_ANON_KEY=%s\n' "$URL" "$KEY" > .env.local
+
+      - name: Make the Android project (expo prebuild)
+        working-directory: mobile
+        run: npx expo prebuild --platform android --no-install
+
+      - name: 'Build the APK (64-bit arm phones)'
+        working-directory: mobile/android
+        run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --console=plain
+
+      - name: Name it
+        if: steps.server.outputs.set == 'true'
+        run: |
+          mkdir -p out
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk "out/megyprints-2.0-dev-${GITHUB_SHA::7}.apk"
+          ls -la out
+
+      - name: Keep it for download
+        if: steps.server.outputs.set == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: megyprints-2.0-dev-apk
+          path: out/*.apk
+          retention-days: 14

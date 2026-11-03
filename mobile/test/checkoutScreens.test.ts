@@ -11,12 +11,12 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { forward, PLACE_AT, pagesAt } from '@web/lib/placeProgress';
+import { forward, PLACE_AT, pagesAt, videosAt } from '@web/lib/placeProgress';
 import { albumPhotoCount, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { fixtureCheckoutAlbum, fixturePhotos } from '../src/lib/checkout/fixtureAlbum';
 import { payByDate, UNPAID_ORDER_DAYS } from '@web/lib/orderExpiry';
 import { askedToPay, OPEN_ORDER_COLUMNS, openOrderView, openOrderWords, payByLine, payByOn, placedOn, secondOrderQuestion, type OpenOrder } from '../src/lib/checkout/openOrder';
-import { barPercent, KEEP_OPEN_NOTE, placeFrames } from '../src/lib/checkout/placeRun';
+import { barPercent, KEEP_OPEN_NOTE, placeFrames, sendFrame } from '../src/lib/checkout/placeRun';
 import { receiptLabel, toReceipt } from '../src/lib/checkout/receipt';
 
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: jest.fn() }));
@@ -71,6 +71,22 @@ describe("placing the order: the website's bar", () => {
     expect(ORDER_SRC).toContain('`Preparing memory video ${d + 1} of ${t}…`');
     expect(ORDER_SRC).toContain('`Uploading memory video ${d + 1} of ${t}…`');
     expect(PROGRESS_SRC).toContain(KEEP_OPEN_NOTE);
+  });
+
+  it('a real send\'s video steps: the website\'s lines and the bar where the website puts it', () => {
+    let p = sendFrame(null, { step: 'videosCheck', before: true });
+    expect(p).toEqual({ progress: forward(null, PLACE_AT.start), message: 'Checking your memory videos…' });
+    p = sendFrame(p.progress, { step: 'videos', done: 0, total: 2, phase: 'compress' });
+    expect(p.message).toBe('Preparing memory video 1 of 2…');
+    expect(p.progress.at).toBe(videosAt(0, 2));
+    p = sendFrame(p.progress, { step: 'videos', done: 1, total: 2, phase: 'upload' });
+    expect(p.message).toBe('Uploading memory video 2 of 2…');
+    p = sendFrame(p.progress, { step: 'videos', done: 2, total: 2, phase: 'upload' });
+    expect(p.message).toBe('Uploading your memory videos…');
+    expect(p.progress.at).toBe(videosAt(2, 2));
+    const after = sendFrame(p.progress, { step: 'videosCheck', before: false });
+    expect(after).toEqual({ progress: forward(p.progress, PLACE_AT.checking), message: 'Checking your memory videos…' });
+    for (const m of ['Checking your memory videos…', 'Uploading your memory videos…']) expect(ORDER_SRC).toContain(`'${m}'`);
   });
 
   it('the bar width is the website\'s (rounded percent, 0 to 100)', () => {
