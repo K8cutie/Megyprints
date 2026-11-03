@@ -37,7 +37,8 @@ export default function Privacy() {
           In the Megy Prints Android app (version 2.0 and later), <b>Google ML Kit finds the faces in
           your photos on your phone</b>, to check your photos (for example, for closed eyes). Your
           photos are never sent anywhere for this. ML Kit does send Google basic diagnostics: your
-          phone's make, model and Android version, and how long and how well it worked.
+          phone's make, model and Android version, the app's version, a random ID for this install of
+          the app (not your name or number), and how long and how well it worked.
         </p>
         <p>
           When you place an order, a print-ready file of your finished album — which includes the

@@ -76,7 +76,7 @@ describe('the policy names Google ML Kit, the 2.0 app\'s face finder', () => {
     const words = text(q('privacy-ml-kit'));
     expect(words).toContain('Google ML Kit finds the faces in your photos on your phone');
     expect(words).toContain('Your photos are never sent anywhere for this.');
-    expect(words).toContain("your phone's make, model and Android version");
+    expect(words).toContain("your phone's make, model and Android version, the app's version, a random ID for this install of the app (not your name or number)");
     const providers = [...host.querySelectorAll('section')].find((s) => s.querySelector('h2')?.textContent === 'Service providers we rely on')!;
     expect(text(providers)).toContain('Google ML Kit — finds faces in your photos on your phone');
     expect(text(host)).not.toContain("browser's local storage");
