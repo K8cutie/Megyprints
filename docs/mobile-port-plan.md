@@ -3245,6 +3245,20 @@ newest first) is unchanged. New Kotlin: a **new APK** is needed.
 
 A **new APK** is needed (a new font file).
 
+## Place order out of sight: as fast as on screen (2026-11-03, `feat/port-background-speed`)
+
+Owner's phone test: with the app out of sight while the order is made,
+about 3 pages a minute, many more on screen. React Native runs the app's
+timers on the screen's refresh (`JavaTimerManager` on the Choreographer;
+the headless task keeps them going, but Android all but stops the refresh
+for an app out of sight), and the print files waited on a timer after
+every page and press sheet. `src/lib/breathe.ts`: on screen a timer, so the
+progress bar is drawn; out of sight `setImmediate`, no screen needed. And
+the order keeper now holds a partial wake lock while it runs (at most 2
+hours, let go in `onDestroy`), so the work goes on with the screen dark.
+New Kotlin and a new permission (`WAKE_LOCK`): a **new APK** is needed.
+Not yet measured on a phone.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

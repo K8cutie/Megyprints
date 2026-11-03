@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.ServiceCompat
 
 /**
@@ -16,9 +17,38 @@ import androidx.core.app.ServiceCompat
  *
  * Type dataSync: sending the album's files to the print shop. Android 15
  * gives dataSync about 6 hours a day; onTimeout stops it then.
+ *
+ * It also keeps the phone's processor awake while it runs (a partial wake
+ * lock: the screen may go dark, the work goes on), for at most WAKE_MS;
+ * without it the work all but stops once the screen turns off.
  */
 class OrderKeeperService : Service() {
+  private var wakeLock: PowerManager.WakeLock? = null
+
   override fun onBind(intent: Intent?): IBinder? = null
+
+  private fun keepAwake() {
+    if (wakeLock?.isHeld == true) return
+    try {
+      val pm = getSystemService(POWER_SERVICE) as PowerManager
+      wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MegyPrints:order").apply {
+        setReferenceCounted(false)
+        acquire(WAKE_MS)
+      }
+    } catch (e: Exception) {
+      // No wake lock: the order still goes on while the screen is on.
+      wakeLock = null
+    }
+  }
+
+  private fun letSleep() {
+    try {
+      wakeLock?.let { if (it.isHeld) it.release() }
+    } catch (e: Exception) {
+      // Already let go.
+    }
+    wakeLock = null
+  }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Placing your order"
@@ -27,6 +57,7 @@ class OrderKeeperService : Service() {
     val type = if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
     try {
       ServiceCompat.startForeground(this, OrderNotifications.ID_WORKING, notification, type)
+      keepAwake()
     } catch (e: Exception) {
       // Android refused (rare: the app was no longer in front). The order
       // still goes on while the app is open.
@@ -46,6 +77,7 @@ class OrderKeeperService : Service() {
   }
 
   override fun onDestroy() {
+    letSleep()
     ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
     super.onDestroy()
   }
@@ -53,5 +85,7 @@ class OrderKeeperService : Service() {
   companion object {
     const val EXTRA_TITLE = "title"
     const val EXTRA_TEXT = "text"
+    /** Longest the processor is kept awake for one order: 2 hours. */
+    const val WAKE_MS = 2L * 60 * 60 * 1000
   }
 }

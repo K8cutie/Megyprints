@@ -21,6 +21,7 @@ import type { SkCanvas, SkImage, SkPaint, Skia } from '@shopify/react-native-ski
 import { AlphaType, ClipOp, ColorType, FilterMode, ImageFormat, MipmapMode, PaintStyle, StrokeCap, StrokeJoin } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { PDFArray, PDFDict, PDFDocument, PDFName, PDFNumber, PDFRawStream, PDFRef, decodePDFRawStream, type PDFContext, type PDFObject } from 'pdf-lib';
 import { setJpegDpi } from '@web/lib/jpegZip';
+import { breathe } from '../lib/breathe';
 
 /** How each picture is drawn. pdf.js draws a picture that is made bigger
  *  without smoothing unless the PDF asks for it (getImageSmoothingEnabled:
@@ -433,8 +434,9 @@ export class SheetRaster {
         surface.dispose();
       }
       onPage?.(n + 1, pages.length);
-      // Let the phone breathe between 85 MB sheets.
-      await new Promise((r) => setTimeout(r, 0));
+      // Let the phone breathe between 85 MB sheets (not waiting for the
+      // screen while the app is out of sight: lib/breathe.ts).
+      await breathe();
     }
     return out;
   }

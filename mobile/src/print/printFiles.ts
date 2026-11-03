@@ -42,6 +42,7 @@ import { photosDrawn, pictureNotDrawn } from '../builder/pageImages';
 import { PagePictures } from './pagePicture';
 import { PrintPdf, interiorPageInches } from './printPdf';
 import { SheetRaster } from './sheetRaster';
+import { breathe } from '../lib/breathe';
 import { skiaTextPainter } from './textPainter';
 import { coverPhotos, coverPlanFor, makeCoverPdf, type CoverInput } from './coverWrap';
 
@@ -169,8 +170,8 @@ async function withPhotos<T>(list: readonly number[], open: OpenPhoto, page: str
   }
 }
 
-/** Lets the phone breathe (and a progress bar move) between pages. */
-const breathe = () => new Promise((r) => setTimeout(r, 0));
+/* Between pages the phone breathes (and a progress bar moves): lib/breathe.ts,
+   which does not wait for the screen while the app is out of sight. */
 
 /** What making the files shares: the page pictures, the pictures pages name,
  *  and the rule that a page with a part that can't be drawn stops it. */

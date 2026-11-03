@@ -278,6 +278,20 @@ describe('the native half', () => {
     }
   });
 
+  it('the processor stays awake while an order is sent (a partial wake lock, at most 2 hours), and is let go when it ends', () => {
+    const manifest = read(`${MOD}/android/src/main/AndroidManifest.xml`);
+    expect(manifest).toContain('<uses-permission android:name="android.permission.WAKE_LOCK" />');
+    const app = JSON.parse(read('mobile/app.json')) as { expo: { android: { blockedPermissions: string[] } } };
+    expect(app.expo.android.blockedPermissions).not.toContain('android.permission.WAKE_LOCK');
+    const kt = read(`${KT}/OrderKeeperService.kt`);
+    expect(kt).toContain('pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "MegyPrints:order")');
+    expect(kt).toContain('acquire(WAKE_MS)');
+    expect(kt).toContain('const val WAKE_MS = 2L * 60 * 60 * 1000');
+    // Taken once the service is in front; let go when it ends (finish, timeout, swipe away all end in onDestroy).
+    expect(kt).toMatch(/ServiceCompat\.startForeground\([^)]*\)\s*keepAwake\(\)/);
+    expect(kt).toMatch(/override fun onDestroy\(\) \{\s*letSleep\(\)/);
+  });
+
   it('the headless task keeps the app\'s timers going: started on the main thread, allowed while the app is in front', () => {
     const kt = read(`${KT}/OrderKeeperModule.kt`);
     expect(kt).toContain('HeadlessJsTaskConfig(TASK_KEY, Arguments.createMap(), 0L, true)');
