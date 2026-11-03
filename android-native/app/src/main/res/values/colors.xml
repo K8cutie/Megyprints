@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The website's primary colour (src/index.css: peach #B85C38, terracotta) -->
+    <color name="megy_terracotta">#B85C38</color>
+</resources>

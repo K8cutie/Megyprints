@@ -8,7 +8,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as wizardSteps from '@web/assistant/wizardSteps';
 import { remakeLosesMessage } from '@web/assistant/rebuildQuestion';
-import { COVER_PHOTOS_SHOWN, COVER_TO_PAGES, COVER_TO_PHOTOS, GENERATING_COPY, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MAKE_ALBUM, remakeQuestion, REMAKE_ALBUM, SIZE_LINE, startNewNote, TO_COVER } from '../src/builder/albumFlow';
+import { YOUR_PHOTOS } from '../src/editor/cover/words';
+import { COVER_TO_PAGES, COVER_TO_PHOTOS, GENERATING_COPY, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MAKE_ALBUM, remakeQuestion, REMAKE_ALBUM, SIZE_LINE, startNewNote, TO_COVER } from '../src/builder/albumFlow';
 
 const REPO = path.resolve(__dirname, '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(REPO, rel), 'utf8');
@@ -94,9 +95,11 @@ describe("the app's album steps use the website's words", () => {
   });
 
   it('the cover (CoverEditor.tsx)', () => {
-    expect(web.cover).toContain(`COVER_PHOTOS_SHOWN = ${COVER_PHOTOS_SHOWN}`);
-    for (const w of ['Design your cover', 'Pick 1 photo for the front cover', 'Your photos, best ones first. Tap one.', 'Cover title', 'e.g. The Cruz Family',
-      'Too long for the front cover: part of it will be cut off in print. Shorten it', ', or make the text smaller', 'Make it fit (size ', 'Show fewer']) {
+    // The photos: one row above the cover (CoverPhotoRow, the website's since #235), its words the row's own.
+    expect(web.cover).toContain(YOUR_PHOTOS);
+    expect(app.cover).toContain('<CoverPhotoRow');
+    for (const w of ['Design your cover', 'Pick 1 photo for the front cover', 'Cover title', 'e.g. The Cruz Family',
+      'Too long for the front cover: part of it will be cut off in print. Shorten it', ', or make the text smaller', 'Make it fit (size ']) {
       expect(web.cover).toContain(w);
       expect(app.cover).toContain(w);
     }

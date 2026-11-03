@@ -39,6 +39,12 @@ export function focusablesIn(root: HTMLElement): HTMLElement[] {
 /** Open dialogs, oldest first, with their panels. */
 const stack: { id: symbol; panel: () => HTMLElement | null }[] = [];
 
+/** How many dialogs are open right now (Today's test waits for none before
+ *  opening "You're done" by itself: lib/dailyTestRun). */
+export function openDialogCount(): number {
+  return stack.length;
+}
+
 /** The dialog the keyboard talks to: the newest one with no other open
  *  dialog inside it (a dialog mounted inside another, at the same time, runs
  *  its effects first — so "newest" alone would pick the outer one). */

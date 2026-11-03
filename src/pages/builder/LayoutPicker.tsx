@@ -67,6 +67,8 @@ export default function LayoutPicker({ actions }: { actions: BuilderContextValue
             initial={{ y: '100%', opacity: 0.6 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '100%', opacity: 0.6 }}
             transition={{ type: 'spring', damping: 30, stiffness: 320 }}
             ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="layout-picker-title" tabIndex={-1}
+            // A lesson's coach mark points here (lib/lessonTips ALBUM_TIPS.layout).
+            data-coach="layout-picker"
             className="w-full lg:max-w-2xl bg-white rounded-t-2xl lg:rounded-2xl max-h-[80vh] flex flex-col shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >

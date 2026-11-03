@@ -150,8 +150,9 @@ describe('"This album already has an order": the website\'s words', () => {
   it('"Open order" goes to that order\'s payment step whenever nobody has paid it', () => {
     // The website's button text, and its payment-step lines once there is an order number.
     expect(ORDER_SRC).toContain('Open order {openOrder.order_number}');
-    expect(ORDER_SRC).toContain('is placed. Pay by bank transfer to finish.');
-    expect(ORDER_SRC).toContain('in the note if your app asks');
+    // Since #234: "is placed." then "Pay by bank transfer to finish." on its own line, and the note line in PayCard.
+    expect(ORDER_SRC).toContain('is placed.\n              <span className="block text-taupe">Pay by bank transfer to finish.</span>'.replace(/\n/g, ORDER_SRC.includes('\r\n') ? '\r\n' : '\n'));
+    expect(readFileSync(path.join(WEB, 'src/components/PayCard.tsx'), 'utf8')).toContain('in the note if your app asks.');
     // A real waiting order: amount NULL, the asked total in quoted_amount (see below).
     expect(openOrderView({ ...waiting, amount: null, quoted_amount: 1288 })).toBe('pay');
     // An order placed before 0055 has no total saved: still its payment step (QR, number, last day), never "we're confirming it".

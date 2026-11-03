@@ -263,14 +263,3 @@ export function moveCoverTitle(b: CoverBuilder, from: { offsetX: number; offsetY
   return true;
 }
 
-/* ── The album's photos for the cover ──────────────────────────────────── */
-
-/** CoverEditor COVER_PHOTOS_SHOWN logic: the best few first ("Show all" for
- *  the rest), the photo on the cover always among those shown. `photos` is
- *  best first (albumFlow.coverPhotos). */
-export function shownCoverPhotos<P extends { id: string }>(photos: readonly P[], showAll: boolean, onCover: string | null, shown: number): readonly P[] {
-  if (showAll || photos.length <= shown) return photos;
-  const top = photos.slice(0, shown);
-  const picked = onCover && !top.some((p) => p.id === onCover) ? photos.find((p) => p.id === onCover) : undefined;
-  return picked ? [picked, ...top.slice(0, shown - 1)] : top;
-}

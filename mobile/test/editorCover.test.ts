@@ -22,7 +22,6 @@ import '../src/editor/parts';
 import { BLANK_COVER_MESSAGE } from '../src/editor/cover/coverChecks';
 import { COVER_ROUTE } from '../src/editor/cover';
 import { COVER_PAPER, TITLE_SIZE, ZOOM_RANGE } from '../src/editor/cover/coverEdits';
-import { COVER_PHOTOS_SHOWN } from '../src/builder/albumFlow';
 import * as W from '../src/editor/cover/words';
 
 const REPO = path.resolve(__dirname, '..', '..');
@@ -54,9 +53,9 @@ describe("the cover editor uses the website's words", () => {
 
   it('the Background tab (CoverEditor.tsx, PageColorPicker.tsx)', () => {
     expect(web.cover).toContain(`>${W.YOUR_PHOTOS}</span>`);
-    expect(web.cover).toContain(`'${W.SHOW_FEWER}'`);
-    expect(web.cover).toContain('`Show all ${coverPhotos.length} photos`');
-    expect(W.showAllPhotos(57)).toBe('Show all 57 photos');
+    // Since #235 the photos are one row, every photo: no "Show all".
+    expect(web.cover).not.toContain('Show all');
+    expect(web.cover).toContain('data-testid="cover-photo-row"');
     expect(web.cover).toContain(`mb-1.5">${W.COLOUR}</span>`);
     expect(web.cover).toContain(`>${W.ZOOM}</span>`);
     expect(web.cover).toContain(`\n                  ${W.RESET}\n`);
@@ -98,16 +97,23 @@ describe("the cover editor uses the website's words", () => {
     expect(W.useInk('White')).toBe('Use white');
   });
 
-  it('the photos shown before "Show all" are the website\'s count', () => {
-    expect(web.cover).toContain(`export const COVER_PHOTOS_SHOWN = ${COVER_PHOTOS_SHOWN};`);
+  it('the photos are one row ABOVE the cover, under the tabs (#235), in the app as on the website', () => {
+    // The website: the tabs, the photo row, then the cover, in the step and in the dialog.
+    expect(web.cover.split('{tabBar}\n          {photoStrip}\n          {preview}')).toHaveLength(2);
+    expect(web.cover.split('{tabBar}\n        {photoStrip}\n        {preview}')).toHaveLength(2);
+    // The app: the same order on Design your cover, and the row before the cover on the cover step.
+    expect(app.screen.indexOf('accessibilityRole="tablist"')).toBeLessThan(app.screen.indexOf('<CoverPhotoRow'));
+    expect(app.screen.indexOf('<CoverPhotoRow')).toBeLessThan(app.screen.indexOf('<CoverStage'));
+    const step = read('mobile/src/app/album-cover.tsx');
+    expect(step.indexOf('<CoverPhotoRow')).toBeGreaterThan(0);
+    expect(step.indexOf('<CoverPhotoRow')).toBeLessThan(step.indexOf('testID="cover-picture"'));
   });
 });
 
 describe("the cover editor makes CoverEditor's calls (the website's source still says them)", () => {
   it('a photo, a colour, the crop, Remove photo', () => {
-    // BackgroundDesigner in the cover's photo-only mode, as CoverEditor passes it.
-    expect(web.cover).toContain('onChange={(bg) => b.setPageBackground(bg)}');
-    expect(web.designer).toContain("onClick={() => onChange({ type: 'image', image: p.previewUrl, photoId: p.id, opacity: background.opacity ?? 100 })}");
+    // A tap in the photo row (#235): the photo, its opacity kept (putPhotoOnCover).
+    expect(web.cover).toContain("onClick={() => b.setPageBackground({ type: 'image', image: p.previewUrl, photoId: p.id, opacity: page.background?.opacity ?? 100 })}");
     expect(web.cover).toContain('onPick={(hex) => b.setPageColor(hex)} onPickAll={(hex) => b.applyPageColorToAllPages(hex)}');
     expect(web.cover).toContain('focusX: clamp01(d.fx - (e.clientX - d.x) / Math.max(1, dims.w)),');
     expect(web.cover).toContain('focusY: clamp01(d.fy - (e.clientY - d.y) / Math.max(1, dims.h)),');

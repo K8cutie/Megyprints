@@ -7,20 +7,32 @@
    no account to keep it — and signed in, an album with only a name was not
    worth saving, so it went too. So when this device has an album in
    progress, Start Creating asks first; continuing is the way on.
+
+   Testing phase, in the Android app: when the album in progress is a sample
+   album made on an earlier day, the way on is "Make today's sample album"
+   (owner, 2026-10-28: "The resume will confuse testers"), as on "Welcome
+   back" (ResumePrompt). Continuing would open the old day's album.
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { useState } from 'react';
 import { X, BookOpen, Sparkles } from 'lucide-react';
 import type { LocalDraftSummary } from '../lib/localDraft';
 import { useModalDialog } from '../lib/useModalDialog';
 import MegyMascot from './MegyMascot';
+import { isNativeShell } from '../lib/nativeShell';
+import { showSamplePhotos, sampleAlbumIsFromAnEarlierDay } from '../lib/samplePhotos';
 
-export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onStartNew, onClose }: {
+export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onStartNew, onStartTodaysSample, onClose }: {
   draft: LocalDraftSummary;
   signedIn: boolean;
   onContinue: () => void;
   onStartNew: () => void;
+  /** A new album, made at once as today's sample album. */
+  onStartTodaysSample?: () => void;
   onClose: () => void;
 }) {
+  const [inApp] = useState(isNativeShell);
+  const todaysSample = !!onStartTodaysSample && showSamplePhotos(inApp) && sampleAlbumIsFromAnEarlierDay(draft.sampleMadeAt, new Date());
   const photos = `${draft.photoCount} photo${draft.photoCount === 1 ? '' : 's'}`;
   // Keyboard (KB-2): focus on "Continue my album", Tab kept inside, Escape closes.
   const panelRef = useModalDialog<HTMLDivElement>(true, onClose);
@@ -43,9 +55,9 @@ export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onSta
           </div>
         </div>
         <div className="space-y-2">
-          <button onClick={onContinue} data-testid="start-new-continue" data-autofocus
+          <button onClick={todaysSample ? onStartTodaysSample : onContinue} data-testid="start-new-continue" data-today-sample={todaysSample || undefined} data-autofocus
             className="w-full py-3 rounded-xl bg-peach text-white text-sm font-semibold hover:brightness-105 transition-all">
-            Continue my album
+            {todaysSample ? 'Start the User tutorial' : 'Continue my album'}
           </button>
           <button onClick={onStartNew} data-testid="start-new-confirm"
             className="w-full py-3 rounded-xl border border-peach text-blush-pink text-sm font-semibold hover:bg-blush transition-colors flex items-center justify-center gap-2">
@@ -53,9 +65,11 @@ export default function StartNewAlbumPrompt({ draft, signedIn, onContinue, onSta
           </button>
         </div>
         <p className="text-xs text-taupe mt-3" data-testid="start-new-note">
-          {signedIn
-            ? draft.hasContent ? 'This one stays in Your Projects.' : "This one has no photos yet, so it won't be kept."
-            : 'Starting a new one deletes this album from this device. Sign in first to keep it.'}
+          {todaysSample
+            ? signedIn ? "The old tutorial album stays in Your Projects." : "The old tutorial album is replaced on this device."
+            : signedIn
+              ? draft.hasContent ? 'This one stays in Your Projects.' : "This one has no photos yet, so it won't be kept."
+              : 'Starting a new one deletes this album from this device. Sign in first to keep it.'}
         </p>
       </div>
     </div>

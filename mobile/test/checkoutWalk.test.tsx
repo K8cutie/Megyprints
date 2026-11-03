@@ -227,10 +227,14 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByText(`Send ${amount}`)).toBeOnTheScreen();
     expect(screen.getByText('GoTyme Bank · InstaPay · QR Ph')).toBeOnTheScreen();
     expect(screen.getByLabelText('GoTyme Bank InstaPay QR for ARCHIE GARCIA')).toBeOnTheScreen();
-    expect(screen.getByText('Account ending in 2370')).toBeOnTheScreen();
+    // The pay card (#234): the last 4 digits as dots, read out as "Account ending in".
+    expect(screen.getByTestId('pay-account')).toHaveTextContent('•••••• 2370');
+    expect(screen.getByLabelText('Account ending in 2370')).toBeOnTheScreen();
     // No order was placed, so no order number: the website then leaves out
-    // "Order … is placed" and "put … in the note" (it never says both).
-    expect(screen.getByText(`3. Send exactly ${amount}.`)).toBeOnTheScreen();
+    // "Order … is placed", the ✓, Copy, and "paste … in the note".
+    expect(screen.getByText(`Send exactly ${amount}`)).toBeOnTheScreen();
+    expect(screen.queryByTestId('pay-placed-badge')).toBeNull();
+    expect(screen.queryByTestId('pay-copy-order')).toBeNull();
     expect(screen.queryByText(/is placed\. Pay by bank transfer/)).toBeNull();
     expect(screen.queryByText(/in the note/)).toBeNull();
     expect(screen.getByText(/Please pay within 7 days/)).toBeOnTheScreen();
@@ -317,7 +321,10 @@ describe('the checkout screen, walked', () => {
     // That order's payment step, in the app: ITS amount and number, as the website says them once there is a number.
     expect(screen.getByText('Send ₱1,288')).toBeOnTheScreen();
     expect(screen.getByTestId('pay-order-placed')).toHaveTextContent('Order MP-2026-ABC1234 is placed. Pay by bank transfer to finish.');
-    expect(screen.getByText('3. Send exactly ₱1,288 and put MP-2026-ABC1234 in the note if your app asks.')).toBeOnTheScreen();
+    expect(screen.getByTestId('pay-placed-badge')).toBeOnTheScreen();
+    expect(screen.getByText('Send exactly ₱1,288')).toBeOnTheScreen();
+    expect(screen.getByTestId('pay-note-line')).toHaveTextContent('and paste MP-2026-ABC1234 in the note if your app asks.');
+    expect(screen.getByTestId('pay-copy-order')).toHaveTextContent('MP-2026-ABC1234Copy');
     expect(screen.queryByText('Order summary')).toBeNull(); // the form's price is not that order's
     // ITS last day to pay (placed Oct 26 in Manila + 7 days), as the website's Orders page says it.
     expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
@@ -364,7 +371,8 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByTestId('pay-order-placed')).toHaveTextContent('Order MP-2026-ABC1234 is placed. Pay by bank transfer to finish.');
     expect(screen.queryByText(/₱/)).toBeNull(); // no total made up
     expect(screen.getByTestId('pay-no-total')).toHaveTextContent('This order is older, so its total is not saved here. Message us and we will tell you how much to send.Message us');
-    expect(screen.getByText('3. Send the total we tell you and put MP-2026-ABC1234 in the note if your app asks.')).toBeOnTheScreen();
+    expect(screen.getByText('Send the total we tell you')).toBeOnTheScreen();
+    expect(screen.getByTestId('pay-note-line')).toHaveTextContent('and paste MP-2026-ABC1234 in the note if your app asks.');
     expect(screen.getByTestId('pay-within')).toHaveTextContent('Please pay by November 2, 2026. After that this order closes by itself, and your album stays saved.');
     await fireEvent.press(screen.getByTestId('pay-message-us'));
     expect(opened).toEqual(['https://megyprints.vercel.app/#/contact']); // the website's Contact page (a #/ page)

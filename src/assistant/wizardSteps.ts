@@ -8,6 +8,15 @@
 import type { BuilderActions } from '../pages/builder/useBuilderState';
 import { photosShortBy } from '../pages/builder/albumMinimum';
 
+/* Megy's guide is 4 steps: name + occasion, size, photos, cover ("Make my
+   album →"). Welcome is an unnumbered hello before them. 'review_pages' (the
+   made album's pages on screen) and 'finalize' (Preview open) are where the
+   journey stands AFTER the guide: they drive the screen (phaseForStep) and are
+   saved with the journey, but they are not steps. No number, and no card that
+   walks through the pages, Text or Preview & Order (owner, 2026-10-30: those
+   cards repeated the screen's own buttons, Step 6 never showed, and Step 7
+   caused a tester bug). The old 'add_text' step is gone: a journey saved on it
+   restores like any retired step. */
 export type WizardStep =
   | 'welcome'
   | 'pick_theme'
@@ -15,7 +24,6 @@ export type WizardStep =
   | 'design_cover'
   | 'upload_photos'
   | 'review_pages'
-  | 'add_text'
   | 'finalize';
 
 /** The photos step with a made album: the way on, and the choice to start the pages over. */

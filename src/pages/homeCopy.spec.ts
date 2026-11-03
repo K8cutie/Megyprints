@@ -76,9 +76,9 @@ describe('How It Works follows the wizard', () => {
     pick_size: 'Size',
     design_cover: 'Cover',
     upload_photos: 'Photos',
+    // After Megy's 4 steps: the made album's pages, then Preview (and Order).
     review_pages: 'Review',
-    add_text: 'Review', // the optional captions step, folded into Review
-    finalize: 'Preview', // "Preview & Order": Preview, then Order
+    finalize: 'Preview',
   };
   it('covers every wizard step, in the same order', () => {
     const steps = WIZARD_ORDER.filter((s) => s !== 'welcome') as Exclude<WizardStep, 'welcome'>[];

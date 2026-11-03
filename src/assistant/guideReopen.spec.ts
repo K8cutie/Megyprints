@@ -5,16 +5,13 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 /* ══════════════════════════════════════════════════════════════════════════
-   STEP 7's "PLACE ORDER →" ORDERS. On Preview & Order Megy's card shows
-   "Preview Full Album", "← Edit pages", "Save to Cloud" and "Place Order →".
-   "Place Order →" is drawn as THE filled button (isPrimaryAction: →), but the
-   panel only handled the other three, so the tap did nothing. A forward
-   button must never be a dead tap: testers get stuck (PR #54).
-   It must order through the ONE order entry, BuilderPreview.handleOrder
-   (the 40-photo check, the print job checkout reads, then Builder.handleOrder's save
-   and /order), never straight to /order. So these walk the REAL Builder,
-   Megy's panel and the preview, and hold the tap to the Order button's own
-   outcome on the same album.
+   MEGY'S STEPS COME BACK AFTER ✕ (1-star testers, 2026-10-04): on a computer
+   the ✕ on Megy's side panel hides her card. It used to take the card away
+   for good, a reload didn't bring it back. Now "Show the steps again" stays
+   in the panel, and one tap brings the card back. After the guide (the album
+   is made, here on Preview) the card is the short "Your album is made" one,
+   with no buttons of its own (owner, 2026-10-30: the old Step 7 repeated
+   Preview's own buttons). These walk the REAL Builder and Megy's panel.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({ ctx: null as unknown }));
@@ -86,7 +83,7 @@ const app = () => createElement(MemoryRouter, { initialEntries: ['/builder'] },
 
 async function openPreview(ctx: ReturnType<typeof builderOn>) {
   h.ctx = ctx;
-  // The journey as Step 7 leaves it: every step before it done.
+  // The journey on Preview: the 4 steps and the pages done.
   localStorage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({
     step: 'finalize', completed: WIZARD_ORDER.slice(0, -1), skipped: [], isFirstTime: false, dismissed: false,
   }));
@@ -95,6 +92,8 @@ async function openPreview(ctx: ReturnType<typeof builderOn>) {
 }
 const megyButton = (label: string) =>
   [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === label) ?? null;
+/** Megy's card, or null while the steps are hidden. */
+const card = () => document.querySelector('[data-testid="megy-card"]');
 async function tap(button: Element | null) {
   expect(button).not.toBeNull();
   await act(async () => { (button as HTMLButtonElement).click(); });
@@ -121,16 +120,17 @@ afterEach(async () => {
 });
 
 describe("Megy's steps after ✕", () => {
-  it('closing them leaves a way back; one tap brings Step 7 and its buttons back', async () => {
+  it('closing them leaves a way back; one tap brings her card back', async () => {
     await openPreview(builderOn(40));
-    expect(megyButton('Place Order →')).not.toBeNull();
+    expect(card()?.getAttribute('data-step')).toBe('finalize');
     await tap(document.querySelector('button[aria-label="Hide the steps"]'));
-    expect(megyButton('Place Order →')).toBeNull();
+    expect(card()).toBeNull();
     const back = document.querySelector('[data-testid="megy-show-steps"]');
-    expect(back?.textContent).toBe('Show the steps again (Step 7 of 7)');
+    expect(back?.textContent).toBe('Show the steps again (All 4 steps done)');
     await tap(back);
-    expect(megyButton('Place Order →')).not.toBeNull();
+    expect(card()).not.toBeNull();
     expect(document.querySelector('[data-testid="megy-show-steps"]')).toBeNull();
+    expect(megyButton('Place Order →')).toBeNull(); // the old Step 7 is gone: Preview has its own Order
     expect(where).toBe('/builder'); // hiding and showing the steps never leaves the album
   });
 
@@ -141,7 +141,7 @@ describe("Megy's steps after ✕", () => {
     root = createRoot(host);
     await act(async () => { root.render(app()); });
     await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
-    expect(megyButton('Place Order →')).toBeNull();
+    expect(card()).toBeNull();
     expect(document.querySelector('[data-testid="megy-show-steps"]')).not.toBeNull();
   });
 });

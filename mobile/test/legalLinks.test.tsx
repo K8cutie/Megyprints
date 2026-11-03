@@ -53,16 +53,22 @@ describe('the pages and the words', () => {
   it('the website\'s Privacy Policy and Terms of Service pages', () => {
     expect(PRIVACY_PAGE).toBe('https://megyprints.vercel.app/#/privacy');
     expect(TERMS_PAGE).toBe('https://megyprints.vercel.app/#/terms');
-    // The privacy page and its footer link are in this branch's copy of the
-    // website (#218). The Terms page (#233, Oct 31) is on main and live;
-    // this branch's ../src is from Oct 28, before it.
-    expect(read('src/App.tsx')).toContain('<Route path="/privacy" element={<Privacy />} />');
-    expect(read('src/components/Footer.tsx')).toContain(PRIVACY_LABEL);
-    expect(TERMS_LABEL).toBe('Terms of Service');
+    // Both pages are routes of the website, linked by its footer and phone menu.
+    const routes = read('src/App.tsx');
+    expect(routes).toContain('<Route path="/privacy" element={<Privacy />} />');
+    expect(routes).toContain('<Route path="/terms" element={<Terms />} />');
+    for (const f of ['src/components/Footer.tsx', 'src/components/Navbar.tsx']) {
+      const src = read(f).replace(/\s+/g, ' ');
+      expect(src).toMatch(new RegExp(`<Link to="/privacy"[^>]*> ${PRIVACY_LABEL} </Link>`));
+      expect(src).toMatch(new RegExp(`<Link to="/terms"[^>]*> ${TERMS_LABEL} </Link>`));
+    }
   });
 
-  it('the website\'s agree line, word for word (TermsAgreeLine.tsx)', () => {
+  it('the website\'s agree line, word for word (TermsAgreeLine.tsx), and its age (src/lib/legal.ts, shared)', () => {
     const line = (by: string) => { const w = agreeWords(by); return `${w.before}${w.link}${w.after}`; };
+    const web = read('src/components/TermsAgreeLine.tsx');
+    expect(web).toContain('By {by} you agree to our');
+    expect(web).toContain(`${TERMS_LABEL}\n      </Link>{' '}\n      and confirm you're {MIN_AGE} or older.`.replace(/\n/g, web.includes('\r\n') ? '\r\n' : '\n'));
     expect(MIN_AGE).toBe(18);
     expect(line('placing an order')).toBe("By placing an order you agree to our Terms of Service and confirm you're 18 or older.");
     expect(line('signing in')).toBe("By signing in you agree to our Terms of Service and confirm you're 18 or older.");

@@ -61,7 +61,9 @@ const steps = (list: SendStep[]) => {
 describe('the words', () => {
   it('the bar\'s name and the website\'s "is placed" line', () => {
     expect(read('src/components/PlaceOrderProgress.tsx')).toContain(`aria-label="${KEEPER_TITLE}"`);
-    expect(read('src/pages/Order.tsx')).toContain('is placed. Pay by bank transfer to finish.</p>');
+    // Since #234 the website says it on two lines: "Order … is placed." / "Pay by bank transfer to finish."
+    expect(read('src/pages/Order.tsx')).toContain('</span> is placed.');
+    expect(read('src/pages/Order.tsx')).toContain('<span className="block text-taupe">Pay by bank transfer to finish.</span>');
     expect(placedNotice({ order_number: 'MP-2026-ABC1234' }, false)).toEqual({ title: 'Order MP-2026-ABC1234 is placed', text: 'Pay by bank transfer to finish.' });
     expect(read('src/pages/Order.tsx')).toContain("'Test order placed'");
     expect(placedNotice({ order_number: 'MP-2026-ABC1234' }, true)).toEqual({ title: 'Test order placed', text: 'Order MP-2026-ABC1234' });
