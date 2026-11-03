@@ -13,10 +13,12 @@
      • on its side: the open book fills the screen inside the safe area, no
        header, no status bar, the turn buttons beside (or under) it; Next,
        Previous and a swipe turn the pages; back upright, the same page;
-     • the page pictures are asked for at one size both ways up.
+     • the page pictures are asked for at one size both ways up;
+     • it looks like a real book: the cover board and the page edges around
+       the pages, the spine, and a page turn that bends and throws a shadow.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ComponentType, type ReactElement } from 'react';
-import { Dimensions, type GestureResponderEvent } from 'react-native';
+import { Animated, Dimensions, type GestureResponderEvent } from 'react-native';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
@@ -89,7 +91,8 @@ jest.mock('../src/builder/usePagePicture', () => ({
 
 // After the mocks: the screen and the layout it must follow.
 import Preview from '../src/app/preview';
-import { sidewaysBook, uprightBook, UPRIGHT_EDGE } from '../src/builder/previewLayout';
+import { BOOK_DRESS_X, sidewaysBook, uprightBook, UPRIGHT_EDGE } from '../src/builder/previewLayout';
+import { edgeThickness } from '../src/builder/bookLook';
 import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
 const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
@@ -208,7 +211,7 @@ describe('upright: the book as big as the screen allows', () => {
     await act(async () => { one('preview-scroll').props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 412, height: 700 } } }); });
     await refresh();
     const want = uprightBook({ screenW: 412, viewH: 700, aspect: aspect(), shows: 'closed' });
-    expect(want.pageW).toBe(412 - 2 * UPRIGHT_EDGE);
+    expect(want.pageW).toBe(412 - 2 * UPRIGHT_EDGE - 2 * BOOK_DRESS_X);
     const book = flat(one('preview-book').props.style);
     expect(book.width).toBe(want.pageW);
     expect(book.height).toBe(want.pageH);
@@ -365,6 +368,75 @@ describe('on its side: the open book fills the screen', () => {
     expect(book.width).toBe(want.spread.w);
   });
 
+});
+
+describe('it looks like a real book (owner, 2026-11-03; src/builder/bookLook.tsx)', () => {
+  const bookOnly = (id: string) => onBook(id);
+  const width = (id: string) => Number(flat(one(id).props.style).width);
+
+  it('the closed book: just its cover, no board, no page edges', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    expect(onBook('preview-cover')).toHaveLength(1);
+    expect(all('preview-board')).toHaveLength(0);
+    expect(all('preview-spine-shade')).toHaveLength(0);
+  });
+
+  it('one page: the cover board around it, the spine on its bound side, the pages beyond it as page edges', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    const total = builder().albumPages.length;
+    await open();
+    await press('preview-next');
+    const page = Number(flat(one('preview-book').props.style).width);
+    // Page 1 is a right-hand page: bound on the left.
+    expect(width('preview-board')).toBe(page + 2 * BOOK_DRESS_X);
+    expect(bookOnly('preview-hinge-left')).toHaveLength(1);
+    expect(all('preview-edges-left')).toHaveLength(0);
+    expect(width('preview-edges-right')).toBe(edgeThickness((total - 1) / total));
+    expect(all('preview-edges-under')).toHaveLength(1);
+    expect(all('preview-spine-shade')).toHaveLength(1);
+    // Page 2: a left-hand page, bound on the right.
+    await press('preview-next');
+    expect(bookOnly('preview-hinge-right')).toHaveLength(1);
+    expect(width('preview-edges-left')).toBe(edgeThickness(1 / total));
+    expect(all('preview-edges-right')).toHaveLength(0);
+  });
+
+  it('the open book on its side: the pages read on the left, the pages to come on the right, the board under both', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    const total = builder().albumPages.length;
+    await open();
+    await turn(TURNED, TURNED_INSETS);
+    await press('preview-next');
+    await press('preview-next');
+    expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
+    const want = sidewaysBook({ screenW: 915, screenH: 412, insets: TURNED_INSETS, aspect: aspect() });
+    expect(width('preview-board')).toBe(want.spread.w + 2 * BOOK_DRESS_X);
+    expect(width('preview-edges-left')).toBe(edgeThickness(2 / total));
+    expect(width('preview-edges-right')).toBe(edgeThickness((total - 3) / total));
+    expect(all('preview-hinge-left')).toHaveLength(0);
+    expect(all('preview-spine-shade')).toHaveLength(1);
+  });
+
+  it('a page turn: the leaf bends like paper and throws a moving shadow on the pages under it', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await turn(TURNED, TURNED_INSETS);
+    await press('preview-next');
+    await refresh();
+    await refresh();
+    // The turn held mid-way (it plays for 0.8 s on the phone; a slow test run could miss it).
+    const held = jest.spyOn(Animated, 'timing').mockImplementation(() => ({ start: () => {}, stop: () => {}, reset: () => {} }) as unknown as Animated.CompositeAnimation);
+    try {
+      await act(async () => { one('preview-next').props.onClick({ currentTarget: null, target: null, nativeEvent: {}, stopPropagation() {} }); });
+      expect(all('preview-page-turn')).toHaveLength(1);
+      expect(all('preview-turn-bend')).toHaveLength(1);
+      expect(all('preview-turn-cast-right')).toHaveLength(1);
+      expect(all('preview-turn-cast-left')).toHaveLength(1);
+    } finally {
+      held.mockRestore();
+    }
+  });
 });
 
 describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/orderStart.ts)', () => {

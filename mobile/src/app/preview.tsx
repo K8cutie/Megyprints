@@ -55,7 +55,8 @@ import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } fro
 import { useOncePerVisit } from '../lib/useOncePerVisit';
 import { orderCheck, orderSaveError, type OrderCheck } from '../lib/checkout/orderStart';
 import { screenCanTurn, useTurnsWithThePhone } from '../lib/screenTurning';
-import { isSideways, pagePictureWidth, sidewaysBook, uprightBook, UPRIGHT_CHROME_GUESS, UPRIGHT_EDGE, type Box } from '../builder/previewLayout';
+import { BOARD, BOOK_DRESS_Y, isSideways, pagePictureWidth, sidewaysBook, uprightBook, UPRIGHT_CHROME_GUESS, UPRIGHT_EDGE, type Box } from '../builder/previewLayout';
+import { BookUnder, bookSides, SpineShade, TURN_LOOK } from '../builder/bookLook';
 import type { PageRequest } from '../builder/pageImages';
 import { EDIT_PAGES } from '../editor/editorWords';
 import { COVER_ROUTE } from '../editor/cover';
@@ -141,24 +142,47 @@ function TurnLayer({ plan, W, H, spineX, face, onDone }: { plan: TurnPlan; W: nu
   const front = angle.interpolate({ inputRange: [-180, -90.01, -90, 0], outputRange: [0, 0, 1, 1] });
   const back = angle.interpolate({ inputRange: [-180, -90, -89.99, 0], outputRange: [1, 1, 0, 0] });
   const shade = angle.interpolate({ inputRange: [-180, -90, 0], outputRange: [0, 0.35, 0], extrapolate: 'clamp' });
+  // The book look (owner, 2026-11-03: "page flips looking realistic"): the
+  // lifted leaf bends like paper (darker at the spine, light where it curves,
+  // its edge a little darker), most while it stands up; and it throws a
+  // shadow that moves with its free edge over the page it uncovers or is
+  // about to cover.
+  const lift = angle.interpolate({ inputRange: [-180, -90, 0], outputRange: [0, 1, 0], extrapolate: 'clamp' });
+  const edgeX = angle.interpolate({ inputRange: TURN_LOOK.angles, outputRange: TURN_LOOK.angles.map((a) => W * Math.cos((a * Math.PI) / 180)), extrapolate: 'clamp' });
+  const band = Math.round(W * TURN_LOOK.band);
+  const onRight = angle.interpolate({ inputRange: [-180, -90.01, -90, -45, 0], outputRange: [0, 0, 0.9, 0.7, 0], extrapolate: 'clamp' });
+  const onLeft = angle.interpolate({ inputRange: [-180, -135, -90, -89.99, 0], outputRange: [0, 0.7, 0.9, 0, 0], extrapolate: 'clamp' });
+  const leftBandX = Animated.add(edgeX, W - band);
+  const castLeft = plan.layout === 'spread' && !plan.hideLeft;
   const persp = W * 6;
   const sideLeft = (side: 'left' | 'right') => (side === 'left' ? spineX - W : spineX);
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill} testID="preview-page-turn">
       {plan.patch && <View style={[styles.layerFace, { left: sideLeft(plan.patch.side), width: W, height: H }]}>{face(plan.patch.face)}</View>}
+      <View style={[styles.castClip, { left: spineX, width: W, height: H }]} testID="preview-turn-cast-right">
+        <Animated.View style={[styles.cast, { width: band, height: H, backgroundImage: TURN_LOOK.castRight, opacity: onRight, transform: [{ translateX: edgeX }] }]} />
+      </View>
+      {castLeft && (
+        <View style={[styles.castClip, { left: spineX - W, width: W, height: H }]} testID="preview-turn-cast-left">
+          <Animated.View style={[styles.cast, { width: band, height: H, backgroundImage: TURN_LOOK.castLeft, opacity: onLeft, transform: [{ translateX: leftBandX }] }]} />
+        </View>
+      )}
       <Animated.View style={[styles.layerFace, { left: spineX, width: W, height: H, opacity: front, transformOrigin: 'left center', transform: [{ perspective: persp }, { rotateY: rotate }] }]}>
         {face(plan.leaf.front)}
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundImage: TURN_LOOK.leafFront, opacity: lift }]} testID="preview-turn-bend" />
         <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: shade }]} />
       </Animated.View>
       {plan.leaf.back && (
         <Animated.View style={[styles.layerFace, { left: spineX, width: W, height: H, opacity: back, transformOrigin: 'left center', transform: [{ perspective: persp }, { rotateY: rotate }, { translateX: W }, { rotateY: '180deg' }] }]}>
           {face(plan.leaf.back)}
+          <Animated.View style={[StyleSheet.absoluteFill, { backgroundImage: TURN_LOOK.leafBack, opacity: lift }]} />
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000', opacity: shade }]} />
         </Animated.View>
       )}
     </View>
   );
 }
+
 
 /** A round turn button beside (or under) the book on its side: ‹ back, ›
  *  forward (filled terracotta: the way forward), or Done at the album's end.
@@ -418,8 +442,12 @@ export default function Preview() {
       {sideways && focused && <StatusBar hidden />}
     </>
   );
+  // The book look (bookLook.tsx): the cover board and page edges under the
+  // pages, the bend into the spine over them.
+  const sides = bookSides({ shows: layout, index, start: s, total });
   const book = (
-    <View style={[styles.stage, hideLeft && styles.stageOpening, { width: bookW, height: H }]} {...swipe.panHandlers} testID="preview-book">
+    <View style={[styles.stage, layout === 'closed' && styles.stageClosed, hideLeft && styles.stageOpening, !side && styles.stageUpright, { width: bookW, height: H }]} {...swipe.panHandlers} testID="preview-book">
+      {!hideLeft && <BookUnder shows={layout} W={singleW} H={H} sides={sides} />}
       {layout === 'closed' && <Face face={{ kind: 'cover' }} {...faceProps} onNotDrawn={noteNotDrawn} />}
       {layout === 'page' && <Face face={{ kind: 'page', index }} {...faceProps} onNotDrawn={noteNotDrawn} />}
       {layout === 'spread' && (
@@ -428,9 +456,9 @@ export default function Preview() {
             <Face face={s >= 0 ? { kind: 'page', index: s } : { kind: 'inside', cover: 'front' }} {...faceProps} onNotDrawn={noteNotDrawn} />
           </View>
           <Face face={s + 1 < total ? { kind: 'page', index: s + 1 } : { kind: 'inside', cover: 'back' }} {...faceProps} onNotDrawn={noteNotDrawn} />
-          {!hideLeft && <View pointerEvents="none" style={[styles.gutter, { left: singleW - 6, height: H }]} />}
         </View>
       )}
+      {!hideLeft && <SpineShade shows={layout} W={singleW} H={H} sides={sides} />}
       {turnNow && (
         <TurnLayer key={turnNow.n} plan={turnNow.plan} W={singleW} H={H} spineX={layout === 'spread' ? singleW : 0} face={face}
           onDone={() => setTurn((t) => (t && t.n === turnNow.n ? null : t))} />
@@ -564,16 +592,22 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.85 },
   sideAsk: { position: 'absolute', alignItems: 'center', justifyContent: 'center', padding: space.md },
   sideCounter: { position: 'absolute', fontSize: 13, lineHeight: 20, fontWeight: '600', color: colors.muted, textAlign: 'center' },
-  stage: { backgroundColor: '#FFFFFF', elevation: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8 },
+  // The open book's shadow is its cover board's (bookLook.tsx); the closed
+  // book is just its cover, with its own.
+  stage: { backgroundColor: '#FFFFFF' },
+  stageClosed: { elevation: 6, shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8 },
+  // Upright: clear of the line under it, with the board and the page edges.
+  stageUpright: { marginTop: BOARD, marginBottom: BOOK_DRESS_Y },
   // The cover opening on its side: only the right page is there yet.
   stageOpening: { backgroundColor: 'transparent', elevation: 0, shadowOpacity: 0 },
   notYet: { opacity: 0 },
   spread: { flexDirection: 'row' },
-  gutter: { position: 'absolute', top: 0, width: 12, backgroundColor: 'rgba(60,40,20,0.10)' },
   face: { backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   inside: { backgroundColor: '#FFFFFF' },
   insideText: { fontSize: 12, color: '#B9A992', textAlign: 'center', padding: space.sm },
   layerFace: { position: 'absolute', top: 0, overflow: 'hidden', backgroundColor: '#FFFFFF', backfaceVisibility: 'hidden' },
+  castClip: { position: 'absolute', top: 0, overflow: 'hidden' },
+  cast: { position: 'absolute', left: 0, top: 0 },
   caption: { fontSize: 14, fontWeight: '600', color: colors.muted },
   toggleRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.sm },
   toggle: { minHeight: 48, justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: space.md, paddingVertical: 8 },

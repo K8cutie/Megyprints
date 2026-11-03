@@ -13,10 +13,14 @@
        still on screen. Bigger than before on every phone and album size.
      • One picture size for both ways up, so turning the phone draws no page
        again.
+   Owner (2026-11-03): the Preview looks like a real book: room is kept
+   around the pages for the cover board and the page edges (BOOK_DRESS_X at
+   each side, BOOK_DRESS_Y above and below), so the book WITH its cover is
+   what fills the room, and nothing sits on it.
    ══════════════════════════════════════════════════════════════════════════ */
 import { ALBUM_SIZES } from '@web/pages/builder/types';
 import {
-  CONTROL_STRIP, fitPages, isSideways, pagePictureWidth, sidewaysBook, SIDEWAYS_EDGE, TURN_BUTTON,
+  BOOK_DRESS_X, BOOK_DRESS_Y, CONTROL_STRIP, fitPages, isSideways, pagePictureWidth, sidewaysBook, SIDEWAYS_EDGE, TURN_BUTTON,
   uprightBook, UPRIGHT_EDGE, UPRIGHT_ROOM, type Box, type Insets,
 } from '../src/builder/previewLayout';
 
@@ -45,6 +49,8 @@ const SIDEWAYS_INSETS: { name: string; insets: Insets }[] = [
 const inside = (b: Box, outer: Box) => b.x >= outer.x - 0.001 && b.y >= outer.y - 0.001
   && b.x + b.w <= outer.x + outer.w + 0.001 && b.y + b.h <= outer.y + outer.h + 0.001;
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+/** The book with its cover board and page edges around the pages. */
+const dressed = (b: Box): Box => ({ x: b.x - BOOK_DRESS_X, y: b.y - BOOK_DRESS_Y, w: b.w + 2 * BOOK_DRESS_X, h: b.h + 2 * BOOK_DRESS_Y });
 
 /** The upright book before this change (preview.tsx): 16 points at each side,
  *  300 points kept for everything else on the screen. */
@@ -97,20 +103,21 @@ describe('on its side: the open book fills the screen', () => {
           expect(b.spread.w).toBe(2 * b.pageW);
           expect(b.spread.h).toBe(b.pageH);
           expect(Math.abs(b.pageW / b.pageH - aspect)).toBeLessThan(0.02);
-          // Clear of the notch and the bars.
-          for (const box of [b.spread, b.closed, b.back, b.forward, b.counter, b.edit]) expect(inside(box, safe)).toBe(true);
-          // The turn buttons, the count and "Edit pages" are never over the pages.
+          // Clear of the notch and the bars, the book's cover board too.
+          for (const box of [dressed(b.spread), dressed(b.closed), b.back, b.forward, b.counter, b.edit]) expect(inside(box, safe)).toBe(true);
+          // The turn buttons, the count and "Edit pages" are never over the book.
           for (const box of [b.back, b.forward, b.counter, b.edit]) {
-            expect(overlaps(box, b.spread)).toBe(false);
-            expect(overlaps(box, b.closed)).toBe(false);
+            expect(overlaps(box, dressed(b.spread))).toBe(false);
+            expect(overlaps(box, dressed(b.closed))).toBe(false);
           }
           expect(overlaps(b.back, b.forward)).toBe(false);
           // "Edit pages" is a finger tall and clear of the other buttons and the count.
           expect(b.edit.h).toBe(TURN_BUTTON);
           for (const box of [b.back, b.forward, b.counter]) expect(overlaps(b.edit, box)).toBe(false);
-          // Fills the screen: it reaches the room's edges one way or the other.
-          const fillsWidth = b.room.w - b.spread.w < 2;
-          const fillsHeight = b.room.h - b.spread.h < 2;
+          // Fills the screen: the book with its cover reaches the room's edges one
+          // way or the other (to the point: the page's other side is rounded down).
+          const fillsWidth = b.room.w - dressed(b.spread).w <= 2;
+          const fillsHeight = b.room.h - dressed(b.spread).h <= 2;
           expect(fillsWidth || fillsHeight).toBe(true);
           // The room is the safe area less only the strip the buttons take.
           const strips = b.controls === 'sides' ? { w: 2 * CONTROL_STRIP, h: 0 } : { w: 0, h: CONTROL_STRIP };
@@ -133,8 +140,8 @@ describe('on its side: the open book fills the screen', () => {
       const size = ALBUM_SIZES.find((s) => s.preset === preset)!;
       const b = sidewaysBook({ screenW: 915, screenH: 412, insets: NO_INSETS, aspect: aspectOf(size) });
       expect(b.controls).toBe('sides');
-      if (size.category === 'portrait') expect(b.room.h - b.spread.h).toBeLessThan(2);
-      else expect(b.room.w - b.spread.w).toBeLessThan(2);
+      if (size.category === 'portrait') expect(b.room.h - dressed(b.spread).h).toBeLessThanOrEqual(2);
+      else expect(b.room.w - dressed(b.spread).w).toBeLessThanOrEqual(2);
       // Back on the left edge, forward on the right, halfway up.
       expect(b.back.x).toBe(SIDEWAYS_EDGE);
       expect(b.forward.x + b.forward.w).toBe(915 - SIDEWAYS_EDGE);
@@ -142,15 +149,16 @@ describe('on its side: the open book fills the screen', () => {
     }
   });
 
-  it('a wide album: the buttons under the book, the book as wide as the screen', () => {
+  it('a wide album: the buttons under the book, the book with its cover as big as fits', () => {
     for (const preset of ['6x4', '8x6', '11.5x8']) {
       const size = ALBUM_SIZES.find((s) => s.preset === preset)!;
       const b = sidewaysBook({ screenW: 915, screenH: 412, insets: NO_INSETS, aspect: aspectOf(size) });
       expect(b.controls).toBe('below');
-      expect(b.room.w - b.spread.w).toBeLessThan(2);
-      expect(b.spread.w).toBeGreaterThanOrEqual(915 - 2 * SIDEWAYS_EDGE - 1);
-      // The buttons in the bottom corners, under the book.
-      expect(b.back.y).toBeGreaterThanOrEqual(b.spread.y + b.spread.h);
+      // As wide as the screen, or (an 8×6: the cover takes some height too) as tall as the room.
+      expect(Math.min(b.room.w - dressed(b.spread).w, b.room.h - dressed(b.spread).h)).toBeLessThanOrEqual(2);
+      if (preset === '6x4') expect(dressed(b.spread).w).toBeGreaterThanOrEqual(915 - 2 * SIDEWAYS_EDGE - 1);
+      // The buttons in the bottom corners, under the book and its cover.
+      expect(b.back.y).toBeGreaterThanOrEqual(b.spread.y + b.spread.h + BOOK_DRESS_Y);
       expect(b.forward.y).toBe(b.back.y);
     }
   });
@@ -161,8 +169,8 @@ describe('on its side: the open book fills the screen', () => {
       const b = sidewaysBook({ screenW: 915, screenH: 412, insets: NO_INSETS, aspect });
       const safeW = 915 - 2 * SIDEWAYS_EDGE;
       const safeH = 412 - 2 * SIDEWAYS_EDGE;
-      const sides = fitPages(safeW - 2 * CONTROL_STRIP, safeH, aspect, 2).pageW;
-      const below = fitPages(safeW, safeH - CONTROL_STRIP, aspect, 2).pageW;
+      const sides = fitPages(safeW - 2 * CONTROL_STRIP - 2 * BOOK_DRESS_X, safeH - 2 * BOOK_DRESS_Y, aspect, 2).pageW;
+      const below = fitPages(safeW - 2 * BOOK_DRESS_X, safeH - CONTROL_STRIP - 2 * BOOK_DRESS_Y, aspect, 2).pageW;
       expect(b.pageW).toBe(Math.max(sides, below));
     }
   });
@@ -198,52 +206,56 @@ describe('on its side: the open book fills the screen', () => {
 });
 
 describe('upright: the book is as big as the screen allows', () => {
-  it('one page is as wide as the screen, 4 points at each side', () => {
+  it('one page with its cover is as wide as the screen, 4 points at each side', () => {
     expect(UPRIGHT_EDGE).toBe(4);
     for (const phone of PHONES) {
       for (const size of ALBUM_SIZES) {
         const aspect = aspectOf(size);
         const b = uprightBook({ screenW: phone.w, viewH: viewHeight(phone.h), aspect, shows: 'page' });
-        expect(b.pageW).toBeLessThanOrEqual(phone.w - 2 * UPRIGHT_EDGE);
+        expect(b.pageW + 2 * BOOK_DRESS_X).toBeLessThanOrEqual(phone.w - 2 * UPRIGHT_EDGE);
         // As tall as fits with the line under it.
-        expect(b.pageH + UPRIGHT_ROOM).toBeLessThanOrEqual(viewHeight(phone.h));
+        expect(b.pageH + 2 * BOOK_DRESS_Y + UPRIGHT_ROOM).toBeLessThanOrEqual(viewHeight(phone.h));
         // Either the width or the height is used up.
-        const fullWidth = b.pageW === phone.w - 2 * UPRIGHT_EDGE;
-        const fullHeight = viewHeight(phone.h) - UPRIGHT_ROOM - b.pageH < 2;
+        const fullWidth = b.pageW + 2 * BOOK_DRESS_X === phone.w - 2 * UPRIGHT_EDGE;
+        const fullHeight = viewHeight(phone.h) - UPRIGHT_ROOM - 2 * BOOK_DRESS_Y - b.pageH <= 2;
         expect(fullWidth || fullHeight).toBe(true);
       }
     }
   });
 
-  it('bigger than before, on every phone and album size (the page, the cover and the open book)', () => {
+  it('the book with its cover is bigger than the book was before 2026-11, on every phone and album size (the page, the cover and the open book)', () => {
     for (const phone of PHONES) {
       for (const size of ALBUM_SIZES) {
         const aspect = aspectOf(size);
         for (const shows of ['page', 'closed', 'spread'] as const) {
+          const across = shows === 'spread' ? 2 : 1;
           const now = uprightBook({ screenW: phone.w, viewH: viewHeight(phone.h), aspect, shows });
-          const was = before(phone.w, phone.h, aspect, shows === 'spread' ? 2 : 1);
-          expect(now.pageW).toBeGreaterThan(was.pageW);
+          const was = before(phone.w, phone.h, aspect, across);
+          expect(now.pageW * across + 2 * BOOK_DRESS_X).toBeGreaterThan(was.pageW * across);
+          expect(now.pageH + 2 * BOOK_DRESS_Y).toBeGreaterThan(was.pageH);
         }
       }
     }
   });
 
-  it('on a common phone (412×915), an 8×8 page goes from 380 to 404 points wide', () => {
+  it('on a common phone (412×915), an 8×8 page: 380 points wide before 2026-11, 382 now inside its cover (404 with it)', () => {
     const now = uprightBook({ screenW: 412, viewH: viewHeight(915), aspect: 1, shows: 'page' });
     expect(before(412, 915, 1, 1).pageW).toBe(380);
-    expect(now).toEqual({ pageW: 404, pageH: 404 });
+    expect(now).toEqual({ pageW: 382, pageH: 382 });
+    expect(now.pageW + 2 * BOOK_DRESS_X).toBe(404);
   });
 
-  it('the open book upright: two pages across the whole width', () => {
+  it('the open book upright: two pages and their cover across the whole width', () => {
     const b = uprightBook({ screenW: 412, viewH: viewHeight(915), aspect: 0.75, shows: 'spread' });
-    expect(b.pageW).toBe(Math.floor((412 - 2 * UPRIGHT_EDGE) / 2));
+    expect(b.pageW).toBe(Math.floor((412 - 2 * UPRIGHT_EDGE - 2 * BOOK_DRESS_X) / 2));
   });
 
-  it('a short screen and a tall album: as tall as fits, the line under it still on screen', () => {
-    const viewH = 420;
+  it('a short screen and a tall album: as tall as fits with its cover, the line under it still on screen', () => {
+    // Whole points both ways: 364 × 0.75 = 273.
+    const viewH = UPRIGHT_ROOM + 2 * BOOK_DRESS_Y + 364;
     const b = uprightBook({ screenW: 412, viewH, aspect: 0.75, shows: 'page' });
-    expect(b.pageH).toBe(viewH - UPRIGHT_ROOM);
-    expect(b.pageW).toBe(Math.floor((viewH - UPRIGHT_ROOM) * 0.75));
+    expect(b.pageH).toBe(viewH - UPRIGHT_ROOM - 2 * BOOK_DRESS_Y);
+    expect(b.pageW).toBe(Math.floor((viewH - UPRIGHT_ROOM - 2 * BOOK_DRESS_Y) * 0.75));
   });
 });
 

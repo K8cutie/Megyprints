@@ -3364,6 +3364,34 @@ changes until the script is run again. A theme's corner art (old albums
 only; albums made today have none) is still not in the app. A **new APK**
 is needed.
 
+## The Preview looks like a real book (2026-11-03, `feat/port-book-look`)
+
+Owner: "make the view look like a book effect with edges looking like pages
+and page flips looking realistic" (the drawing:
+https://claude.ai/artifact/TF3673TheumrdrJ5YvkHb9). Now
+(`src/builder/bookLook.tsx`, `src/app/preview.tsx`):
+
+- around the pages: the cover board (a warm cloth brown) with its shadow on
+  the table; the stack of page edges at each outer side, thin where few
+  pages are and thick where many are (read pages on the left, those to
+  come on the right; up to 7 points, a fine line between sheets); the page
+  edges under the pages. One page at a time: the spine and the cover's hinge
+  on its bound side (binding.ts), the page edges on the other. The closed
+  book is just its cover;
+- over the pages: each bends down into the spine (light where it lifts,
+  darker at the spine), and a crease where the two pages meet;
+- the page turn: the leaf shades like bending paper while it stands up, and
+  throws a shadow that follows its free edge over the pages under it.
+
+Room is kept around the pages for the board and the edges (`previewLayout`
+`BOOK_DRESS_X` = 11 at each side, `BOOK_DRESS_Y` = 7 above and below): the
+page itself is 22 points narrower than before (an 8x8 page upright on a
+412-point phone: 382 instead of 404; the book with its cover is still 404).
+Plain views and React Native's own gradients: no new library. Not yet:
+dragging the page corner with a finger (the page follows the finger), and
+the paper visibly curving as it turns; a swipe and the buttons turn the page
+as before. A **new APK** is needed.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

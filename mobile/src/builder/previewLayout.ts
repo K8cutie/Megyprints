@@ -18,6 +18,8 @@
    cover is one page of the same book, in the middle of the same place, so
    the book stays the same size when it opens.
 
+   Both ways up, room is kept around the pages for the book's cover board
+   and page edges (BOOK_DRESS_X, BOOK_DRESS_Y).
    The page pictures are drawn at one size for both ways up
    (pagePictureWidth): turning the phone draws no page again.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -41,6 +43,21 @@ export function fitPages(w: number, h: number, aspect: number, across: 1 | 2): P
   return { pageW, pageH: Math.max(1, Math.floor(pageW / aspect)) };
 }
 
+// ── The book around its pages ─────────────────────────────────────────────
+// Owner, 2026-11-03: "make the view look like a book, with edges looking like
+// pages". Around the pages (bookLook.tsx): the stack of page edges beside
+// them, the cover board past it, and the page edges under them. Room is kept
+// for it on every side, so it never runs off the screen or under a button.
+
+/** The stack of page edges beside a page, at its thickest (points). */
+export const PAGE_EDGES_MAX = 7;
+/** The cover board showing past the page edges (points). */
+export const BOARD = 4;
+/** Kept for them at each side of the book. */
+export const BOOK_DRESS_X = PAGE_EDGES_MAX + BOARD;
+/** Kept above and below the book: the board, and the page edges under the pages. */
+export const BOOK_DRESS_Y = BOARD + 3;
+
 // ── Upright ────────────────────────────────────────────────────────────────
 
 /** Between the page and the screen's side, each side (was 16). */
@@ -55,8 +72,8 @@ export const UPRIGHT_CHROME_GUESS = 260;
 /** The book upright. `viewH` = the height of the area between the header and
  *  the turn bar (measured on the phone). */
 export function uprightBook(o: { screenW: number; viewH: number; aspect: number; shows: BookShows }): PageSize {
-  const availW = o.screenW - 2 * UPRIGHT_EDGE;
-  const availH = o.viewH - UPRIGHT_ROOM;
+  const availW = o.screenW - 2 * UPRIGHT_EDGE - 2 * BOOK_DRESS_X;
+  const availH = o.viewH - UPRIGHT_ROOM - 2 * BOOK_DRESS_Y;
   return fitPages(availW, availH, o.aspect, o.shows === 'spread' ? 2 : 1);
 }
 
@@ -106,8 +123,10 @@ export function sidewaysBook(o: { screenW: number; screenH: number; insets: Inse
   };
   const sidesRoom: Box = { x: safe.x + CONTROL_STRIP, y: safe.y, w: Math.max(0, safe.w - 2 * CONTROL_STRIP), h: safe.h };
   const belowRoom: Box = { x: safe.x, y: safe.y, w: safe.w, h: Math.max(0, safe.h - CONTROL_STRIP) };
-  const sides = fitPages(sidesRoom.w, sidesRoom.h, aspect, 2);
-  const below = fitPages(belowRoom.w, belowRoom.h, aspect, 2);
+  // The pages, inside the book's cover board and page edges.
+  const fit = (r: Box) => fitPages(r.w - 2 * BOOK_DRESS_X, r.h - 2 * BOOK_DRESS_Y, aspect, 2);
+  const sides = fit(sidesRoom);
+  const below = fit(belowRoom);
   const controls = sides.pageW >= below.pageW ? 'sides' : 'below';
   const room = controls === 'sides' ? sidesRoom : belowRoom;
   const { pageW, pageH } = controls === 'sides' ? sides : below;
