@@ -3546,6 +3546,14 @@ the phone after:
   for 5 years (you added 15 more years)", in the price line's and the
   picker's words, and the album line says "7 living-memory QRs" like the box
   under it (`pricing.includedHostingLine`, shared with the website).
+- **My albums was a list you couldn't open** (owner: "Why cant i open the
+  albums is that just a list"). Phase 1 made it read-only. Each album now
+  says Open: tapping it loads it from the account with the website's own
+  `loadAlbum` (what `/builder?album=<id>` does) and goes where "Continue my
+  album" goes, its pages once made. While it loads the card says
+  "Opening…"; a failed read stays on My albums and says to check the
+  phone is online (`src/app/albums.tsx`). Photos that aren't on this phone
+  show the missing-photos note the editor already has.
 - **Test builds for a server on this PC** (a plain-http address in
   `.env.local`) may talk plain http; the Play build refuses such an address
   (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
@@ -3561,6 +3569,7 @@ the phone after:
     • Going back from checkout keeps your name and address
     • The photo picker asks before dropping photos you picked
     • Your order says clearly how long your videos stay live
+    • Tap an album in My albums to open it
     Also new:
     • The app tells you when a new version is ready
 
