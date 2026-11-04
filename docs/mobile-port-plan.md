@@ -3697,6 +3697,18 @@ Each fix has a test that failed first.
   - Owner: "If signed out theres a huge awkward space at the bottom." Home
     now centres its cards when it is shorter than the screen, as the
     website's home does (`HeroSection`). Signed in, it scrolls as before.
+  - An order file that gets no answer is a failed try, not an endless
+    wait. If the connection dropped under the pages file, the screen said
+    "Sending your print file…" for 13+ minutes. Each upload try now has a
+    time limit (`uploadTimeLimitMs`): a minute plus the file at 1 Mbit/s,
+    about 2.5 min for an 11 MB file. After three tries, the plain words.
+  - An album opened from My albums starts at its cover, not at the page
+    where the previous album was left.
+  - With photos missing, "Order this album" says so once: its answer
+    takes the place of the note already on the Preview.
+  - Left as is (owner's call): signed out, "Continue my album" still opens
+    the last account's album on the phone. This was already the case
+    before 2.0.4.
 - Left as is:
   - "Start a new album?" signed out: to say "it stays in your account", the
     app must know the latest changes reached the account. It doesn't know
