@@ -107,16 +107,16 @@ describe("the cover editor uses the website's words", () => {
     expect(W.useInk('White')).toBe('Use white');
   });
 
-  it('the photos are one row ABOVE the cover, under the tabs (#235), in the app as on the website', () => {
+  it('the photos are ABOVE the cover, under the tabs (#235), in the app (a grid) as on the website (a row)', () => {
     // The website: the tabs, the photo row, then the cover, in the step and in the dialog.
     expect(web.cover.split('{tabBar}\n          {photoStrip}\n          {preview}')).toHaveLength(2);
     expect(web.cover.split('{tabBar}\n        {photoStrip}\n        {preview}')).toHaveLength(2);
-    // The app: the same order on Design your cover, and the row before the cover on the cover step.
-    expect(app.screen.indexOf('accessibilityRole="tablist"')).toBeLessThan(app.screen.indexOf('<CoverPhotoRow'));
-    expect(app.screen.indexOf('<CoverPhotoRow')).toBeLessThan(app.screen.indexOf('<CoverStage'));
+    // The app: the same order on Design your cover, and the grid before the cover on the cover step.
+    expect(app.screen.indexOf('accessibilityRole="tablist"')).toBeLessThan(app.screen.indexOf('<CoverPhotoGrid'));
+    expect(app.screen.indexOf('<CoverPhotoGrid')).toBeLessThan(app.screen.indexOf('<CoverStage'));
     const step = read('mobile/src/app/album-cover.tsx');
-    expect(step.indexOf('<CoverPhotoRow')).toBeGreaterThan(0);
-    expect(step.indexOf('<CoverPhotoRow')).toBeLessThan(step.indexOf('testID="cover-picture"'));
+    expect(step.indexOf('<CoverPhotoGrid')).toBeGreaterThan(0);
+    expect(step.indexOf('<CoverPhotoGrid')).toBeLessThan(step.indexOf('testID="cover-picture"'));
   });
 });
 

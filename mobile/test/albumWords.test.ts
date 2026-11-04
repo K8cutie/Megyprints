@@ -95,9 +95,9 @@ describe("the app's album steps use the website's words", () => {
   });
 
   it('the cover (CoverEditor.tsx)', () => {
-    // The photos: one row above the cover (CoverPhotoRow, the website's since #235), its words the row's own.
+    // The photos: above the cover (the app's a grid, CoverPhotoGrid; the website's a row since #235), its words its own.
     expect(web.cover).toContain(WEBSITE_YOUR_PHOTOS);
-    expect(app.cover).toContain('<CoverPhotoRow');
+    expect(app.cover).toContain('<CoverPhotoGrid');
     for (const w of ['Design your cover', 'Pick 1 photo for the front cover', 'Cover title', 'e.g. The Cruz Family',
       'Too long for the front cover: part of it will be cut off in print. Shorten it', ', or make the text smaller', 'Make it fit (size ']) {
       expect(web.cover).toContain(w);

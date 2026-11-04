@@ -3,8 +3,8 @@
    the "Cover" tile before page 1 in the Edit pages strip.
 
    The FRONT cover only (the spine follows the title, the back is Megy's): the
-   website's two tabs, then (Background) the album's photos in one row you
-   swipe, best first, ABOVE the cover (CoverPhotoRow; the website's order
+   website's two tabs, then (Background) the album's photos in a grid you
+   scroll down, best first, ABOVE the cover (CoverPhotoGrid; the website's order
    since #235), then the cover as print draws it (the page renderer,
    coverMode), then the tab's controls:
      • Background: the cover's colours and "Use <colour> on every page"; with
@@ -49,7 +49,7 @@ import { ALBUM_SIZES, bgCoverFit, type AlbumPage } from '@web/pages/builder/type
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
 import { WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
 import { Button } from '../../components/Button';
-import { CoverPhotoRow } from '../../components/CoverPhotoRow';
+import { CoverPhotoGrid } from '../../components/CoverPhotoGrid';
 import { useBuilder } from '../../builder/BuilderProvider';
 import { coverPhotoId, coverPhotos } from '../../builder/albumFlow';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../../builder/screenWords';
@@ -322,7 +322,7 @@ export default function CoverScreen() {
       </View>
       {tab === 'background' && photos.length > 0 && (
         <View style={styles.photoRow}>
-          <CoverPhotoRow photos={photos} onCover={onCover} onPick={(p) => putPhotoOnCover(builder, p)} pad={space.md} />
+          <CoverPhotoGrid photos={photos} onCover={onCover} onPick={(p) => putPhotoOnCover(builder, p)} pad={space.md} rows={2.5} />
         </View>
       )}
       <View style={styles.top}>
