@@ -3591,6 +3591,10 @@ the phone after:
   Left as designed (Mother: by design): a cover with no photo is allowed (a
   title-only cover); "Pick 1 photo for the front cover" reads as a must.
   Owner's call.
+- **A shared phone** (found in my own sign-in save before round 3): another
+  account signing in gets a fresh album, and the sign-in save no longer
+  sends the old account's pages into the new account (`useAccountSave`
+  saves only the album its render shows).
 - **Test builds for a server on this PC** (a plain-http address in
   `.env.local`) may talk plain http; the Play build refuses such an address
   (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
@@ -3614,6 +3618,31 @@ the phone after:
     • The app tells you when a new version is ready
 
 (Drop the last line if 2.0.2 went out first: it is 2.0.2's.)
+
+### Known in 2.0.3 (round 3 of the testers; to be fixed in 2.0.4)
+
+The owner asked for 2.0.3 to be built from the round 2 fixes as they were,
+and round 3's findings to go into 2.0.4. Mother's round 3 on the 2.0.3 test
+build found:
+- **Opening an album from My albums can overwrite the album open before it**
+  (its pages and size become the opened album's), when the opened album's
+  photos are on this phone. The sign-in save sees the new pages while the
+  old album id is still set (`loadAlbum` waits for the photos first).
+- A shared phone: the photos one account picked stay on the phone, and
+  "Continue my album" carries them into the next account's album.
+- After opening an album, "Add the photos" lists the photos of the album
+  open before it.
+- Opening an album re-saves it and the album left behind ("Changed just now").
+- With a stuck test order, applying the tester code after the "didn't
+  finish" question leaves the question up and hides Place order.
+- Finishing a stopped order after leaving checkout sends the cover again,
+  and the pages file after it can wait about 40 s (it still goes through).
+- "Ask for photo access again" can be a dead tap when Android is slow
+  (over 0.4 s); while blocked, it comes back on every visit; a closed
+  question says "Photo access is off".
+- A double tap on "Make my album" opens the Preview at page 1, not the cover.
+- Small words: an empty frame says "Click to add"; signed out, "Start a new
+  album?" says the album is lost though it is in the account.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
