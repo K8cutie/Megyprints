@@ -42,6 +42,12 @@ const ORDERS = [
   W({ id: 'test', order_number: 'MP-2026-TEST007', status: 'pending_payment', created_at: '2026-08-01T03:00:00Z', quoted_amount: 0, amount: 0, tester_code: 'MEGYTEST' }),
   W({ id: 'other', order_number: 'MP-2026-OTHR008', status: 'paid', created_at: '2026-10-28T03:00:00Z', user_id: 'someone-else' }),
 ];
+/** Not in the list above: which orders the list shows is held there. */
+const LATER = [
+  W({ id: 'testdone', order_number: 'MP-2026-TDON009', status: 'paid', created_at: '2026-08-02T03:00:00Z', quoted_amount: 0, amount: 0, tester_code: 'MEGYTEST' }),
+  W({ id: 'noalbum', order_number: 'MP-2026-NOAL010', status: 'pending_payment', created_at: '2026-10-25T17:30:00Z', quoted_amount: 1288, album_id: null }),
+  W({ id: 'testnoalbum', order_number: 'MP-2026-TNAL011', status: 'pending_payment', created_at: '2026-08-03T03:00:00Z', quoted_amount: 0, tester_code: 'MEGYTEST', album_id: null }),
+];
 
 beforeEach(() => {
   resetOrdersFake();
@@ -217,6 +223,60 @@ describe('one order', () => {
     expect(screen.getByTestId('order-test-note').props.children).toBe('You used the tester code MEGYTEST, so nothing is charged. Thank you for testing Megy Prints!');
     expect(screen.queryByTestId('order-tracker')).toBeNull();
     expect(screen.queryByTestId('order-how-to-pay')).toBeNull();
+  });
+
+  /* The message at 3 unpaid orders says "cancel one in Your orders" (0042), and
+     nearly every tester's orders are test orders. One that stopped half-way
+     still counts, so it needs its Cancel; once its album is deleted (My albums,
+     2.0.6) checkout can't finish it either. */
+  it("a test order that didn't finish: says so, nothing to pay, and it can be cancelled", async () => {
+    await open('test');
+    expect(screen.getByText("This test order didn't finish. If you don't need it, you can cancel it.")).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-pay')).toBeNull();
+    await fireEvent.press(screen.getByTestId('order-cancel'));
+    expect(screen.getByText('Yes, cancel order MP-2026-TEST007')).toBeTruthy();
+    await fireEvent.press(screen.getByTestId('order-cancel-keep'));
+    expect(writes()).toEqual([]);
+
+    answers.rpc.cancel_my_unpaid_order = () => {
+      answers.orders = answers.orders.map((o) => (o.id === 'test' ? { ...o, status: 'cancelled' } : o));
+      return { data: true, error: null };
+    };
+    await fireEvent.press(screen.getByTestId('order-cancel'));
+    await fireEvent.press(screen.getByTestId('order-cancel-yes'));
+    expect(calls.rpcs).toEqual([{ name: 'cancel_my_unpaid_order', args: { p_order_id: 'test' } }]);
+    expect(await screen.findByText('Cancelled')).toBeTruthy();
+    expect(screen.queryByTestId('order-unfinished-test')).toBeNull();
+  });
+
+  it('a test order that finished: no Cancel', async () => {
+    answers.orders.push(...LATER.map((o) => ({ ...o })));
+    await open('testdone');
+    expect(screen.getByTestId('order-test-note')).toBeTruthy();
+    expect(screen.queryByTestId('order-unfinished-test')).toBeNull();
+    expect(screen.queryByTestId('order-cancel')).toBeNull();
+  });
+
+  describe('its album was deleted in My albums', () => {
+    beforeEach(() => { answers.orders.push(...LATER.map((o) => ({ ...o }))); });
+
+    it('the order still shows, and never promises the album is saved', async () => {
+      await open('noalbum');
+      expect(screen.getByTestId('order-pay-by').props.children).toBe('Please pay by November 2, 2026. After that this order closes by itself.');
+      await fireEvent.press(screen.getByTestId('order-pay'));
+      expect(screen.getByTestId('pay-within').props.children).toBe('Please pay by November 2, 2026. After that this order closes by itself.');
+    });
+
+    it('cancelled, it says only what is true', async () => {
+      answers.rpc.cancel_my_unpaid_order = () => {
+        answers.orders = answers.orders.map((o) => (o.id === 'testnoalbum' ? { ...o, status: 'cancelled' } : o));
+        return { data: true, error: null };
+      };
+      await open('testnoalbum');
+      await fireEvent.press(screen.getByTestId('order-cancel'));
+      await fireEvent.press(screen.getByTestId('order-cancel-yes'));
+      expect((await screen.findByTestId('order-cancelled-note')).props.children).toBe("This order was cancelled. If that's a surprise, message us.");
+    });
   });
 
   it("another account's order is not shown", async () => {

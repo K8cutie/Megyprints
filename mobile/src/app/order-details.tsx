@@ -7,7 +7,9 @@
    box, its last day to pay, the payment step (checkout's, #223: the QR, the
    order number for the note, the receipt; "I've sent" records the payment)
    and "Cancel this order", asked twice in words, as the website does
-   (cancel_my_unpaid_order, 0042: the database decides).
+   (cancel_my_unpaid_order, 0042: the database decides). A free test order
+   that didn't finish has nothing to pay, so it has only "Cancel this order":
+   it counts as unpaid, and the message at 3 unpaid orders says to cancel one.
    ══════════════════════════════════════════════════════════════════════════ */
 import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -16,7 +18,7 @@ import { Button } from '../components/Button';
 import { PaymentStep } from '../components/checkout/PaymentStep';
 import { OrderTracker } from '../components/orders/OrderTracker';
 import { useAuth } from '../lib/auth';
-import { askedToPay } from '../lib/checkout/openOrder';
+import { askedToPay, unfinishedTestOrder } from '../lib/checkout/openOrder';
 import { sitePage } from '../lib/checkout/site';
 import { cancelUnpaidOrder, type AppOrder } from '../lib/orders/myOrders';
 import {
@@ -24,6 +26,7 @@ import {
   CANCEL_FAILED,
   CANCEL_GONE,
   CANCELLED_NOTE,
+  CANCELLED_NOTE_NO_ALBUM,
   cancelYes,
   KEEP_IT,
   orderView,
@@ -31,6 +34,7 @@ import {
   payHeadline,
   testOrderNote,
   trackingLine,
+  UNFINISHED_TEST_NOTE,
 } from '../lib/orders/orderWords';
 import { useMyOrder } from '../lib/orders/useMyOrders';
 import { supabase } from '../lib/supabase';
@@ -103,6 +107,15 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
     }
   };
 
+  const cancelButtons = !askCancel ? (
+    <Button label={CANCEL_ASK} kind="plain" onPress={() => { setCancelErr(''); setAskCancel(true); }} testID="order-cancel" />
+  ) : (
+    <>
+      <Button label={cancelYes(order.order_number)} busy={cancelling} onPress={() => void cancel()} testID="order-cancel-yes" />
+      <Button label={KEEP_IT} kind="plain" onPress={() => { if (!cancelling) setAskCancel(false); }} testID="order-cancel-keep" />
+    </>
+  );
+
   return (
     <ScrollView contentContainerStyle={styles.page} testID="order-details">
       <View style={styles.top}>
@@ -118,7 +131,7 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
         <Text style={[styles.headline, track.cancelled && styles.bad]} testID="order-headline">{track.headline}</Text>
         {track.cancelled ? (
           <>
-            <Text style={styles.small} testID="order-cancelled-note">{CANCELLED_NOTE}</Text>
+            <Text style={styles.small} testID="order-cancelled-note">{order.album_id === null ? CANCELLED_NOTE_NO_ALBUM : CANCELLED_NOTE}</Text>
             <Button label="Message us" kind="plain" onPress={messageUs} testID="order-message-us" />
           </>
         ) : track.test ? (
@@ -137,14 +150,13 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
           {!!v.payBy && <Text style={styles.payText} testID="order-pay-by">{v.payBy}</Text>}
           {/* While the cancel question is open, its "Yes" is the one filled button. */}
           {!askCancel && <Button label={payButton(total)} onPress={onPay} testID="order-pay" />}
-          {!askCancel ? (
-            <Button label={CANCEL_ASK} kind="plain" onPress={() => { setCancelErr(''); setAskCancel(true); }} testID="order-cancel" />
-          ) : (
-            <>
-              <Button label={cancelYes(order.order_number)} busy={cancelling} onPress={() => void cancel()} testID="order-cancel-yes" />
-              <Button label={KEEP_IT} kind="plain" onPress={() => { if (!cancelling) setAskCancel(false); }} testID="order-cancel-keep" />
-            </>
-          )}
+          {cancelButtons}
+        </View>
+      )}
+      {unfinishedTestOrder(order) && (
+        <View style={styles.payBox} testID="order-unfinished-test">
+          <Text style={styles.payText}>{UNFINISHED_TEST_NOTE}</Text>
+          {cancelButtons}
         </View>
       )}
       {!!cancelErr && (

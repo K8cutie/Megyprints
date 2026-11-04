@@ -24,6 +24,8 @@ export interface OpenOrder {
   created_at: string;
   payment_submitted_at: string | null;
   tester_code?: string | null;
+  /** NULL once the customer has deleted the album (0002: on delete set null). */
+  album_id?: string | null;
 }
 
 /** The website's Your orders columns, plus the total the customer was asked to pay. */
@@ -60,10 +62,12 @@ export function payByOn(iso: string): string {
 }
 
 /** The line under the QR on an order already placed: the website's Orders
- *  page words (src/pages/MyOrders.tsx), with that order's own last day. */
-export function payByLine(iso: string): string {
+ *  page words (src/pages/MyOrders.tsx), with that order's own last day. An
+ *  order whose album was deleted (album_id null) makes no promise about it. */
+export function payByLine(iso: string, albumId?: string | null): string {
   const day = payByOn(iso);
-  return `${day ? `Please pay by ${day}.` : `Please pay within ${UNPAID_ORDER_DAYS} days.`} After that this order closes by itself, and your album stays saved.`;
+  const first = day ? `Please pay by ${day}.` : `Please pay within ${UNPAID_ORDER_DAYS} days.`;
+  return `${first} After that this order closes by itself${albumId === null ? '.' : ', and your album stays saved.'}`;
 }
 
 /** A free tester-code order that stopped half-way (its files or its claim

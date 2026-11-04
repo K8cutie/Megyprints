@@ -38,7 +38,7 @@ export interface PaySummary { albumLine: string; breakdown: { label: string; amo
  *  instead of making a total up. */
 export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back to your order', live = false, onPaid }: {
   amount: number | null;
-  order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at'> | null;
+  order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at' | 'album_id'> | null;
   summary?: PaySummary;
   onBack: () => void;
   backLabel?: string;
@@ -130,7 +130,7 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
         {!!payError && <Text style={styles.error} accessibilityRole="alert">{payError}</Text>}
         <Text style={[styles.tiny, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>
         {/* An order already placed: its own last day, as the website's Orders page says it. */}
-        <Text style={[styles.tiny, styles.center]} testID="pay-within">{order?.created_at ? payByLine(order.created_at) : PAY_WITHIN_MESSAGE}</Text>
+        <Text style={[styles.tiny, styles.center]} testID="pay-within">{order?.created_at ? payByLine(order.created_at, order.album_id) : PAY_WITHIN_MESSAGE}</Text>
 
         {summary && (
           <Pressable accessibilityRole="button" onPress={() => setShowSummary((v) => !v)}>
