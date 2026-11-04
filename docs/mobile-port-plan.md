@@ -3934,6 +3934,38 @@ test that failed first. Each was walked on the emulator with a real album:
   panel with 292 of room. The sheets measure their own room now, less the
   system's buttons, and a list fills the panel's height. "Add a photo" had
   the same fault and is fixed the same way.
+- **Mask, Filter and Page colour stay open (`EditorSheet` `live`).** Owner:
+  "When applying mask or filter or any edit in the picture dont let the
+  editor close". A pick applies and the sheet stays, so another can be tried;
+  the ✕ closes it. The page isn't dimmed, and the sheet takes at most 42% of
+  the height, so the page shows above it. Sideways it is the side panel as
+  before. On the emulator, upright and sideways: Fade down, then Circle, the
+  tick moves, the sheet stays.
+- **Delete an album in My albums.** Owner: "ive created so much test album",
+  "add it", "just add a warning that album deletion is permanent". Each card
+  has Delete. It asks "Delete this album?" and says it is permanent and that
+  orders stay, with Keep it and Delete album. It uses the website's own delete
+  (`useAlbumSyncWith`). Deleting the album on the phone lets the phone's copy go
+  too (`letDeletedAlbumGo`, the draft), so no save brings it back. On the
+  emulator: Keep it leaves the row; Delete album removes the row and the card;
+  the album on the phone stays gone after a wait and a restart, and Home says
+  Start Creating. An order keeps its own copy (`album_snapshot`), and
+  `album_id` goes null (0002, the only table that points at albums).
+- **An order whose album was deleted says only what is true.** "Your album is
+  still saved" and "your album stays saved" are left out when `album_id` is
+  null (`CANCELLED_NOTE_NO_ALBUM`, `payByLine`). Paying and cancelling it still
+  work.
+- **A test order that didn't finish can be cancelled (`order-unfinished-test`).**
+  Owner: "also cancelling an order". Cancel was already there for an order
+  waiting for payment, and walking it found the gap: a MEGYTEST order saves its
+  row first and is marked paid last, so closing the app in between leaves it
+  unpaid. Its page had no Pay and no Cancel, yet it counts toward the 3 unpaid
+  orders, and that message says "cancel one in Your orders". Checkout can finish
+  one only through its album, and Delete takes that way out. The database already
+  allowed the cancel; only the button was missing. On the emulator, with its
+  album and without: Keep it changes nothing, Yes gives `cancelled`, by
+  `customer`. An ordinary unpaid order cancels the same. **The website has the
+  same gap** (`MyOrders.tsx`), not changed here.
 - **Version 2.0.6, code 106.**
 
 ### Release notes 2.0.6 (draft: check against the app on upload day)
@@ -3944,8 +3976,11 @@ test that failed first. Each was walked on the emulator with a real album:
     • "Choose a layout" fits when the phone is sideways
     • A photo keeps its mask when you add a video QR
     • A quick second tap no longer opens "Add to this box"
+    • Mask and Filter stay open, so you can try each one
+    • Delete an album in My albums
+    • Cancel a test order that didn't finish
 
-293 characters.
+418 characters.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
