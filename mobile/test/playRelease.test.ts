@@ -98,15 +98,16 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.0.4', () => {
+  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.0.5', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
     // 100 (2.0.0) was built 2026-11-03 but never uploaded; 101 (2.0.1) went to Alpha 2026-11-04;
     // 102 (2.0.2) checks the tester code with the database and asks for a new version;
     // 103 (2.0.3, owner: "all the fixes make it 2.0.3") has the beta testers' fixes;
-    // 104 (2.0.4, owner: "put this latest in 2.0.4") has the fixes for what round 3 found.
-    expect(play.android.versionCode).toBe(104);
-    expect(play.version).toBe('2.0.4');
+    // 104 (2.0.4, owner: "put this latest in 2.0.4") has the fixes for what round 3 found;
+    // 105 (2.0.5) the speed work and the page-flip switch (owner: "most importantly performance issue").
+    expect(play.android.versionCode).toBe(105);
+    expect(play.version).toBe('2.0.5');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {

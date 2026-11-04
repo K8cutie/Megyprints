@@ -3787,6 +3787,82 @@ those fixes, so testers go 2.0.1 → 2.0.4 and the notes cover all three:
 
 493 characters.
 
+## 2.0.5: speed, and the page flip switch (2026-11-04, `fix/port-speed`)
+
+Owner, testing 2.0.1 on a Galaxy S25: "most importantly performance
+issue. can you do something about it", then "Turn off the page flip
+animation. It works fine on my phone but not for everyone or add a button
+to turn it off. On by default."
+
+**Measured first** on the emulator, with the 2.0.4 test build and a
+150-photo album at the S25's 12 MP (65 pages). The script is
+`scratchpad/crew/make_big_roll.py`. Figures are CPU time per thread, from
+/proc, plus timers in a throwaway build.
+- Page turn to a page drawn for the first time: ~130 ms of the JavaScript
+  thread, ~390 ms for the whole app. To a page already drawn: ~41 ms.
+- Other screens left open under the Preview add almost nothing (130 ms
+  with only Home + Preview against 140 ms with the whole wizard). So the
+  whole-app builder re-rendering every screen is not the cost.
+- Drawing a new page: photos loaded 57-187 ms (wall, mostly native), drawn
+  33-102 ms (~35 ms a photo, JS thread), JPEG 11-16 ms, file 1-2 ms. The
+  album-changed check (`localAlbumKey`) runs 6-10 ms after every turn.
+- "Change layout": 9 pictures at 20-51 ms each, ~390 ms of JS in all.
+- Home, untouched: ~26% of a CPU core, almost all drawing. The background
+  photo's slow zoom (`homeMotion` kenBurns) redraws the whole screen every
+  frame. **Owner's call, not changed:** stop that zoom on the phone, or
+  keep it.
+
+**Changed:**
+- **Pages on screen are drawn with Skia's own sampling.** PageDrawer's
+  `screen` option is used only by pageImages `drawPageImage`: the Preview,
+  the editor, the cover step and layout pictures.
+  - Chrome's sampling (sampling.ts: a halving and an older bilinear, both
+    runtime shaders) is for the print file. The phone's CPU runs those
+    shaders interpreted.
+  - The print path (`renderPrintPage`, phoneSend) and the golden tests are
+    unchanged.
+  - Test `pageImagesSpeed`: the screen draw never calls the print shaders,
+    and the print draw still does. The two look the same at screen size:
+    mean difference under 1.5 levels, under 1% of channels more than 24
+    apart.
+- **"Page flip animation" switch** (`lib/pageFlip.ts`), under the book in
+  the upright Preview.
+  - It is on by default and kept on the phone (`megy-2.0-page-flip`).
+  - Off: a tap shows the next page at once, with no leaf and no wait for
+    the leaf's pictures. A swipe turns the page at once, with no leaf
+    following the finger. Sideways too, where the switch itself is not
+    shown.
+  - Tests are in previewScreen.
+  - On the emulator: a screenshot 0.3 s after Next shows the leaf mid-turn
+    with the switch on, and the next page already there with it off.
+    "Off" survives closing the app.
+
+**After** (same album, same steps, caches cleared):
+
+| | 2.0.4 | 2.0.5 |
+|---|---|---|
+| Drawing a new page (1-3 photos), Preview | 33-102 ms | 17-43 ms |
+| Drawing a new page, editor | 35-97 ms | 21-40 ms |
+| One "Change layout" picture | 20-51 ms | 1-4 ms |
+| Page turn to a new page (JS thread) | ~130 ms | ~96 ms |
+| Opening "Change layout" (JS thread) | ~390 ms | ~130 ms |
+
+**Still there** (next, if wanted):
+- The JPEG of each drawn page (11-16 ms).
+- Photo copies at 1280 px even for small frames.
+- The album-changed check after every page turn.
+- Home's background zoom.
+
+### Release notes 2.0.5 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Pages show faster when you turn them and when you edit
+    • "Change layout" opens about three times faster
+    • New: "Page flip animation" under your album in the Preview. Turn it off and pages change at once (it is on unless you turn it off)
+
+260 characters. If 2.0.4 never went up, add the 2.0.4 lines above them
+(the "uploaded alone" list), within 500.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
