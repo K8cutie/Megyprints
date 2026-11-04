@@ -28,6 +28,7 @@ import { copyNotesMessage, missingPhotos } from '@web/lib/photoPresence';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '@web/pages/builder/types';
 import { missingOnPhoneMessage } from '../../builder/screenWords';
 import type { CheckoutAlbum, OrderAlbumRow } from './orderPayload';
+import { isNoConnection } from './sendOrder';
 
 export interface OrderInput {
   pages: AlbumPage[];
@@ -77,11 +78,14 @@ export function orderSaveError(conflict: boolean): string {
 /** lib/orderAlbum AlbumNotSavedError's words. */
 export const ALBUM_NOT_SAVED = "This album isn't saved to your account yet, so we can't order it. Open it in the builder and tap Order again. It saves on the way.";
 
+/** No connection while reading it: plain words, not the phone's error. */
+export const ALBUM_LOAD_OFFLINE = "We couldn't reach your account to get this album. Check your internet, then tap Place order again.";
+
 /** The album's row in the account, by its id (selectOrderAlbum with an id:
  *  that row or nothing, never another album). */
 export async function loadOrderAlbumRow(client: Pick<SupabaseClient, 'from'>, userId: string, albumId: string): Promise<OrderAlbumRow> {
   const { data, error } = await client.from('albums').select('*').eq('user_id', userId).eq('id', albumId).maybeSingle();
-  if (error) throw new Error(`Could not load your album: ${error.message}`);
+  if (error) throw new Error(isNoConnection(error.message) ? ALBUM_LOAD_OFFLINE : `Could not load your album: ${error.message}`);
   if (!data) throw new Error(ALBUM_NOT_SAVED);
   return data as OrderAlbumRow;
 }

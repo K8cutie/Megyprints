@@ -23,7 +23,7 @@ import { BLANK_COVER_MESSAGE, checkOrderReadiness, PLACEHOLDER_TEXT, readinessMe
 import { missingPhotos } from '@web/lib/photoPresence';
 import { SCENARIOS } from '../../tools/parity/scenarios';
 import { missingOnPhoneMessage } from '../src/builder/screenWords';
-import { checkoutAlbumFrom, loadOrderAlbumRow, orderCheck, orderSaveError, ORDER_SAVE_CONFLICT, ORDER_SAVE_FAILED } from '../src/lib/checkout/orderStart';
+import { ALBUM_LOAD_OFFLINE, checkoutAlbumFrom, loadOrderAlbumRow, orderCheck, orderSaveError, ORDER_SAVE_CONFLICT, ORDER_SAVE_FAILED } from '../src/lib/checkout/orderStart';
 import { act, builder, madeAlbum, useEditorBench } from './editorHarness';
 import { chooseCover, coverPhotoId } from '../src/builder/albumFlow';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
@@ -147,6 +147,12 @@ describe('checkout reads the album back from the account (lib/orderAlbum selectO
     await webOrderAlbum.selectOrderAlbum(fakeClient, { userId: 'user-1', albumId: 'album-7', columns: '*' }).catch((e: Error) => { webMessage = e.message; });
     expect(webMessage).toMatch(/isn't saved to your account/);
     await expect(loadOrderAlbumRow(fakeClient as never, 'user-1', 'album-7')).rejects.toThrow(webMessage);
+  });
+
+  it('no connection: plain words, not the phone\'s error (beta round 2)', async () => {
+    const offline = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'TypeError: Network request failed' } }) }) }) }) }) };
+    await expect(loadOrderAlbumRow(offline as never, 'user-1', 'album-7')).rejects.toThrow(ALBUM_LOAD_OFFLINE);
+    expect(ALBUM_LOAD_OFFLINE).toBe("We couldn't reach your account to get this album. Check your internet, then tap Place order again.");
   });
 
   it('the album checkout orders: the pages on screen, the account\'s row', async () => {

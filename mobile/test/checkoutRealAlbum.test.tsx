@@ -19,7 +19,8 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
 import path from 'node:path';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { ScrollView } from 'react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { PriceSchedule } from '@web/lib/pricing';
 import OrderScreen from '../src/app/order';
 import { fixtureCheckoutAlbum, fixturePhotos } from '../src/lib/checkout/fixtureAlbum';
@@ -387,6 +388,111 @@ describe('checkout on the album "Order this album" opened it with', () => {
     await render(<OrderScreen />);
     expect(await screen.findByTestId('order-test-album')).toBeOnTheScreen();
     expect(screen.queryByTestId('order-own-album')).toBeNull();
+  });
+});
+
+describe('beta round 2 (Mother reproduced each one on the phone)', () => {
+  async function useTesterCode() {
+    fake.rpc.check_tester_code = { data: { ok: true, code: 'MEGYTEST' }, error: null };
+    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
+    await fireEvent.press(screen.getByTestId('tester-code-apply'));
+    expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
+  }
+  /** A free test order of this album that stopped half-way (its cover sent, nothing after). */
+  const STUCK = {
+    id: 'order-9', order_number: 'MP-2026-QCFG5G4', status: 'pending_payment', amount: null, quoted_amount: 0,
+    created_at: '2026-11-04T00:30:00Z', payment_submitted_at: null, tester_code: 'MEGYTEST',
+  };
+
+  it('a free test order that stopped half-way: never "pay that order"; Place order with the code finishes THAT order', async () => {
+    fake.orderRow = STUCK;
+    await render(<OrderScreen />);
+    const box = await screen.findByTestId('order-already-open');
+    expect(box).toHaveTextContent(/This album has a test order that didn't finish: MP-2026-QCFG5G4, placed November 4\./);
+    expect(box).toHaveTextContent(/Nothing is charged for a test order\. Use your tester code and tap Place order below to finish it\./);
+    expect(box).not.toHaveTextContent(/waiting for payment|pay that order/);
+    await fillDetails();
+    await useTesterCode();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    // No "second order?" question: the same order is finished (an unfinished
+    // one counts as unpaid, and 3 unpaid orders stop new ones: 0042).
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-second-ask')).toBeNull();
+    expect(mockSend.calls).toHaveLength(1);
+    expect(mockSend.calls[0].placed).toEqual({ id: 'order-9', order_number: 'MP-2026-QCFG5G4', status: 'pending_payment' });
+  });
+
+  it('the same test order, Place order WITHOUT a code: asked first, in words that fit a test order', async () => {
+    fake.orderRow = STUCK;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-already-open');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    const ask = await screen.findByTestId('order-second-ask');
+    expect(ask).toHaveTextContent(/This album has test order MP-2026-QCFG5G4 that didn't finish\. Place a new order for it\?/);
+    expect(ask).not.toHaveTextContent(/waiting for payment/);
+    expect(mockSend.calls).toHaveLength(0);
+  });
+
+  it('signed in on Your order while the album was going to the account: Place order reads it again and goes on', async () => {
+    // The read right at sign-in found nothing yet (the album was still being saved).
+    fake.albumRow = null;
+    const s = await render(<OrderScreen />);
+    expect(await screen.findByText(ALBUM_NOT_SAVED)).toBeOnTheScreen();
+    fake.albumRow = ROW;
+    await fillDetails();
+    await useTesterCode();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(1);
+    await s.unmount();
+  });
+
+  it('the builder\'s save landing reads the account\'s copy again: the "isn\'t saved" note goes by itself', async () => {
+    fake.albumRow = null;
+    const s = await render(<OrderScreen />);
+    expect(await screen.findByTestId('order-not-saved')).toBeOnTheScreen();
+    fake.albumRow = ROW;
+    mockAlbum.builder = { ...ownAlbum, lastSavedAt: new Date(Date.UTC(2026, 10, 4, 0, 44)) };
+    await s.rerender(<OrderScreen />);
+    await waitFor(() => expect(screen.queryByTestId('order-not-saved')).toBeNull());
+  });
+
+  it('a send that stopped: the screen goes down to its words and Place order (they were below the fold)', async () => {
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+      throw new Error("We couldn't send your album's pages. Your order is saved: check your internet, then tap Place order again.");
+    };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText(/We couldn't send your album's pages/)).toBeOnTheScreen();
+    const toEnd = (ScrollView as unknown as { prototype: { scrollToEnd: jest.Mock } }).prototype.scrollToEnd;
+    toEnd.mockClear();
+    await fireEvent(screen.getByTestId('order-form'), 'contentSizeChange', 400, 3000);
+    expect(toEnd).toHaveBeenCalledTimes(1);
+    // Only once: typing afterwards does not jump the page down again.
+    await fireEvent(screen.getByTestId('order-form'), 'contentSizeChange', 400, 3100);
+    expect(toEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('tester code signed out: "Sign in first" has its Sign in button; signed in, the old words go and the code stays typed', async () => {
+    mockAuth.session = null;
+    const s = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
+    await fireEvent.press(screen.getByTestId('tester-code-apply'));
+    expect(await screen.findByText('Sign in first, then type the code.')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('tester-code-sign-in'));
+    expect(mockNav.push).toHaveBeenCalledWith({ pathname: '/sign-in', params: { then: 'back' } });
+    mockAuth.session = { user: { id: 'user-1' } };
+    await s.rerender(<OrderScreen />);
+    expect(screen.queryByText('Sign in first, then type the code.')).toBeNull();
+    expect(screen.queryByTestId('tester-code-sign-in')).toBeNull();
+    expect(screen.getByTestId('tester-code-input').props.value).toBe('MEGYTEST');
   });
 });
 

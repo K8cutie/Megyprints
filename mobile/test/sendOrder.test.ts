@@ -29,7 +29,7 @@ import { placeOrderPlan, type OrderAlbumRow, type PlanInput } from '../src/lib/c
 import { paymentSubmitPlan } from '../src/lib/checkout/payment';
 import { TesterCodeGoneError } from '../src/lib/checkout/testerCode';
 import {
-  COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
+  COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, ORDER_OFFLINE, PAGES_SEND_FAILED, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
   type ClipSender, type PlacedOrder, type SendDeps, type SendStep,
 } from '../src/lib/checkout/sendOrder';
 import { createOnlyUpload, isAlreadyExists } from '../src/lib/checkout/storage';
@@ -177,6 +177,24 @@ describe('a retry, and files already sent', () => {
     expect(rec.uploads.map((u) => u.path)).toEqual(['order-1-cover.pdf', 'order-1.pdf']);
   });
 
+  it('Place order again after the pages failed: the cover sent on the first try is not sent (nor made) again', async () => {
+    // Beta round 2 (Mother): the cover sent again answered 409 at once, and
+    // the pages file after it, on the same connection, got 502 every time.
+    const sent = new Set<string>();
+    let pagesFail = true;
+    const log = (path: string) => { rec.uploads.push({ bucket: 'print-pdfs', path, opts: {} }); };
+    const first = deps({ sent, upload: async (_b, path) => { log(path); return path === 'order-1.pdf' && pagesFail ? { message: 'reset' } : null; } });
+    await expect(sendOrder(placeOrderPlan(input()), first)).rejects.toThrow(PAGES_SEND_FAILED);
+    expect([...sent]).toEqual(['order-1-cover.pdf']);
+    rec.uploads = [];
+    pagesFail = false;
+    const again = deps({ sent, upload: async (_b, path) => { log(path); return null; } });
+    await sendOrder(placeOrderPlan(input()), again, { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+    expect(rec.uploads.map((u) => u.path)).toEqual(['order-1.pdf']);
+    expect(again.made).toEqual(['pages']);
+    expect([...sent].sort()).toEqual(['order-1-cover.pdf', 'order-1.pdf']);
+  });
+
   it('a file already in the bucket (an earlier try) counts as sent', async () => {
     const d = deps({ upload: async () => null });
     await expect(sendOrder(placeOrderPlan(input()), d, { id: 'order-1', order_number: 'X', status: 'pending_payment' })).resolves.toBeTruthy();
@@ -202,11 +220,32 @@ describe('when something fails: the website\'s words', () => {
     expect(COVER_MAKE_FAILED).toBe("We couldn't make your album's cover on this phone. Your order is saved: close your other apps, then tap Place order again. If it keeps happening, message us.");
   });
 
-  it('the pages file that didn\'t go up: the website\'s words, nothing after it', async () => {
-    const d = deps({ upload: async (_b, path) => (path === 'order-1.pdf' ? { message: 'timeout' } : null) });
-    await expect(sendOrder(placeOrderPlan(input({ testerCode: 'MEGYTEST' })), d)).rejects.toThrow('Print file upload failed: timeout');
+  it('the pages file that didn\'t go up: tried 3 times, the same file (made once), then plain words, nothing after it', async () => {
+    let tries = 0;
+    const d = deps({ upload: async (_b, path) => { if (path === 'order-1.pdf') { tries++; return { message: 'An invalid response was received from the upstream server' }; } return null; } });
+    await expect(sendOrder(placeOrderPlan(input({ testerCode: 'MEGYTEST' })), d)).rejects.toThrow(PAGES_SEND_FAILED);
+    expect(tries).toBe(3);
+    expect(d.made).toEqual(['cover', 'pages']);
+    expect(d.waits).toEqual([1500, 4000]);
     expect(rec.upserts).toHaveLength(0);
     expect(rec.rpcs).toHaveLength(0);
+    expect(PAGES_SEND_FAILED).toBe("We couldn't send your album's pages. Your order is saved: check your internet, then tap Place order again.");
+  });
+
+  it('the pages file that went up on its second try: the order goes on', async () => {
+    let tries = 0;
+    const d = deps({ upload: async (_b, path) => (path === 'order-1.pdf' && ++tries === 1 ? { message: 'reset' } : null) });
+    await expect(sendOrder(placeOrderPlan(input({ testerCode: 'MEGYTEST' })), d)).resolves.toMatchObject({ paidByTester: true });
+    expect(tries).toBe(2);
+    expect(d.made).toEqual(['cover', 'pages']);
+  });
+
+  it('no connection when the order is placed: plain words, not the phone\'s error', async () => {
+    fake.insertError = { message: 'Error: fetch failed: java.net.ConnectException: Failed to connect to /10.0.2.2:59321' };
+    await expect(sendOrder(placeOrderPlan(input()), deps())).rejects.toThrow(ORDER_OFFLINE);
+    fake.insertError = { message: 'TypeError: Network request failed' };
+    await expect(sendOrder(placeOrderPlan(input()), deps())).rejects.toThrow(ORDER_OFFLINE);
+    expect(ORDER_OFFLINE).toBe("We couldn't reach Megy Prints. Check your internet, then tap Place order again.");
   });
 
   it('three unpaid orders already, and a tester code that stopped: the website\'s errors, nothing sent', async () => {
