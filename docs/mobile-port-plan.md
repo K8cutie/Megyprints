@@ -3554,6 +3554,43 @@ the phone after:
   "Opening…"; a failed read stays on My albums and says to check the
   phone is online (`src/app/albums.tsx`). Photos that aren't on this phone
   show the missing-photos note the editor already has.
+- **Round 2: all six testers reached checkout** (round 1: none). Mother
+  checked the round-1 fixes on the phone (all fixed; the one regression is
+  the sign-out item above) and reproduced ten more, each fixed with a test
+  that failed first:
+  - Signing in from Home with an album made signed out: My albums said "No
+    albums yet". The save at sign-in lived only in the Preview; it is the
+    whole app's now (`accountSave.useAccountSave` in `BuilderProvider`), and
+    My albums reads the list again when a save lands.
+  - Place order again after a failed send could never finish: the cover was
+    sent again (409 at once, before its bytes were read) and the pages file
+    after it on the same connection got 502 every time. A file a try sent is
+    not made or sent again (`sendOrder` `sent`), the pages file gets 3 tries
+    like the cover, and the form opens at the words under Place order (they
+    were below the fold). No connection says so in plain words.
+  - Signed in on Your order: the first read of the album came before its
+    save, and "isn't saved to your account" stayed for good. It is read
+    again when the save lands, and Place order reads it again and goes on.
+  - A free test order that stopped half-way said "To finish it, pay that
+    order" (nothing to pay). It says it didn't finish, and Place order with
+    the code finishes that same order (an unfinished one counts toward the 3
+    unpaid orders, 0042). The website has the same words; not checked there.
+  - Place order waited for Android's notification question: Home while it
+    was up held the order until you came back. The order goes on now.
+  - "Sign in first" by the tester code has its Sign in button.
+  - A double tap on Next skipped Album size (the second tap hit the next
+    screen's Next as it slid in). Each step's way forward goes once per
+    visit, and a screen just on top ignores it for 0.5 s (`useOncePerVisit`).
+  - Closing Android's photo question without answering left "Photo access
+    is off" for good (Expo saves it as blocked). It still offers to ask
+    again, until Android answers at once without asking.
+  - "Add the 50 photos you picked?" showed a blank gap (an empty Android
+    message): it has a line. The cover row said "best ones first" with no
+    photo check in the app: it says what it is. "Replace photo" opened a
+    sheet titled "Add a photo": it says Replace photo.
+  Left as designed (Mother: by design): a cover with no photo is allowed (a
+  title-only cover); "Pick 1 photo for the front cover" reads as a must.
+  Owner's call.
 - **Test builds for a server on this PC** (a plain-http address in
   `.env.local`) may talk plain http; the Play build refuses such an address
   (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
@@ -3570,6 +3607,9 @@ the phone after:
     • The photo picker asks before dropping photos you picked
     • Your order says clearly how long your videos stay live
     • Tap an album in My albums to open it
+    • Albums made before you sign in now show in My albums
+    • Place order again finishes an order that stopped
+    • A double tap on Next no longer skips a step
     Also new:
     • The app tells you when a new version is ready
 
