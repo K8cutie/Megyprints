@@ -28,6 +28,7 @@ import type { PhotoHeader } from '../src/builder/appPhotos';
 import { chooseCover, makeAlbum, nameAlbum, occasionOf, syncPhotos } from '../src/builder/albumFlow';
 import { addPhotos, emptyDraft, type DraftPhoto } from '../src/lib/photoDraft';
 import { useAccountSave } from '../src/builder/accountSave';
+import { useDraftFollowsAlbum } from '../src/lib/draftFollowsAlbum';
 
 type Row = Record<string, unknown>;
 
@@ -184,9 +185,12 @@ describe('the album on the phone', () => {
 describe('signing in saves the album on the phone (accountSave.useAccountSave), never into another account', () => {
   /** The app's builder with the whole app's sign-in save (BuilderProvider), signed in as `who`. */
   const who: { id: string | null } = { id: null };
+  /** What the picked photos became each time the album on the phone changed (BuilderProvider). */
+  const picked: DraftPhoto[][] = [];
   function SignedInProbe({ name, platform }: { name: string; platform: AppPlatform }) {
     const b = useBuilderState();
     useAccountSave(b, platform.deviceStore, !!b.user);
+    useDraftFollowsAlbum(b.getAlbumId, b.isLoadingCloud, b.uploadedPhotos, (d) => { picked.push(d); }, (id) => platform.photoStore.records().find((r) => r.id === id)?.uri);
     useEffect(() => { builders[name] = b; });
     return null;
   }
@@ -254,6 +258,8 @@ describe('signing in saves the album on the phone (accountSave.useAccountSave), 
     await settle();
 
     expect(b().getAlbumId()).toBe(firstId);
+    // The picked photos are the opened album's own (here the same phone photos), once.
+    expect(picked.at(-1)!.map((p) => p.name).sort()).toEqual(b().uploadedPhotos.map((p) => p.name).sort());
     // The second album's row still holds its own pages and size.
     const after = rowOf(secondId);
     expect(after.pages).toEqual(second.pages);
@@ -295,9 +301,12 @@ describe('signing in saves the album on the phone (accountSave.useAccountSave), 
     const { b, make, signIn } = await phoneFor2(table, log);
     await make();
     expect(table.map((r) => r.user_id)).toEqual(['user-a']);
+    picked.length = 0;
     await signIn(null);
     await signIn('user-b');
     expect(table.filter((r) => r.user_id === 'user-b')).toEqual([]);
+    // The photos A picked are not B's picked photos either ("Continue my album" carried them, round 3).
+    expect(picked).toEqual([[]]);
     // B has a fresh album: blank pages, none of A's photos or title.
     expect(b().albumTitle).not.toBe(sc.title);
     expect(b().albumPages.some((p) => (p.slotFills ?? []).some((f) => f != null))).toBe(false);
