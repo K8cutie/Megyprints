@@ -1,37 +1,50 @@
 /* Pick photos without access yet: the way in (Android's question, or
    Files), and what to do when it was not allowed.
 
-   "Off" (Expo says Android won't ask again) still offers to ask: closing
-   Android's question without an answer (a tap outside it, or Back) is saved
-   by Expo as "blocked", though Android recorded nothing and would ask again
-   (beta round 2, Mother). When Android really won't, its answer comes back
-   at once with no question shown: then that button goes, and Settings is
-   the way. */
-import { useState } from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+   Expo's "off" (canAskAgain false) can't tell a real block from Android's
+   question closed without an answer (a tap outside it, or Back): Expo saves
+   both as "blocked", though after a closed question Android recorded
+   nothing and would ask again (beta round 2, Mother). So "off" says "not
+   allowed" and still offers to ask. Whether Android then shows its question
+   is seen by the app stepping aside for it (AppState leaves "active"), not
+   by how fast the answer came: a cold phone answered "won't ask" in 556 ms,
+   past the 0.4 s line this used, and the button stayed as a dead tap (beta
+   round 3). When Android answers with no question, it won't ask again: the
+   button goes, the screen says so, and the phone remembers it (it came back
+   on every visit) until access changes. Settings and Files are the ways. */
+import { useEffect, useState } from 'react';
+import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALLOW_PHOTOS, ASK_LINE, FILES, FILES_INSTEAD, FILES_WORKS, SETTINGS_HOW } from '../lib/pickWords';
 import { colors, space } from '../lib/theme';
 import { Button } from './Button';
 
-/** Faster than anyone answers Android's question: it was not shown. */
-export const NO_QUESTION_MS = 400;
+export const WONT_ASK_LINE = 'Your phone will not ask again.';
+
+/** Android answered "ask again" with no question, while access is off. */
+let wontAskKnown = false;
+/** Access changed (or a test starts): Android may ask again. */
+export function forgetWontAsk(): void { wontAskKnown = false; }
 
 export function AskForPhotos({ access, onAsk, onFiles }: { access: { canAskAgain: boolean; refused: boolean }; onAsk: () => Promise<void>; onFiles: () => Promise<void> }) {
-  const off = !access.canAskAgain;
-  const refused = access.refused && !off;
-  // Asked again while off, and Android answered without asking.
-  const [wontAsk, setWontAsk] = useState(false);
+  const blocked = !access.canAskAgain;
+  const [wontAsk, setWontAsk] = useState(() => blocked && wontAskKnown);
+  useEffect(() => { if (!blocked) forgetWontAsk(); }, [blocked]);
+  const off = blocked && wontAsk;
+  const refused = (access.refused || blocked) && !off;
   const askAgain = async () => {
-    const asked = Date.now();
-    await onAsk();
-    if (off && Date.now() - asked < NO_QUESTION_MS) setWontAsk(true);
+    // Android's question puts the app in the background while it shows.
+    let asked = false;
+    const sub = AppState.addEventListener('change', (s) => { if (s !== 'active') asked = true; });
+    try { await onAsk(); } finally { sub.remove(); }
+    if (blocked && !asked) { wontAskKnown = true; setWontAsk(true); }
   };
   return (
     <SafeAreaView edges={['bottom']} style={styles.ask}>
       <View style={styles.askText}>
         <Text style={styles.heading}>{off ? 'Photo access is off' : refused ? 'Photo access was not allowed' : 'Pick photos from your phone'}</Text>
         <Text style={styles.body}>{ASK_LINE}</Text>
+        {off && <Text style={styles.body}>{WONT_ASK_LINE}</Text>}
         {off && <Text style={styles.body}>{SETTINGS_HOW}</Text>}
         <Text style={styles.small}>{FILES_WORKS}</Text>
       </View>
@@ -39,8 +52,8 @@ export function AskForPhotos({ access, onAsk, onFiles }: { access: { canAskAgain
         {off || refused ? (
           <>
             <Button label={FILES} onPress={() => { void onFiles(); }} testID="files-main" />
-            {!(off && wontAsk) && <Button label="Ask for photo access again" kind="plain" onPress={() => { void askAgain(); }} testID="ask-again" />}
-            {off && <Button label="Open Settings" kind="plain" onPress={() => { void Linking.openSettings(); }} testID="open-settings" />}
+            {!off && <Button label="Ask for photo access again" kind="plain" onPress={() => { void askAgain(); }} testID="ask-again" />}
+            {blocked && <Button label="Open Settings" kind="plain" onPress={() => { void Linking.openSettings(); }} testID="open-settings" />}
           </>
         ) : (
           <>
