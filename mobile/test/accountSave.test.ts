@@ -286,6 +286,26 @@ describe('signing in saves the album on the phone (accountSave.useAccountSave), 
     expect(rowOf(firstId).title).toBe('First album, renamed');
   }, 120_000);
 
+  it('the album on the phone deleted from My albums, with a change not saved yet: it never comes back (owner, 2026-11-05)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make } = await phoneFor2(table, log);
+    await make();
+    const id = b().getAlbumId()!;
+    expect(table.map((r) => r.id)).toEqual([id]);
+    await act(async () => { b().setAlbumTitle('Renamed, not saved yet'); });
+    // What My albums does (albums.tsx): the row goes, then the phone lets it go.
+    table.splice(0, table.length);
+    await act(async () => { b().letDeletedAlbumGo(); });
+    await settle();
+    await settle();
+    expect(table).toEqual([]);
+    expect(b().getAlbumId()).not.toBe(id);
+    expect(b().cloudGone).toBe(false);
+    expect(b().albumTitle).toBe('');
+  }, 120_000);
+
   it('opening another album (My albums) never saves its pages into the album that was on the phone (round 3)', async () => {
     const table: Row[] = [];
     const log: string[] = [];

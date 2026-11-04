@@ -24,8 +24,9 @@ const mockCloud: {
 
 jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => { mockCloud.steps.push(`push ${String(a[0])}`); mockNav.push(...a); } }, Redirect: () => null }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: { user: { id: 'user-1' } }, loading: false }) }));
+jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ clear: () => {} }) }));
 jest.mock('../src/lib/useMyAlbums', () => ({
-  useMyAlbums: () => ({ albums: mockList.albums, loading: false, failed: false, retrying: false, retry: jest.fn() }),
+  useMyAlbums: () => ({ albums: mockList.albums, loading: false, failed: false, retrying: false, retry: jest.fn(), remove: jest.fn() }),
 }));
 // The website's builder, as far as opening an album goes: loadAlbum reads the
 // row and puts it on screen (getAlbumId is its albumIdRef); a failed read
