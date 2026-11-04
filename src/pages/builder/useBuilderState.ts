@@ -211,12 +211,18 @@ function asMemoryBadge(before: AlbumPage, relaid: AlbumPage, memory: QrFill, tem
   };
 }
 
-/** A memory page's photo covers the whole sheet: no Studio-moved frame and no
- *  mask (both are kept by slot number, and every renderer applies them to the
- *  QR slot too — a moved frame printed the QR as a big square mid-page). The
- *  photo keeps its filter when it stays the same photo (`samePhoto`). */
+/** A memory page's photo fills its frame: no Studio-moved frame (kept by slot
+ *  number, and every renderer applies it to the QR slot too — a moved frame
+ *  printed the QR as a big square mid-page). When it stays the same photo
+ *  (`samePhoto`) it keeps its filter and its mask, the photo's slot only, so
+ *  none lands on the QR's (owner, 2026-11-04: "i added a mask on a picture then
+ *  i added the QR the mask disappeared, and you need to re apply the mask"). */
 export function fullBleedPhoto(page: AlbumPage, samePhoto: boolean): Pick<AlbumPage, 'slotGeometries' | 'slotMasks' | 'slotLooks'> {
-  return { slotGeometries: [], slotMasks: [], slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [] };
+  return {
+    slotGeometries: [],
+    slotMasks: samePhoto && page.slotMasks?.[0] ? [page.slotMasks[0]] : [],
+    slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [],
+  };
 }
 
 /* The page's dominant photo ratio (the most common ratio among the photos
@@ -2726,8 +2732,8 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
-        // The photo goes full bleed under its memory: a mask or a moved frame
-        // on this single would make the memory page something else.
+        // The photo fills its frame under its memory (a moved frame would make
+        // the memory page something else); its filter and mask stay.
         ...fullBleedPhoto(p, true),
         // Drop any theme decorative corners — they sit in all four corners and
         // would overlay (and in print obscure) the QR chip.
