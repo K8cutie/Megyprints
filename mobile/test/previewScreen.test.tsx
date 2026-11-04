@@ -42,6 +42,8 @@ const mockSeen = {
   conflict: null as { updatedAt: string } | null,
   /** The album's photos are not on this phone (opened from My albums on another phone). */
   photosGone: false,
+  /** What the app keeps on the phone (the page-flip switch). */
+  store: new Map<string, string>(),
 };
 /** The album's photos as the phone finds them: none, while photosGone (one list per album's list). */
 const goneLists = new WeakMap<object, unknown[]>();
@@ -85,7 +87,8 @@ jest.mock('../src/builder/BuilderProvider', () => ({
       get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict
         : k === 'uploadedPhotos' && mockSeen.photosGone ? goneFrom(t.uploadedPhotos) : t[k]),
     });
-    return { builder, platform: { deviceStore: { getItem: () => null, setItem: () => {} }, textMeasurer: () => null }, text: null };
+    const deviceStore = { getItem: (k: string) => mockSeen.store.get(k) ?? null, setItem: (k: string, v: string) => { mockSeen.store.set(k, v); } };
+    return { builder, platform: { deviceStore, textMeasurer: () => null }, text: null };
   },
 }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockSeen.session }) }));
@@ -114,6 +117,7 @@ import { BOOK_DRESS_X, sidewaysBook, uprightBook, UPRIGHT_EDGE } from '../src/bu
 import { edgeThickness } from '../src/builder/bookLook';
 import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
 import { ARRIVING_MS } from '../src/lib/useOncePerVisit';
+import { PAGE_FLIP_KEY, PAGE_FLIP_LABEL } from '../src/lib/pageFlip';
 const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
 const DEFAULT = 0;
@@ -211,6 +215,7 @@ beforeEach(() => {
   mockSeen.session = null;
   mockSeen.save = jest.fn(async () => true);
   mockSeen.conflict = null;
+  mockSeen.store.clear();
   setScreen(UPRIGHT, UPRIGHT_INSETS);
 });
 afterEach(async () => {
@@ -787,3 +792,59 @@ async function swipe(dx: number) {
   });
   await refresh();
 }
+
+describe('the page flip can be turned off (owner, 2026-11-04: "add a button to turn it off. On by default")', () => {
+  it('on by default: the switch says On, and Next turns the leaf over', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    expect(textOf('preview-page-flip')).toBe(`${PAGE_FLIP_LABEL}On`);
+    const land = holdTurns();
+    await press('preview-next');
+    expect(all('preview-page-turn')).toHaveLength(1);
+    await land();
+  });
+
+  it('off: Next shows the next page at once, with no leaf turning, and the phone remembers it', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await press('preview-page-flip');
+    expect(textOf('preview-page-flip')).toBe(`${PAGE_FLIP_LABEL}Off`);
+    const land = holdTurns();
+    await press('preview-next'); // the cover opens
+    expect(all('preview-page-turn')).toHaveLength(0);
+    await press('preview-next');
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-caption')).toMatch(/^Page 2 of \d+$/);
+    await land();
+    // Another visit to the Preview: still off.
+    await act(async () => { screen!.unmount(); });
+    await open();
+    expect(textOf('preview-page-flip')).toBe(`${PAGE_FLIP_LABEL}Off`);
+    // On again: the leaf turns again.
+    await press('preview-page-flip');
+    const land2 = holdTurns();
+    await press('preview-next');
+    expect(all('preview-page-turn')).toHaveLength(1);
+    await land2();
+  });
+
+  it('off: a finger swipe turns the page at once, with no leaf following the finger (on its side too)', async () => {
+    mockSeen.store.set(PAGE_FLIP_KEY, 'off');
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await turn(TURNED, TURNED_INSETS);
+    const land = holdTurns();
+    await press('preview-next');
+    await press('preview-next');
+    const total = builder().albumPages.length;
+    expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
+    const up = await finger([-20, -100], { lift: false });
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
+    await up();
+    await refresh();
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-counter')).toBe(`4-5 / ${total}`);
+    await land();
+  });
+});
