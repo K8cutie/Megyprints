@@ -23,13 +23,17 @@ export function leavePicksTitle(n: number): string {
   return `Add the ${formatCount(n)} ${photoWord(n)} you picked?`;
 }
 
+/** The line under it. Never none: Android draws an empty message as a blank
+ *  gap between the title and the buttons (beta round 2). */
+export const LEAVE_PICKS_LINE = 'They are not in your album yet.';
+
 type Ask = (title: string, message: string | undefined, buttons: AlertButton[], options: { cancelable: boolean }) => void;
 
 /** Back was pressed in the picker. True when it asked (Back held until an
  *  answer); false when nothing is picked and Back may go back. */
 export function askBeforeLeavingPicks(picked: number, then: { leave: () => void; add: () => void }, ask: Ask = Alert.alert): boolean {
   if (picked <= 0) return false;
-  ask(leavePicksTitle(picked), undefined, [
+  ask(leavePicksTitle(picked), LEAVE_PICKS_LINE, [
     { text: LEAVE_THEM_OUT, onPress: then.leave },
     { text: addPhotosLabel(picked), onPress: then.add },
   ], { cancelable: true });

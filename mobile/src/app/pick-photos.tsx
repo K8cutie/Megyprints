@@ -16,6 +16,7 @@ import { ActivityIndicator, Alert, Linking, Pressable, StyleSheet, Text, useWind
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { photoWord } from '@web/pages/builder/albumMinimum';
 import { releasePickedFiles } from '../../modules/photo-files';
+import { AskForPhotos } from '../components/AskForPhotos';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useDraft } from '../lib/draftStore';
@@ -24,7 +25,7 @@ import { addPhotosLabel, askBeforeLeavingPicks } from '../lib/pickLeave';
 import { photosForAlbum, type GalleryPhoto } from '../lib/gallery';
 import { formatCount, gridRows, groupByDay, type Day, type GridRow } from '../lib/photoDays';
 import { idsInAlbum, pickerProgress } from '../lib/photoDraft';
-import { ALLOW_PHOTOS, ALREADY_IN, ASK_LINE, CHOOSE_MORE, FILES, FILES_INSTEAD, FILES_WORKS, LIMITED_HOW, LIMITED_TITLE, SETTINGS_HOW, TAP_TO_PICK, ALL_IN_ALBUM } from '../lib/pickWords';
+import { ALREADY_IN, CHOOSE_MORE, FILES, LIMITED_HOW, LIMITED_TITLE, TAP_TO_PICK, ALL_IN_ALBUM } from '../lib/pickWords';
 import { allPicked, countSelected, everythingSelected, groupState, isSelected, keepOnly, nothingSelected, photosToAdd, setMany, toggle, type Selection } from '../lib/photoSelection';
 import { colors, space } from '../lib/theme';
 import { useGallery } from '../lib/useGallery';
@@ -227,38 +228,6 @@ export default function PickPhotos() {
 
 /* ── Asking for photo access, in plain words, with Files as the way round ── */
 
-function AskForPhotos({ access, onAsk, onFiles }: { access: { canAskAgain: boolean; refused: boolean }; onAsk: () => Promise<void>; onFiles: () => Promise<void> }) {
-  const off = !access.canAskAgain;
-  const refused = access.refused && !off;
-  return (
-    <SafeAreaView edges={['bottom']} style={styles.ask}>
-      <View style={styles.askText}>
-        <Text style={styles.heading}>{off ? 'Photo access is off' : refused ? 'Photo access was not allowed' : 'Pick photos from your phone'}</Text>
-        <Text style={styles.body}>{ASK_LINE}</Text>
-        {off && <Text style={styles.body}>{SETTINGS_HOW}</Text>}
-        <Text style={styles.small}>{FILES_WORKS}</Text>
-      </View>
-      <View style={styles.askButtons}>
-        {off || refused ? (
-          <>
-            <Button label={FILES} onPress={() => { void onFiles(); }} testID="files-main" />
-            {off ? (
-              <Button label="Open Settings" kind="plain" onPress={() => { void Linking.openSettings(); }} testID="open-settings" />
-            ) : (
-              <Button label="Ask for photo access again" kind="plain" onPress={() => { void onAsk(); }} testID="ask-again" />
-            )}
-          </>
-        ) : (
-          <>
-            <Button label={ALLOW_PHOTOS} onPress={() => { void onAsk(); }} testID="allow-photos" />
-            <Button label={FILES_INSTEAD} kind="plain" onPress={() => { void onFiles(); }} testID="files-instead" />
-          </>
-        )}
-      </View>
-    </SafeAreaView>
-  );
-}
-
 /* ── Grid rows ─────────────────────────────────────────────────────────── */
 
 const DayHeading = memo(function DayHeading({ day, state, allInAlbum, onToggle }: {
@@ -352,9 +321,6 @@ const styles = StyleSheet.create({
   small: { fontSize: 15, lineHeight: 21, color: colors.muted, textAlign: 'center' },
   muted: { fontSize: 16, lineHeight: 22, color: colors.muted, textAlign: 'center' },
   wide: { alignSelf: 'stretch', marginTop: space.sm },
-  ask: { flex: 1, backgroundColor: colors.background, padding: space.lg, justifyContent: 'space-between' },
-  askText: { flex: 1, justifyContent: 'center', gap: space.md },
-  askButtons: { gap: space.md, paddingBottom: space.md },
   listPad: { paddingBottom: space.md },
   header: { padding: space.md, gap: space.sm },
   limited: { backgroundColor: '#FBEDE6', borderRadius: 14, borderWidth: 1, borderColor: '#EBC9B8', padding: space.md, gap: space.sm },

@@ -15,8 +15,14 @@ export const FRONT_COVER = 'Front cover';
 /** CoverEditor.tsx: the two tabs. */
 export const TABS = { background: 'Background', text: 'Text' } as const;
 
-/** CoverEditor.tsx Background tab: over the one row of photos (no "Show all" since #235). */
-export const YOUR_PHOTOS = 'Your photos, best ones first. Tap one.';
+/** CoverEditor.tsx Background tab: over the one row of photos (no "Show all"
+ *  since #235). "Best ones first" is the website's photo check's order. */
+export const WEBSITE_YOUR_PHOTOS = 'Your photos, best ones first. Tap one.';
+/** APP: the app has no photo check yet (appPlatform.ts photoCheck), so the
+ *  row is in the album's order, and its line promised a ranking it never
+ *  had (beta round 2). Once the check is on, it takes the website's words
+ *  again (test/editorCover.test.ts fails first). */
+export const YOUR_PHOTOS = 'Your photos. Tap one for the cover.';
 export const COLOUR = 'Colour';
 export const ZOOM = 'Zoom';
 export const RESET = 'Reset';

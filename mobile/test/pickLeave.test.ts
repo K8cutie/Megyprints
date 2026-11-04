@@ -21,6 +21,9 @@ describe('Back with photos picked', () => {
     expect(askBeforeLeavingPicks(50, { leave, add }, ask)).toBe(true);
     expect(asked).toHaveLength(1);
     expect(asked[0].title).toBe('Add the 50 photos you picked?');
+    // A line under the title, never none: Android draws an empty message as a
+    // blank gap (beta round 2, Mother: 126 px of white between title and buttons).
+    expect(asked[0].message).toBe('They are not in your album yet.');
     expect(asked[0].buttons.map((b) => b.text)).toEqual(['Leave them out', 'Add 50 photos']);
     // Tapping outside the question (or Back on it) stays in the picker, picks kept.
     expect(asked[0].options.cancelable).toBe(true);

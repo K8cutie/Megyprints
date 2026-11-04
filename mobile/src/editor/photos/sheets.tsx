@@ -21,7 +21,7 @@ import { addPageAfter, canDeletePage, deleteThisPage, photoTags, pickLook, pickM
 import { pickFromPhone } from './pickFromPhone';
 import {
   ADD_A_PHOTO, ADD_PAGE, ADD_PAGE_DESC, CANT_DELETE_PAGE, DELETE_PAGE_DESC, deletePageLabel, FILTER, MASK, MASK_HINT,
-  NO_PHOTOS_YET, ORIGINAL, PAGES_TITLE, UPLOAD_MORE,
+  NO_PHOTOS_YET, ORIGINAL, PAGES_TITLE, REPLACE_PHOTO, UPLOAD_MORE,
 } from './words';
 
 export const PICK_SHEET = 'photos:pick';
@@ -38,8 +38,11 @@ export function PickPhotoSheet({ ctx, params, close }: SheetProps<PickTarget>) {
   const cell = Math.floor((width - space.md * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
   const photos = ctx.builder.uploadedPhotos;
   const tags = photoTags(ctx);
+  // A frame that has a photo (its "Replace photo") says so: the sheet said
+  // "Add a photo" for both (beta round 2).
+  const replacing = params.kind === 'slot' && ctx.page.slotFills?.[params.index] != null;
   return (
-    <EditorSheet title={ADD_A_PHOTO} onClose={close} testID="photos-pick-sheet">
+    <EditorSheet title={replacing ? REPLACE_PHOTO : ADD_A_PHOTO} onClose={close} testID="photos-pick-sheet">
       {/* Running out of photos is found HERE, so the way to more is here too (MobileReview). */}
       <Pressable accessibilityRole="button" accessibilityLabel={UPLOAD_MORE} testID="photos-pick-upload"
         onPress={() => { close(); pickFromPhone({ id: PICK_SHEET, params }); }}
