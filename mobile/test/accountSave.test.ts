@@ -200,12 +200,15 @@ describe('signing in saves the album on the phone (accountSave.useAccountSave), 
     const gate: { wait: Promise<void> | null } = { wait: null };
     const onPhone = phoneFor(sc);
     const inspect = async (uris: string[]) => { if (gate.wait) await gate.wait; return onPhone(uris); };
-    const platform = createAppPlatform({
-      deviceStore: fileKeyValueStore(memoryFiles()), sessionStore: memoryStore(), inspect,
+    const files = memoryFiles();
+    const client = madeUpSupabase(null, table, log);
+    const platformOn = () => createAppPlatform({
+      deviceStore: fileKeyValueStore(files), sessionStore: memoryStore(), inspect,
       lifecycle: { onLeave: () => () => {}, onReturn: () => () => {} },
-      measurer: () => null, client: madeUpSupabase(null, table, log), useUser: () => (who.id ? { id: who.id } : null),
+      measurer: () => null, client, useUser: () => (who.id ? { id: who.id } : null),
     });
-    const root = createRoot();
+    let platform = platformOn();
+    let root = createRoot();
     roots.push(root);
     const draw = () => act(async () => { root.render(createElement(BuilderPlatformContext.Provider, { value: platform }, createElement(SignedInProbe, { name: 'shared', platform }))); });
     await draw();
@@ -222,8 +225,40 @@ describe('signing in saves the album on the phone (accountSave.useAccountSave), 
       await settle();
     };
     const signIn = async (id: string | null) => { who.id = id; await draw(); await settle(); await settle(); };
-    return { b, make, signIn, gate };
+    /** The app closed (its album saved on the phone) and opened again. */
+    const relaunch = async () => {
+      await act(async () => { b().saveDraftNow(); platform.photoStore.flush(); });
+      await act(async () => { root.unmount(); });
+      roots.splice(roots.indexOf(root), 1);
+      platform = platformOn();
+      root = createRoot();
+      roots.push(root);
+      await draw();
+      for (let i = 0; i < 3; i++) await settle();
+    };
+    return { b, make, signIn, gate, relaunch };
   }
+
+  it('an album opened from My albums is not saved again when the app opens next: nobody changed it ("Changed just now", round 4)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make, relaunch } = await phoneFor2(table, log);
+    await make();
+    const firstId = b().getAlbumId()!;
+    await act(async () => { b().reset(); });
+    await settle();
+    await new Promise((r) => setTimeout(r, 5));
+    await make('Second album', sc.size === '6x6' ? '8x8' : '6x6');
+    await act(async () => { await b().loadAlbum(firstId); });
+    await settle();
+    expect(b().getAlbumId()).toBe(firstId);
+    const first = table.find((r) => r.id === firstId)!;
+    const before = first.updated_at;
+    await relaunch();
+    expect(b().getAlbumId()).toBe(firstId);
+    expect(first.updated_at).toBe(before);
+  }, 120_000);
 
   it('opening another album (My albums) never saves its pages into the album that was on the phone (round 3)', async () => {
     const table: Row[] = [];

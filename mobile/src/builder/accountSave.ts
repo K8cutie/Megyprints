@@ -41,21 +41,27 @@ export function useAccountSave(builder: BuilderActions, store: KeyValueStore, si
   // fresh album comes in the next render.
   const shownId = builder.getAlbumId();
   const opening = builder.isLoadingCloud;
-  // The album and its pages as the last render showed them.
-  const seen = useRef({ id: shownId, madeAt });
+  // The album this hook last saw come in (not while it was still opening).
+  const settled = useRef(shownId);
   const sending = useRef<string | null>(null);
   useEffect(() => {
-    const before = seen.current;
-    if (!signedIn) return;
     // An album being opened (My albums: loadAlbum) puts its pages in first
     // and its id, title and photos only once the phone has found its photos:
     // a save then sent the opened album's pages into the album that was on
-    // the phone (beta round 3). Opened, it is the account's own copy: there
-    // is nothing to save, so pages that came with a new id are not saved.
+    // the phone (beta round 3). Nothing is saved while it opens.
     if (opening) return;
     const albumId = builder.getAlbumId();
     if (albumId !== shownId) return;
-    if (madeAt !== before.madeAt && albumId !== before.id) return;
+    if (albumId !== settled.current) {
+      // Another album came in: opened from the account (the account's own
+      // copy: nothing to save, now or when the app opens next; unmarked, the
+      // next start saved it again, "Changed just now", round 4), or a fresh
+      // one (no pages made yet).
+      settled.current = albumId;
+      if (signedIn && madeAt) markAccountSaved(store, albumId, madeAt);
+      return;
+    }
+    if (!signedIn) return;
     if (!accountSaveDue(store, albumId, madeAt)) return;
     const key = mark(albumId, madeAt);
     if (sending.current === key) return;
@@ -64,9 +70,8 @@ export function useAccountSave(builder: BuilderActions, store: KeyValueStore, si
       .then((ok) => { if (ok) markAccountSaved(store, albumId, madeAt); })
       .catch(() => {})
       .finally(() => { if (sending.current === key) sending.current = null; });
-    // Once per album made (madeAt), and when the customer signs in.
+    // Once per album made (madeAt), when the customer signs in, and when
+    // another album has come in (to note it, not save it).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signedIn, madeAt]);
-  // After the save above has looked at what the last render showed.
-  useEffect(() => { seen.current = { id: shownId, madeAt }; });
+  }, [signedIn, madeAt, opening, shownId]);
 }
