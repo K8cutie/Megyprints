@@ -3860,8 +3860,27 @@ to turn it off. On by default."
     • "Change layout" opens about three times faster
     • New: "Page flip animation" under your album in the Preview. Turn it off and pages change at once (it is on unless you turn it off)
 
-260 characters. If 2.0.4 never went up, add the 2.0.4 lines above them
-(the "uploaded alone" list), within 500.
+260 characters.
+
+### Release notes 2.0.5 when uploaded ALONE (2.0.2-2.0.4 skipped)
+
+Testers on 2.0.1 go straight to 2.0.5, so the notes cover all four
+versions:
+
+    From tester feedback:
+    • Pages show faster, and "Change layout" opens 3x faster
+    • New: turn off "Page flip animation" under your album in the Preview
+    • Tap an album in My albums to open it at its cover
+    • Albums made before you sign in now show in My albums
+    • Your albums stay yours when someone else signs in on your phone
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    Also new:
+    • The app tells you when a new version is ready
+
+490 characters. The Play file: `Desktop\megyprints-2.0.5-code105-play.aab`
+(sha256 488df4ab…92f2, code 105 / 2.0.5, upload key 53:1A…C0:AE, the same
+permissions as 2.0.4). Its APK opened Home on the emulator, no crash.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
