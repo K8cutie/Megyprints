@@ -6,12 +6,17 @@
    both as "blocked", though after a closed question Android recorded
    nothing and would ask again (beta round 2, Mother). So "off" says "not
    allowed" and still offers to ask. Whether Android then shows its question
-   is seen by the app stepping aside for it (AppState leaves "active"), not
-   by how fast the answer came: a cold phone answered "won't ask" in 556 ms,
-   past the 0.4 s line this used, and the button stayed as a dead tap (beta
-   round 3). When Android answers with no question, it won't ask again: the
-   button goes, the screen says so, and the phone remembers it (it came back
-   on every visit) until access changes. Settings and Files are the ways. */
+   is seen by how long the app was away for it (QUESTION_SHOWN_MS). Android
+   opens its permission screen on every ask, so the app always steps aside
+   (AppState and window focus both leave), but with no question it is back
+   in 130-360 ms (beta round 4, Android's event log), while a question shown
+   waits for a person to read and tap. Timing the whole ask instead counted
+   the start of Android's screen too (a cold phone: 556 ms, past the 0.4 s
+   line, a dead tap: round 3); taking any step aside as a question made every
+   tap dead (round 4). When Android answers with no question, it won't ask
+   again: the button goes, the screen says so, and the phone remembers it
+   (it came back on every visit) until access changes. Settings and Files
+   are the ways. */
 import { useEffect, useState } from 'react';
 import { AppState, Linking, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +25,11 @@ import { colors, space } from '../lib/theme';
 import { Button } from './Button';
 
 export const WONT_ASK_LINE = 'Your phone will not ask again.';
+
+/** Away for Android's question less than this: it was not shown (no one
+ *  reads and answers it this fast; with no question the app is back in
+ *  130-360 ms). */
+export const QUESTION_SHOWN_MS = 1000;
 
 /** Android answered "ask again" with no question, while access is off. */
 let wontAskKnown = false;
@@ -33,11 +43,18 @@ export function AskForPhotos({ access, onAsk, onFiles }: { access: { canAskAgain
   const off = blocked && wontAsk;
   const refused = (access.refused || blocked) && !off;
   const askAgain = async () => {
-    // Android's question puts the app in the background while it shows.
-    let asked = false;
-    const sub = AppState.addEventListener('change', (s) => { if (s !== 'active') asked = true; });
+    // How long the app was away for Android's permission screen (the whole
+    // ask, on a phone that doesn't say it stepped aside).
+    const asked = Date.now();
+    let left: number | null = null;
+    let back: number | null = null;
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s !== 'active') left ??= Date.now();
+      else if (left !== null) back = Date.now();
+    });
     try { await onAsk(); } finally { sub.remove(); }
-    if (blocked && !asked) { wontAskKnown = true; setWontAsk(true); }
+    const away = (back ?? Date.now()) - (left ?? asked);
+    if (blocked && away < QUESTION_SHOWN_MS) { wontAskKnown = true; setWontAsk(true); }
   };
   return (
     <SafeAreaView edges={['bottom']} style={styles.ask}>
