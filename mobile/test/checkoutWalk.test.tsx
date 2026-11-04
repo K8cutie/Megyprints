@@ -16,6 +16,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { AddressValue } from '@web/lib/contact';
 import type { PriceSchedule } from '@web/lib/pricing';
 import OrderScreen from '../src/app/order';
+import { forgetCheckoutOnPhone } from '../src/lib/checkout/formKeep';
 import { fixtureCheckoutAlbum } from '../src/lib/checkout/fixtureAlbum';
 import { checkoutPrice, peso } from '../src/lib/checkout/price';
 import { fake, rec, resetFake } from './helpers/fakeSupabase';
@@ -31,6 +32,11 @@ jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(
 // Opened from the home screen's test button: no album id, no album (the test album).
 jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => null }));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
+// The page renderer (Skia on the phone): the test album draws no cover (no text drawer), so nothing.
+jest.mock('../src/builder/usePagePicture', () => ({
+  usePagePicture: () => ({ uri: null, notDrawn: [], missing: 0, error: null }),
+  PRIORITY: { editing: 3, shown: 2, thumbnail: 1, ahead: 0 },
+}));
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: async () => (mockPicked.asset ? { canceled: false, assets: [mockPicked.asset] } : { canceled: true, assets: null }),
 }));
@@ -59,6 +65,8 @@ const softPrice = checkoutPrice(LIVE, { albumSize: '8x8', cover: 'softcover', pa
 const hardPrice = checkoutPrice(LIVE, { albumSize: '8x8', cover: 'hardboundLeather', pageCount: album.pages.length, qrCount: 0, hostingYears: null, hdMemories: false, tester: null });
 
 beforeEach(() => {
+  // What a test typed stays for the next opening of checkout (lib/checkout/formKeep.ts): each test starts as a new app.
+  forgetCheckoutOnPhone();
   resetFake();
   fake.rpc.public_price_schedule = { data: LIVE, error: null };
   mockAuth.session = { user: { id: 'user-1' } };
@@ -108,7 +116,7 @@ describe('the checkout screen, walked', () => {
     expect(screen.getByTestId('order-total')).toHaveTextContent(peso(softPrice.payTotal));
     expect(screen.getByText('Free')).toBeOnTheScreen();
     expect(screen.getByText(/Free shipping \(₱200 value\)/)).toBeOnTheScreen();
-    expect(screen.getByText(/5 years of memory hosting/)).toBeOnTheScreen();
+    expect(screen.getByText(/Memories stay live for 5 years/)).toBeOnTheScreen();
     // Hardbound changes the price, from the same list.
     await fireEvent.press(screen.getByText('Hardbound'));
     expect(await screen.findByText(`Place order · pay ${peso(hardPrice.total)} by bank transfer`)).toBeOnTheScreen();

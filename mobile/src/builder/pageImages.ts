@@ -136,7 +136,8 @@ export async function drawPageImage(Sk: Skia, text: PageText, req: PageRequest, 
   // the app carries (siteFiles.ts).
   const assets = new AssetCache(Sk, siteFile);
   const unavailable = new Set<string>();
-  const drawer = new PageDrawer(Sk, text);
+  // A picture for the screen: drawn with Skia's own sampling (drawPage.ts image()).
+  const drawer = new PageDrawer(Sk, text, { screen: true });
   try {
     drawer.draw(canvas, plan, (i) => loaded.get(i) ?? null, { assets: assets.get, onMissing: (src) => { unavailable.add(src); } });
   } finally {

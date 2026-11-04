@@ -21,6 +21,13 @@ import type { AlbumSizePreset } from '@web/pages/builder/types';
 
 export const ALBUMS_RETRY_MS = 20_000;
 
+/** Deleting an album asks first (owner, 2026-11-05: "just add a warning that
+ *  album deletion is permanent"). An order keeps its own copy of the album. */
+export const DELETE_ALBUM_TITLE = 'Delete this album?';
+export function deleteAlbumMessage(name: string): string {
+  return `${name} will be deleted. This is permanent: you can't get it back. Your orders stay.`;
+}
+
 /** The columns the list reads. */
 export const ALBUM_LIST_COLUMNS = 'id, title, album_size, pages, updated_at';
 

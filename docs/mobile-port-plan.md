@@ -3514,6 +3514,474 @@ Home, then the notification). 2.0.0 (code 100) was never uploaded.
     What's new:
     • The app tells you when a new version is ready, so you always have the latest
 
+## 2.0.3: the beta testers' fixes (2026-11-04, `fix/port-crew-round1`)
+
+Owner: "all the fixes make it 2.0.3". The Overseer beta testers (six
+personas on two emulators, a local test database) and Mother, who
+reproduced each defect herself before it was fixed and checked each fix on
+the phone after:
+
+- **"Your cover" on Your order showed an empty "Cover" box.** The cover step
+  puts the photo on the cover as its background; checkout read only the
+  cover's slots (and its test expected the empty box). The card now draws
+  the cover as it prints, as the Preview and the website's Order Summary do
+  (`CoverThumb.tsx`, `orderStart.coverPhotoUri`).
+- **One Back from Your order wiped the name, phone and address.** The form is
+  kept as the website keeps it (`lib/checkoutSession` rules: the same album,
+  the same account, a guest's goes to whoever signs in; forgotten on sign
+  out), in memory only (`src/lib/checkout/formKeep.ts`).
+- **Back in the photo picker dropped every picked photo without asking.** It
+  asks "Add the 50 photos you picked?" with Leave them out and Add 50 photos
+  (`src/lib/pickLeave.ts`, expo-router's `usePreventRemove`).
+- **The start screen's "how it works" slides cut their words at the right
+  edge on Android.** The words beside the picture get the rest of the slide
+  outright; each slide is the exact width (`HomeCards.tsx`).
+- **Signed out with Your order open, the next account saw the typed name,
+  phone and address** (Mother, round 2: the sign-in ran out on the form).
+  Auth forgot the form, then the open screen kept it again as a guest's. An
+  account going away now clears the fields and keeps nothing (`order.tsx`;
+  the website's `Order.tsx` had the same shape, fixed with it).
+- **"Included with your album" said "5 years of memory hosting" beside a
+  20-year order** (owner, from the app). It now reads "Memories stay live
+  for 5 years (you added 15 more years)", in the price line's and the
+  picker's words, and the album line says "7 living-memory QRs" like the box
+  under it (`pricing.includedHostingLine`, shared with the website).
+- **My albums was a list you couldn't open** (owner: "Why cant i open the
+  albums is that just a list"). Phase 1 made it read-only. Each album now
+  says Open: tapping it loads it from the account with the website's own
+  `loadAlbum` (what `/builder?album=<id>` does) and goes where "Continue my
+  album" goes, its pages once made. While it loads the card says
+  "Opening…"; a failed read stays on My albums and says to check the
+  phone is online (`src/app/albums.tsx`). Photos that aren't on this phone
+  show the missing-photos note the editor already has.
+- **Round 2: all six testers reached checkout** (round 1: none). Mother
+  checked the round-1 fixes on the phone (all fixed; the one regression is
+  the sign-out item above) and reproduced ten more, each fixed with a test
+  that failed first:
+  - Signing in from Home with an album made signed out: My albums said "No
+    albums yet". The save at sign-in lived only in the Preview; it is the
+    whole app's now (`accountSave.useAccountSave` in `BuilderProvider`), and
+    My albums reads the list again when a save lands.
+  - Place order again after a failed send could never finish: the cover was
+    sent again (409 at once, before its bytes were read) and the pages file
+    after it on the same connection got 502 every time. A file a try sent is
+    not made or sent again (`sendOrder` `sent`), the pages file gets 3 tries
+    like the cover, and the form opens at the words under Place order (they
+    were below the fold). No connection says so in plain words.
+  - Signed in on Your order: the first read of the album came before its
+    save, and "isn't saved to your account" stayed for good. It is read
+    again when the save lands, and Place order reads it again and goes on.
+  - A free test order that stopped half-way said "To finish it, pay that
+    order" (nothing to pay). It says it didn't finish, and Place order with
+    the code finishes that same order (an unfinished one counts toward the 3
+    unpaid orders, 0042). The website has the same words; not checked there.
+  - Place order waited for Android's notification question: Home while it
+    was up held the order until you came back. The order goes on now.
+  - "Sign in first" by the tester code has its Sign in button.
+  - A double tap on Next skipped Album size (the second tap hit the next
+    screen's Next as it slid in). Each step's way forward goes once per
+    visit, and a screen just on top ignores it for 0.5 s (`useOncePerVisit`).
+  - Closing Android's photo question without answering left "Photo access
+    is off" for good (Expo saves it as blocked). It still offers to ask
+    again, until Android answers at once without asking.
+  - "Add the 50 photos you picked?" showed a blank gap (an empty Android
+    message): it has a line. The cover row said "best ones first" with no
+    photo check in the app: it says what it is. "Replace photo" opened a
+    sheet titled "Add a photo": it says Replace photo.
+  Left as designed (Mother: by design): a cover with no photo is allowed (a
+  title-only cover); "Pick 1 photo for the front cover" reads as a must.
+  Owner's call.
+- **A shared phone** (found in my own sign-in save before round 3): another
+  account signing in gets a fresh album, and the sign-in save no longer
+  sends the old account's pages into the new account (`useAccountSave`
+  saves only the album its render shows).
+- **Test builds for a server on this PC** (a plain-http address in
+  `.env.local`) may talk plain http; the Play build refuses such an address
+  (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
+  at all without it.
+- **Version 2.0.3, code 103.** Same permissions as 2.0.1 and 2.0.2. It has
+  everything in 2.0.2: if 2.0.2 was never uploaded, upload 2.0.3 instead
+  (as 2.0.0 was skipped).
+
+### Release notes 2.0.3 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Your order shows your album's real cover
+    • Going back from checkout keeps your name and address
+    • The photo picker asks before dropping photos you picked
+    • Your order says clearly how long your videos stay live
+    • Tap an album in My albums to open it
+    • Albums made before you sign in now show in My albums
+    • Place order again finishes an order that stopped
+    • A double tap on Next no longer skips a step
+    Also new:
+    • The app tells you when a new version is ready
+
+(Drop the last line if 2.0.2 went out first: it is 2.0.2's.)
+
+### Known in 2.0.3 (round 3 of the testers; to be fixed in 2.0.4)
+
+The owner asked for 2.0.3 to be built from the round 2 fixes as they were,
+and round 3's findings to go into 2.0.4. Mother's round 3 on the 2.0.3 test
+build found:
+- **Opening an album from My albums can overwrite the album open before it**
+  (its pages and size become the opened album's), when the opened album's
+  photos are on this phone. The sign-in save sees the new pages while the
+  old album id is still set (`loadAlbum` waits for the photos first).
+- A shared phone: the photos one account picked stay on the phone, and
+  "Continue my album" carries them into the next account's album.
+- After opening an album, "Add the photos" lists the photos of the album
+  open before it.
+- Opening an album re-saves it and the album left behind ("Changed just now").
+- With a stuck test order, applying the tester code after the "didn't
+  finish" question leaves the question up and hides Place order.
+- Finishing a stopped order after leaving checkout sends the cover again,
+  and the pages file after it can wait about 40 s (it still goes through).
+- "Ask for photo access again" can be a dead tap when Android is slow
+  (over 0.4 s); while blocked, it comes back on every visit; a closed
+  question says "Photo access is off".
+- A double tap on "Make my album" opens the Preview at page 1, not the cover.
+- Small words: an empty frame says "Click to add"; signed out, "Start a new
+  album?" says the album is lost though it is in the account.
+
+## 2.0.4: what the testers' round 3 found (2026-11-04, `fix/port-crew-round3`)
+
+Owner: "Build 2.0.3 and put this latest in 2.0.4". 2.0.4 is 2.0.3 plus
+fixes for round 3 of the beta testers (Mother, on the 2.0.3 crew build).
+Each fix has a test that failed first.
+- **Opening an album never writes it over the album that was open.**
+  `loadAlbum` puts the pages in first, and the id only once the phone has
+  found the photos. The sign-in save (`useAccountSave`) saw the new pages
+  with the old id and saved them there. It doesn't save while an album
+  opens, or pages that came with a new id. Opening an album no longer
+  re-saves the album left behind when nothing in it changed (website
+  `loadAlbum`, flushCloud's rule), so untouched albums stop showing
+  "Changed just now".
+- **The picked photos belong to the album, not the phone**
+  (`draftFollowsAlbum`). When the phone's album becomes another one, the
+  picked photos become that album's photos on this phone:
+  - none for a fresh album (another account signing in);
+  - the opened album's own once it is in.
+
+  Before, another account's "Continue my album" carried the last person's
+  picks, and an opened album listed the album before it's photos as its own.
+- **With a stuck test order, the tester code used after the "didn't finish"
+  question** hides the question and brings Place order back. The question
+  says "a second order", as its button does.
+- **Finishing a stopped order later never sends its cover again.** The files
+  sent are kept on the phone for 6 hours (`sentFiles`), by names that carry
+  the order's id. Before, the duplicate cover answer broke the connection,
+  and the pages file waited about 40 s for a 502.
+- **The Preview:**
+  - "Next page" ignores taps for 0.5 s after the Preview comes on
+    (`useJustArrived`), so a double tap on "Make my album" opens the cover.
+  - "Order this album"'s answer is scrolled into view.
+- **Photo access:**
+  - Whether Android showed its question is seen by how long the app was
+    away for it: under 1 s means no question was shown
+    (`QUESTION_SHOWN_MS`).
+    - Android opens its permission screen on every ask, so the app always
+      goes to the background and loses focus. With no question it is back
+      in 130-360 ms (round 4, Android's event log).
+    - Round 3's 0.4 s timer timed the whole ask: a cold phone took 556 ms,
+      which made a dead tap.
+    - The first 2.0.4 build took any trip to the background as a question,
+      so every tap was dead.
+  - "Won't ask" is remembered until access changes, and the screen says
+    "Your phone will not ask again."
+  - A question that was only closed says "not allowed", not "off".
+- **An empty frame says "Tap to add:".**
+- **Round 4 (Mother, on the first 2.0.4 build):**
+  - An album opened from My albums is noted as the account's own copy, so
+    the next app start doesn't save it again ("Changed just now").
+  - Owner: "If signed out theres a huge awkward space at the bottom." Home
+    now centres its cards when it is shorter than the screen, as the
+    website's home does (`HeroSection`). Signed in, it scrolls as before.
+  - An order file that gets no answer is a failed try, not an endless
+    wait. If the connection dropped under the pages file, the screen said
+    "Sending your print file…" for 13+ minutes. Each upload try now has a
+    time limit (`uploadTimeLimitMs`): a minute plus the file at 1 Mbit/s,
+    about 2.5 min for an 11 MB file. After three tries, the plain words.
+  - An album opened from My albums starts at its cover, not at the page
+    where the previous album was left.
+  - With photos missing, "Order this album" says so once: its answer
+    takes the place of the note already on the Preview.
+  - Left as is (owner's call): signed out, "Continue my album" still opens
+    the last account's album on the phone. This was already the case
+    before 2.0.4.
+- **Round 4b (Mother, then the test written for what she saw):**
+  - "Start a new album" puts away an album nobody changed without saving
+    it again (shared `reset`, the same rule as `loadAlbum`), so it no
+    longer shows "Changed just now".
+  - Another account signing in never saves the album on the phone into
+    the NEW account. reset is told whose album it is putting away (the
+    layout effect's `owner`). Before, it went by the saved draft's
+    account, and when that said none it fell back to `draftAccountRef`.
+    That ref is already the new account's by then. The saved draft says
+    none when the album was begun signed out and not saved again (30 s
+    debounce) before the switch. The website had the same hole
+    (`sharedDevice.spec.ts`). The app's account tests hid it: their
+    made-up saved sign-in was always "nobody", so reset never saved
+    there. It now follows who is signed in.
+  - Round 4c, Mother on the emulators:
+    - Both defects reproduced on the old build (r4c):
+      - lito's account got a byte-identical copy of carlo's "Leak Check
+        Old".
+      - Bea's 22nd, untouched, was PATCHed on "Start a new album".
+    - The same steps on r4d:
+      - No row for lito.
+      - Untouched albums kept their updated_at.
+      - A change still went out in one PATCH.
+      - A guest's album still went to the account they signed in with,
+        once.
+  - Seen, left for later (it was the same before 2.0.4, and the website
+    has it too): an album with a name and no photos IS saved to the
+    account by the background save (`flushCloud` keeps named albums).
+    Yet "Start a new album?" says "This one has no photos yet, so it
+    won't be kept."
+- Left as is:
+  - "Start a new album?" signed out: to say "it stays in your account", the
+    app must know the latest changes reached the account. It doesn't know
+    that while signed out. The words err on the safe side, and the website
+    says the same.
+  - The "Open order" page of an unfinished test order (website
+    `orderTracker` words). The finish no longer needs that detour.
+- **Version 2.0.4, code 104.** Same permissions as 2.0.3.
+
+### Release notes 2.0.4 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Opening an album keeps your other albums as they were
+    • Your album and photos stay yours when someone else signs in on your phone
+    • Your tester code finishes a test order that stopped
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    • Albums opened from My albums start at the cover
+    • "Order this album" shows its answer on screen
+    • Empty frames say "Tap to add"
+    • Home sits in the middle when you're signed out
+
+497 characters (Play's limit is 500). Not "Albums open on their cover": the
+owner found (2026-11-04) that Continue / Preview my album still opens on
+the page last seen, often the last page. That is on his bug list for the
+next build.
+
+### Release notes 2.0.4 when uploaded ALONE (2.0.2 and 2.0.3 skipped)
+
+Recommended (2026-11-04): 2.0.3 has round 3's HIGH defect (opening an
+album from My albums can overwrite the one open before it), and its notes
+advertise that very feature. 2.0.4 has every 2.0.2 and 2.0.3 change plus
+those fixes, so testers go 2.0.1 → 2.0.4 and the notes cover all three:
+
+    From tester feedback:
+    • Tap an album in My albums to open it at its cover
+    • Albums made before you sign in now show in My albums
+    • Your albums stay yours when someone else signs in on your phone
+    • Your order shows your album's real cover
+    • Going back from checkout keeps your name and address
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    • Empty frames say "Tap to add"
+    Also new:
+    • The app tells you when a new version is ready
+
+493 characters.
+
+## 2.0.5: speed, and the page flip switch (2026-11-04, `fix/port-speed`)
+
+Owner, testing 2.0.1 on a Galaxy S25: "most importantly performance
+issue. can you do something about it", then "Turn off the page flip
+animation. It works fine on my phone but not for everyone or add a button
+to turn it off. On by default."
+
+**Measured first** on the emulator, with the 2.0.4 test build and a
+150-photo album at the S25's 12 MP (65 pages). The script is
+`scratchpad/crew/make_big_roll.py`. Figures are CPU time per thread, from
+/proc, plus timers in a throwaway build.
+- Page turn to a page drawn for the first time: ~130 ms of the JavaScript
+  thread, ~390 ms for the whole app. To a page already drawn: ~41 ms.
+- Other screens left open under the Preview add almost nothing (130 ms
+  with only Home + Preview against 140 ms with the whole wizard). So the
+  whole-app builder re-rendering every screen is not the cost.
+- Drawing a new page: photos loaded 57-187 ms (wall, mostly native), drawn
+  33-102 ms (~35 ms a photo, JS thread), JPEG 11-16 ms, file 1-2 ms. The
+  album-changed check (`localAlbumKey`) runs 6-10 ms after every turn.
+- "Change layout": 9 pictures at 20-51 ms each, ~390 ms of JS in all.
+- Home, untouched: ~26% of a CPU core, almost all drawing. The background
+  photo's slow zoom (`homeMotion` kenBurns) redraws the whole screen every
+  frame. **Owner's call, not changed:** stop that zoom on the phone, or
+  keep it.
+
+**Changed:**
+- **Pages on screen are drawn with Skia's own sampling.** PageDrawer's
+  `screen` option is used only by pageImages `drawPageImage`: the Preview,
+  the editor, the cover step and layout pictures.
+  - Chrome's sampling (sampling.ts: a halving and an older bilinear, both
+    runtime shaders) is for the print file. The phone's CPU runs those
+    shaders interpreted.
+  - The print path (`renderPrintPage`, phoneSend) and the golden tests are
+    unchanged.
+  - Test `pageImagesSpeed`: the screen draw never calls the print shaders,
+    and the print draw still does. The two look the same at screen size:
+    mean difference under 1.5 levels, under 1% of channels more than 24
+    apart.
+- **"Page flip animation" switch** (`lib/pageFlip.ts`), under the book in
+  the upright Preview.
+  - It is on by default and kept on the phone (`megy-2.0-page-flip`).
+  - Off: a tap shows the next page at once, with no leaf and no wait for
+    the leaf's pictures. A swipe turns the page at once, with no leaf
+    following the finger. Sideways too, where the switch itself is not
+    shown.
+  - Tests are in previewScreen.
+  - On the emulator: a screenshot 0.3 s after Next shows the leaf mid-turn
+    with the switch on, and the next page already there with it off.
+    "Off" survives closing the app.
+
+**After** (same album, same steps, caches cleared):
+
+| | 2.0.4 | 2.0.5 |
+|---|---|---|
+| Drawing a new page (1-3 photos), Preview | 33-102 ms | 17-43 ms |
+| Drawing a new page, editor | 35-97 ms | 21-40 ms |
+| One "Change layout" picture | 20-51 ms | 1-4 ms |
+| Page turn to a new page (JS thread) | ~130 ms | ~96 ms |
+| Opening "Change layout" (JS thread) | ~390 ms | ~130 ms |
+
+**Still there** (next, if wanted):
+- The JPEG of each drawn page (11-16 ms).
+- Photo copies at 1280 px even for small frames.
+- The album-changed check after every page turn.
+- Home's background zoom.
+
+### Release notes 2.0.5 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Pages show faster when you turn them and when you edit
+    • "Change layout" opens about three times faster
+    • New: "Page flip animation" under your album in the Preview. Turn it off and pages change at once (it is on unless you turn it off)
+
+260 characters.
+
+### Release notes 2.0.5 when uploaded ALONE (2.0.2-2.0.4 skipped)
+
+Testers on 2.0.1 go straight to 2.0.5, so the notes cover all four
+versions:
+
+    From tester feedback:
+    • Pages show faster, and "Change layout" opens 3x faster
+    • New: turn off "Page flip animation" under your album in the Preview
+    • Tap an album in My albums to open it at its cover
+    • Albums made before you sign in now show in My albums
+    • Your albums stay yours when someone else signs in on your phone
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    Also new:
+    • The app tells you when a new version is ready
+
+490 characters. The Play file: `Desktop\megyprints-2.0.5-code105-play.aab`
+(sha256 488df4ab…92f2, code 105 / 2.0.5, upload key 53:1A…C0:AE, the same
+permissions as 2.0.4). Its APK opened Home on the emulator, no crash.
+
+## 2.0.6: the owner's list, from testing 2.0.1 on his phone (2026-11-04, `fix/port-owner-list`)
+
+Owner, with 2.0.5 in review: "ok begin 2.0.6 and add" these five. Each has a
+test that failed first. Each was walked on the emulator with a real album:
+100 photos at 12 MP, signed in on the local test database.
+
+- **"Add to this box" pops up by itself (`pageTapGuard.ts`).** Owner: "the
+  combo box add photo quote own text appeared during editing". Reproduced
+  two ways, both a second tap landing on an empty frame it wasn't aimed at:
+  - A tap on a layout closes the sheet at once, and a second tap falls
+    through to the page under it. It still happened with 0.7 s between the
+    taps.
+  - A tap on a photo selects it, its buttons appear, and the page shrinks
+    and moves up about 50 px, so a second tap on the photo's lower edge is
+    on the empty frame below.
+
+  Now, after a sheet closes the page ignores a tap for 0.8 s. After the page
+  moves it ignores for 0.7 s only a tap that would open the chooser, so
+  another photo can still be tapped at once. A deliberate tap on an empty
+  frame still opens it, and TalkBack's tap goes straight through. On the
+  emulator, the same taps at every gap no longer open it.
+
+  What the owner's brother did wasn't seen, so this is the reproduced cause,
+  not a confirmed match. If the box still appears by itself, the steps
+  before it are what's needed.
+- **A video QR keeps the photo's mask** (`fullBleedPhoto`, shared with the
+  website). Adding a QR, or moving it to another corner, wiped the mask, so
+  it had to be applied again. The photo's mask stays now, on the photo's
+  frame only; a moved frame still goes (it printed the QR as a big square).
+  A layout change that isn't already a badge page still drops it, as the
+  filter is dropped: a mask by slot number isn't that photo's. The page plan
+  already drew this page right (masks are per frame). On the emulator: circle
+  mask, then a real video QR, and the album row holds `["circle"]` on
+  `qr-badge-8x8-bl`. **Website too** when this reaches main.
+- **The Preview opens on the cover (`previewCover.ts`).** It showed the page
+  last seen, and it stays alive under the editor. "Done — Preview my album"
+  on the last page came back on the last page. These now open the Front
+  cover: "Done — Preview my album", a step going to the Preview
+  (`useGoToPreview`), and "Continue my album". "Back to preview" still goes
+  back to the page being worked on, by choice: it says "back". Coming back
+  from an order also stays where it was.
+- **Cover photos are a grid (`CoverPhotoGrid`, app only; the website keeps
+  its row).** Owner: "just show all the photos to choose from not a side
+  scrolling thing". Five across, every photo, and still ABOVE the cover
+  (owner, 2026-11-01: "should put the pics on top"). So it scrolls inside a
+  height of its own (3.5 rows on the cover step, 2.5 on Design your cover),
+  and a tap shows on the cover right under it.
+- **"Choose a layout" fits when sideways (`useSheetBodyWidth`).** Tiles were
+  measured from the screen, not the side panel: a row of 882 points in a
+  panel with 292 of room. The sheets measure their own room now, less the
+  system's buttons, and a list fills the panel's height. "Add a photo" had
+  the same fault and is fixed the same way.
+- **Mask, Filter and Page colour stay open (`EditorSheet` `live`).** Owner:
+  "When applying mask or filter or any edit in the picture dont let the
+  editor close". A pick applies and the sheet stays, so another can be tried;
+  the ✕ closes it. The page isn't dimmed, and the sheet takes at most 42% of
+  the height, so the page shows above it. Sideways it is the side panel as
+  before. On the emulator, upright and sideways: Fade down, then Circle, the
+  tick moves, the sheet stays.
+- **Delete an album in My albums.** Owner: "ive created so much test album",
+  "add it", "just add a warning that album deletion is permanent". Each card
+  has Delete. It asks "Delete this album?" and says it is permanent and that
+  orders stay, with Keep it and Delete album. It uses the website's own delete
+  (`useAlbumSyncWith`). Deleting the album on the phone lets the phone's copy go
+  too (`letDeletedAlbumGo`, the draft), so no save brings it back. On the
+  emulator: Keep it leaves the row; Delete album removes the row and the card;
+  the album on the phone stays gone after a wait and a restart, and Home says
+  Start Creating. An order keeps its own copy (`album_snapshot`), and
+  `album_id` goes null (0002, the only table that points at albums).
+- **An order whose album was deleted says only what is true.** "Your album is
+  still saved" and "your album stays saved" are left out when `album_id` is
+  null (`CANCELLED_NOTE_NO_ALBUM`, `payByLine`). Paying and cancelling it still
+  work.
+- **A test order that didn't finish can be cancelled (`order-unfinished-test`).**
+  Owner: "also cancelling an order". Cancel was already there for an order
+  waiting for payment, and walking it found the gap: a MEGYTEST order saves its
+  row first and is marked paid last, so closing the app in between leaves it
+  unpaid. Its page had no Pay and no Cancel, yet it counts toward the 3 unpaid
+  orders, and that message says "cancel one in Your orders". Checkout can finish
+  one only through its album, and Delete takes that way out. The database already
+  allowed the cancel; only the button was missing. On the emulator, with its
+  album and without: Keep it changes nothing, Yes gives `cancelled`, by
+  `customer`. An ordinary unpaid order cancels the same. **The website has the
+  same gap** (`MyOrders.tsx`), not changed here.
+- **Version 2.0.6, code 106.**
+
+### Release notes 2.0.6 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Cover photos are a grid you scroll down, not one long row
+    • Done on your last page: your album opens on its cover
+    • "Choose a layout" fits when the phone is sideways
+    • A photo keeps its mask when you add a video QR
+    • A quick second tap no longer opens "Add to this box"
+    • Mask and Filter stay open, so you can try each one
+    • Delete an album in My albums
+    • Cancel a test order that didn't finish
+
+418 characters.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

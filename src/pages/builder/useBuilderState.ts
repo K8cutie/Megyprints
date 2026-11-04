@@ -211,12 +211,18 @@ function asMemoryBadge(before: AlbumPage, relaid: AlbumPage, memory: QrFill, tem
   };
 }
 
-/** A memory page's photo covers the whole sheet: no Studio-moved frame and no
- *  mask (both are kept by slot number, and every renderer applies them to the
- *  QR slot too — a moved frame printed the QR as a big square mid-page). The
- *  photo keeps its filter when it stays the same photo (`samePhoto`). */
+/** A memory page's photo fills its frame: no Studio-moved frame (kept by slot
+ *  number, and every renderer applies it to the QR slot too — a moved frame
+ *  printed the QR as a big square mid-page). When it stays the same photo
+ *  (`samePhoto`) it keeps its filter and its mask, the photo's slot only, so
+ *  none lands on the QR's (owner, 2026-11-04: "i added a mask on a picture then
+ *  i added the QR the mask disappeared, and you need to re apply the mask"). */
 export function fullBleedPhoto(page: AlbumPage, samePhoto: boolean): Pick<AlbumPage, 'slotGeometries' | 'slotMasks' | 'slotLooks'> {
-  return { slotGeometries: [], slotMasks: [], slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [] };
+  return {
+    slotGeometries: [],
+    slotMasks: samePhoto && page.slotMasks?.[0] ? [page.slotMasks[0]] : [],
+    slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [],
+  };
 }
 
 /* The page's dominant photo ratio (the most common ratio among the photos
@@ -1050,6 +1056,11 @@ export function useBuilderState(): BuilderActions {
     if (draftAccountRef.current) albumIdRef.current = newAlbumId();
     draftAccountRef.current = user.id;
   }
+  /** While another account signing in puts the album away (reset): the account
+   *  it belongs to. By then draftAccountRef is the new account's, and the saved
+   *  draft can still say none (begun signed out, not saved again since), so
+   *  the album went to the NEW account (beta round 4b). */
+  const leavingOwnerRef = useRef<string | null>(null);
   /** The cloud version the album on screen is based on (albumSyncRecord). Held
    *  by THIS tab and saved inside its draft: two tabs share one draft, and a
    *  record kept per device let a stale tab save its old album onto the other
@@ -2721,8 +2732,8 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
-        // The photo goes full bleed under its memory: a mask or a moved frame
-        // on this single would make the memory page something else.
+        // The photo fills its frame under its memory (a moved frame would make
+        // the memory page something else); its filter and mask stay.
         ...fullBleedPhoto(p, true),
         // Drop any theme decorative corners — they sit in all four corners and
         // would overlay (and in print obscure) the QR chip.
@@ -3624,7 +3635,7 @@ export function useBuilderState(): BuilderActions {
       const id = coverLocalPhotoId(c as AlbumPage | undefined);
       if (id) discardedPhotoIds.push(id);
     }
-    const discardedAccount = stored?.accountId ?? draftAccountRef.current ?? null;
+    const discardedAccount = leavingOwnerRef.current ?? stored?.accountId ?? draftAccountRef.current ?? null;
     // The version the album being put away is on (in memory, else its draft's).
     const leavingRec = syncRecFor(albumIdRef.current) ?? draftSyncRecord(stored?.albumId, stored?.sync);
     const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
@@ -3632,6 +3643,10 @@ export function useBuilderState(): BuilderActions {
       : stored && draftHasContent(stored)
         ? albumDataFromDraft(stored as StoredDraft, currentAlbumTheme())
         : null;
+    // Unchanged since the version this device saved or opened: no write (as
+    // loadAlbum). Re-saving marked an album nobody touched "Changed just now"
+    // (beta round 4b: "Start a new album" after opening one).
+    const unchanged = !!leaving && !!leavingRec?.base && leavingRec.key === albumContentKey(toAlbumRow(leaving));
     // The saved session is read directly, so this is right even while the
     // auth context is still loading (it is, on the fresh-start mount).
     void account.signedInUserId().then(async (signedIn) => {
@@ -3639,7 +3654,7 @@ export function useBuilderState(): BuilderActions {
       //    copy is only refreshed every 10 min or on leaving, so the draft on
       //    this device can be newer — and it is the album the customer will
       //    come back to.
-      if (signedIn && leaving && (!discardedAccount || discardedAccount === signedIn)) {
+      if (signedIn && leaving && !unchanged && (!discardedAccount || discardedAccount === signedIn)) {
         // Only onto the version this device had: a newer one saved on another
         // device is not overwritten by the copy being put away.
         await saveToCloud(signedIn, leaving, { quiet: true, rec: leavingRec });
@@ -3699,7 +3714,10 @@ export function useBuilderState(): BuilderActions {
     if (!user?.id) return;
     const owner = draftOwnerRef.current;
     draftOwnerRef.current = user.id;
-    if (owner && owner !== user.id) reset();
+    if (owner && owner !== user.id) {
+      leavingOwnerRef.current = owner;
+      try { reset(); } finally { leavingOwnerRef.current = null; }
+    }
   }, [user?.id, reset]);
 
   /* ── Load specific album by ID — SAFE: respects local data ── */
@@ -3719,7 +3737,14 @@ export function useBuilderState(): BuilderActions {
       const onScreen = persistRef.current?.local;
       const wasOnScreen = albumIdRef.current === albumId;
       if (albumIdRef.current !== albumId && draftHasContent(onScreen)) {
-        void saveToCloud(user.id, serializeAlbum(), { quiet: true });
+        // Unchanged since the version this device saved or opened: no write
+        // (flushCloud's rule). Re-saving it marked an album nobody touched
+        // "Changed just now" and moved it up the album list (beta round 3).
+        const leaving = serializeAlbum();
+        const rec = syncRecFor(leaving.id);
+        if (!(rec?.base && rec.key === albumContentKey(toAlbumRow(leaving)))) {
+          void saveToCloud(user.id, leaving, { quiet: true });
+        }
       }
       const albumData = await albumSync.load(user.id, albumId);
       // SAME album already on screen: which version is newer is decided by

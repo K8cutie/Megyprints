@@ -34,6 +34,7 @@ import '../src/editor/parts';
 import { builder, ctxOn, firstPhoto, madeAlbum, settle, tapOn, useEditorBench } from './editorHarness';
 
 const mockPush = jest.fn();
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('expo-router', () => {
   const { useEffect } = jest.requireActual('react');
   return { router: { push: (...a: unknown[]) => mockPush(...a) }, useFocusEffect: (fn: () => void | (() => void)) => useEffect(fn, [fn]) };
@@ -195,6 +196,51 @@ describe('the sheets', () => {
     expect(takeIntake()?.reopen).toEqual({ id: 'photos:pick', params: { kind: 'slot', index: t.index } });
   });
 
+  it('for a frame that has a photo (Replace photo), the sheet says "Replace photo", not "Add a photo" (beta round 2)', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await act(async () => { editThePages(builder()); builder().goToPage(3); });
+    const t = firstPhoto(platform);
+    await show(createElement(PickPhotoSheet, { ctx: ctxOn(platform), params: { kind: 'slot', index: t.index }, close: jest.fn() }));
+    expect(texts()).toContain(words.REPLACE_PHOTO);
+    expect(texts()).not.toContain(words.ADD_A_PHOTO);
+    expect(texts()).toContain(words.UPLOAD_MORE);
+  });
+
+  it('Mask stays open after a pick: the photo changes, the tick moves, another can be tried', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await act(async () => { editThePages(builder()); builder().goToPage(6); });
+    const t = firstPhoto(platform);
+    const close = jest.fn();
+    const sheet = () => createElement(MaskSheet, { ctx: ctxOn(platform), params: { slot: t.index }, close });
+    await show(sheet());
+    await press('photos-mask-heart');
+    expect(builder().albumPages[6].slotMasks?.[t.index]).toBe('heart');
+    await show(sheet());
+    expect(texts()).toContain('✓ Heart');
+    await press('photos-mask-circle');
+    expect(builder().albumPages[6].slotMasks?.[t.index]).toBe('circle');
+    await show(sheet());
+    expect(texts()).toContain('✓ Circle');
+    expect(texts()).not.toContain('✓ Heart');
+    await press('photos-mask-none');
+    expect(builder().albumPages[6].slotMasks?.[t.index] ?? null).toBeNull();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('Filter stays open after a pick too', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await act(async () => { editThePages(builder()); builder().goToPage(6); });
+    const t = firstPhoto(platform);
+    const close = jest.fn();
+    const sheet = () => createElement(FilterSheet, { ctx: ctxOn(platform), params: { slot: t.index }, close });
+    await show(sheet());
+    await press('photos-filter-sepia');
+    await show(sheet());
+    await press('photos-filter-bw');
+    expect(builder().albumPages[6].slotLooks?.[t.index]).toBe('bw');
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it('Mask and Filter tick the photo\'s own and change it; Pages says the 40-page floor instead of offering a delete', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     await act(async () => { editThePages(builder()); builder().goToPage(6); });
@@ -208,7 +254,8 @@ describe('the sheets', () => {
     expect(texts()).toContain(`✓ ${words.ORIGINAL}`);
     await press('photos-filter-sepia');
     expect(builder().albumPages[6].slotLooks?.[t.index]).toBe('sepia');
-    expect(close).toHaveBeenCalledTimes(2);
+    // Both stay open to try another (owner, 2026-11-05: "dont let the editor close").
+    expect(close).not.toHaveBeenCalled();
     await show(createElement(PagesSheet, { ctx: ctxOn(platform), params: undefined, close }));
     expect(byId('photos-page-delete')).toHaveLength(0);
     expect(texts()).toContain(words.CANT_DELETE_PAGE);

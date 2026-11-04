@@ -29,6 +29,8 @@ export const REDO = 'Redo';
 /** BuilderPreview.tsx EmptyChooserBox, chooserFit.ts CHOOSER_TITLE (shared):
  *  what an empty frame or caption box offers, and a dealt box's one invitation. */
 export const SLOT_OPTIONS = ['Photo', 'Quote', 'Text'];
+/** The website's "Click to add:" (CHOOSER_TITLE), as a phone is used. */
+export const TAP_TO_ADD = 'Tap to add:';
 export const BOX_OPTIONS = ['Quote', 'Text'];
 export const ROLL_LABELS = {
   quote: 'Let AI write a quote',

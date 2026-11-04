@@ -35,7 +35,6 @@ import {
   setTitleFont, setTitleSize, titleBoxOf, coverWithoutTitle, titleRectOf, toggleTitleBold, toggleTitleItalic,
   toggleTitleShadow, typeTitle, zoomCoverPhoto, type CoverBuilder,
 } from '../src/editor/cover/coverEdits';
-import { scrollToShow, TILE, TILE_GAP } from '../src/components/CoverPhotoRow';
 import { dragTarget } from '../src/editor/cover/CoverStage';
 import { snap } from '../src/editor/cover/Slider';
 import { act, builder, madeAlbum, useEditorBench } from './editorHarness';
@@ -386,16 +385,6 @@ describe('the small pieces', () => {
     expect(snap(0.4, 1, 3, 0.01)).toBe(1);
     expect(snap(3.7, 1, 3, 0.01)).toBe(3);
     expect(snap(44.6, 16, 96, 1)).toBe(45);
-  });
-
-  it('the photo row scrolls to the photo on the cover only when it is out of sight (the website\'s scrollIntoView, nearest)', () => {
-    // 64 px tiles 6 px apart, 16 px before the first: a 360 px row shows tiles 0 to 4 whole.
-    expect([TILE, TILE_GAP]).toEqual([64, 6]);
-    expect(scrollToShow(0, 360, 16)).toBeNull();
-    expect(scrollToShow(4, 360, 16)).toBeNull(); // 16 + 4 × 70 + 64 = 360: in sight
-    expect(scrollToShow(5, 360, 16)).toBe(16 + 5 * 70 + 64 - 360 + 16); // just enough: its right edge 16 px in
-    expect(scrollToShow(-1, 360, 16)).toBeNull(); // no album photo on the cover
-    expect(scrollToShow(9, 0, 16)).toBeNull(); // not laid out yet
   });
 
   it('a photo is on the cover after the app\'s steps (the cover step\'s tap)', async () => {

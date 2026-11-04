@@ -18,9 +18,10 @@
 import { useMemo, useRef, type ReactNode } from 'react';
 import { ActivityIndicator, PanResponder, StyleSheet, Text, View, type ViewInstance, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
-import { CHOOSER_TITLE, chooserListSizes } from '@web/pages/builder/chooserFit';
+import { chooserListSizes } from '@web/pages/builder/chooserFit';
 import { swipeTurn } from '@web/pages/builder/previewPaging';
 import { colors } from '../lib/theme';
+import { TAP_TO_ADD } from './editorWords';
 import type { Target } from './hitTest';
 
 /** A tap moves less than this (screen px) or it is a drag. */
@@ -52,7 +53,7 @@ function EmptyHint({ t, k, options, roll }: { t: Target; k: number; options: str
         <Text style={[styles.emptyText, { fontSize: rollSize, lineHeight: rollSize * 1.2 }]}>{roll}</Text>
       ) : list ? (
         <>
-          <Text style={[styles.emptyText, { fontSize: list.titleFs }]} numberOfLines={1}>{CHOOSER_TITLE}</Text>
+          <Text style={[styles.emptyText, { fontSize: list.titleFs }]} numberOfLines={1}>{TAP_TO_ADD}</Text>
           <View>
             {options.map((o) => <Text key={o} style={[styles.emptyItem, { fontSize: list.listFs, lineHeight: list.listFs * 1.5 }]}>{`•  ${o}`}</Text>)}
           </View>

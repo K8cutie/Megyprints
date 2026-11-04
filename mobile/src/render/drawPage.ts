@@ -84,7 +84,10 @@ export class PageDrawer {
   /** How many drawings are under way (see drawing()). */
   private depth = 0;
 
-  constructor(private readonly Skia: Skia, private readonly text: PageText) {
+  /** `screen`: a picture for the phone's screen (pageImages drawPageImage),
+   *  not a print file: its pictures are drawn with Skia's own smooth sampling
+   *  (see image()). */
+  constructor(private readonly Skia: Skia, private readonly text: PageText, private readonly options: { screen?: boolean } = {}) {
     this.surfaces = new SurfacePool(Skia);
     this.sampling = new ChromeSampling(Skia, this.surfaces);
   }
@@ -144,6 +147,17 @@ export class PageDrawer {
     const p = paint ?? this.Skia.Paint();
     const m = canvas.getTotalMatrix().get();
     const level = (m[1] === 0 && m[3] === 0) || (m[0] === 0 && m[4] === 0);
+    if (this.options.screen) {
+      // On screen (the Preview, the editor, a layout's picture): Skia's own
+      // smooth sampling, drawn natively. Chrome's (sampling.ts) is for the
+      // print file, where a pixel must match the website's; on a screen the
+      // two look the same, and Chrome's shaders run interpreted on the
+      // phone's CPU: about 35 ms a photo, with every tap waiting behind it
+      // (owner, 2026-11-04: "most importantly performance issue").
+      p.setAntiAlias(!level);
+      canvas.drawImageRectOptions(img, this.rect(src), this.rect(dst), FilterMode.Linear, MipmapMode.Linear, p);
+      return;
+    }
     let pic = img;
     let from = src;
     if (decoded) {

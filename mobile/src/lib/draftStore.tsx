@@ -25,6 +25,9 @@ interface DraftValue {
   add: (photos: readonly DraftPhoto[]) => AddResult;
   remove: (keys: readonly string[]) => void;
   clear: () => void;
+  /** The album's own photos instead of the picked ones (another album on the
+   *  phone: draftFollowsAlbum). */
+  replace: (photos: readonly DraftPhoto[]) => void;
   /** The album as it is right now, even between renders (for timers). */
   peek: () => AlbumDraft;
 }
@@ -136,12 +139,13 @@ export function DraftProvider({ children, storage = fileDraftStorage }: { childr
 
   const remove = useCallback((keys: readonly string[]) => commit(removePhotos(current.current, keys)), [commit]);
   const clear = useCallback(() => commit({ ...emptyDraft(), updatedAt: Date.now() }), [commit]);
+  const replace = useCallback((photos: readonly DraftPhoto[]) => commit(addPhotos({ ...emptyDraft(), updatedAt: Date.now() }, photos).draft), [commit]);
   const peek = useCallback(() => current.current, []);
   const closeCouldNotOpen = useCallback(() => setCouldNotOpen(false), []);
 
   const value = useMemo(
-    () => ({ loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, peek }),
-    [loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, peek],
+    () => ({ loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, replace, peek }),
+    [loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, replace, peek],
   );
   return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;
 }

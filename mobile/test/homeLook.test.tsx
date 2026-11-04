@@ -44,11 +44,12 @@ jest.mock('../../src/lib/supabase', () => ({ supabase: {} }));
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 // The font files can't load in a test (no asset files): the hook says "in".
 jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), useFonts: jest.fn(() => [mockState.fontsIn, null]) }));
+const mockGoToPage = jest.fn();
 const mockState: { session: unknown; inProgress: boolean; focused: boolean; fontsIn: boolean } = { session: null, inProgress: false, focused: true, fontsIn: true };
 jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useIsFocused: () => mockState.focused }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ loading: false, session: mockState.session, signOut: jest.fn(async () => {}) }) }));
 jest.mock('../src/builder/BuilderProvider', () => ({
-  useBuilder: () => ({ builder: { uploadedPhotos: [], reset: jest.fn() }, platform: { deviceStore: {} } }),
+  useBuilder: () => ({ builder: { uploadedPhotos: [], reset: jest.fn(), goToPage: mockGoToPage }, platform: { deviceStore: {} } }),
 }));
 jest.mock('../src/builder/albumFlow', () => ({ albumInProgress: () => mockState.inProgress, resumeRoute: () => '/photos', startNewNote: () => '' }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ draft: { photos: [] }, clear: jest.fn() }) }));
@@ -95,6 +96,16 @@ describe('the look', () => {
     expect(WEB_HOME).toContain('bg-[rgba(45,40,36,0.22)]');
     expect(SCREEN).toContain("veil: { backgroundColor: 'rgba(45, 40, 36, 0.22)' },");
     expect(fs.existsSync(path.join(__dirname, '..', 'assets', 'home', 'hero.jpg'))).toBe(true);
+  });
+
+  it('shorter than the screen (signed out): the cards sit in the middle, as the website\'s home centers them, not a big gap at the bottom (owner, 2026-11-04)', async () => {
+    await render(<Start />);
+    const box = flat(screen.getByTestId('home-scroll').props.contentContainerStyle);
+    // As tall as the screen at least, the cards and links in its middle;
+    // longer (signed in), it scrolls as before.
+    expect(box.flexGrow).toBe(1);
+    expect(box.justifyContent).toBe('center');
+    expect(WEB_HOME).toContain('min-h-[max(100dvh,640px)] flex items-center justify-center');
   });
 
   it('"Megy · Prints" over it, and the menu', async () => {
@@ -206,6 +217,25 @@ describe('the slides', () => {
     expect(now('albums')).toBe(4);
   });
 
+  it('the words wrap inside the slide (beta testers 2026-11-04: lines ran past the card\'s right edge on the phone)', async () => {
+    await render(<Start />);
+    // The slide area as the phone measures it: 347.43 points (412 dp wide, 32 + 32 of card).
+    await fireEvent(screen.getByTestId('home-albums-slides').children[0] as never, 'layout', { nativeEvent: { layout: { width: 347.43, height: 150 } } });
+    // Each slide exactly the area's width (rounding it made every slide a
+    // little narrower than a page, so the next slide showed a sliver of the last).
+    expect(flat(screen.getByTestId('home-albums-slides-slide-1', { includeHiddenElements: true }).props.style).width).toBe(347.43);
+    // The words beside a 150-point picture get the rest of the slide, set
+    // outright (left to flex on Android, the line was laid out as wide as the slide).
+    /** The View the words sit in. */
+    const column = (words: string) => {
+      let n = screen.getByText(words, { includeHiddenElements: true }).parent;
+      while (n && n.type !== 'View') n = n.parent;
+      return flat(n!.props.style);
+    };
+    expect(column(ALBUMS_CARD.steps[0].desc).width).toBeCloseTo(347.43 - 150, 5);
+    expect(column(ALBUMS_CARD.hook).width).toBeCloseTo(347.43 - 146, 5);
+  });
+
   it('a finger on them holds the clock; a swipe lands on its slide', async () => {
     jest.useFakeTimers();
     await render(<Start />);
@@ -238,6 +268,8 @@ describe('the buttons', () => {
     expect(screen.getByTestId('new-album')).toHaveTextContent(HOME.newAlbum);
     await fireEvent.press(screen.getByTestId('continue-album'));
     expect(router.push).toHaveBeenCalledWith('/photos');
+    // Its first page: the Preview shows the page last seen, often the last one.
+    expect(mockGoToPage).toHaveBeenCalledWith(0);
     expect(CARDS).toContain('<View style={styles.cardButtons}>{children}</View>');
   });
 

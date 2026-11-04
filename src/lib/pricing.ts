@@ -151,6 +151,15 @@ export function includedHostingYears(src: { hosting_tiers?: unknown }): number |
   return tiers.length ? tiers[0].years : null;
 }
 
+/** The "Included with your album" line for the hosting term, in the words of
+ *  the price line and the term picker ("Memories stay live"). A longer term
+ *  the customer picked is named, so the box never says 5 years beside a
+ *  20-year line (owner, 2026-11-04). */
+export function includedHostingLine(includedYears: number, chosenYears: number | null): string {
+  const added = chosenYears != null && chosenYears > includedYears ? chosenYears - includedYears : 0;
+  return `Memories stay live for ${includedYears} years${added ? ` (you added ${added} more years)` : ''}`;
+}
+
 /** Pesos for a chosen term. Unknown/absent term → 0 (never over-charge on a
  *  stale client). */
 export function hostingTermCharge(src: { hosting_tiers?: unknown }, years: number | null | undefined): number {
@@ -301,7 +310,7 @@ export function priceBreakdown(
     const more = extraPagesCharge(schedule, size, binding, pages);
     const pps = schedule.sizes[size].pps;
     items.push({
-      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} living-memory QRs included`,
       amount: printTotal - more.amount,
     });
     items.push({
@@ -310,7 +319,7 @@ export function priceBreakdown(
     });
   } else {
     items.push({
-      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} QR memories included`,
+      label: `Album — ${sizeLabel} ${bindingLabel} · ${minPages} pages · ${FREE_QR_MEMORIES} living-memory QRs included`,
       amount: printTotal,
     });
   }

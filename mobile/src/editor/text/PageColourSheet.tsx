@@ -24,7 +24,7 @@ export function pickPageColourEverywhere(b: Pick<BuilderActions, 'applyPageColor
 
 export function PageColourSheet({ ctx, close }: SheetProps<unknown>) {
   return (
-    <EditorSheet title={PAGE_COLOUR} onClose={close} testID="page-color-sheet">
+    <EditorSheet title={PAGE_COLOUR} onClose={close} scroll live testID="page-color-sheet">
       <PageColourPicker background={ctx.page.background}
         onPick={(hex) => pickPageColour(ctx.builder, hex)}
         onPickAll={(hex) => { close(); pickPageColourEverywhere(ctx.builder, hex, ctx.say); }} />

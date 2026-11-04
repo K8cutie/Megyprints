@@ -22,6 +22,7 @@ import { useBuilder } from '../builder/BuilderProvider';
 import { offerableSizes, pagesHoldPhotos, resizeMadeAlbum, saveStep, SIZE_LINE, sizePhotosPerPage, sizeTap } from '../builder/albumFlow';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
+import { useOncePerVisit } from '../lib/useOncePerVisit';
 
 /** The sizes the owner switched off (public_price_schedule), or none. */
 async function disabledSizes(): Promise<string[]> {
@@ -79,10 +80,13 @@ export default function AlbumSize() {
     ]);
   };
 
-  const next = () => {
+  // Once per visit, and not while this screen comes on: a double tap on
+  // the step before's Next landed here and skipped the size (useOncePerVisit).
+  const once = useOncePerVisit();
+  const next = once(() => {
     saveStep(platform.deviceStore, 'photos');
     router.push('/photos');
-  };
+  });
 
   return (
     <View style={styles.page}>
