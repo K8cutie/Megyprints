@@ -3756,13 +3756,15 @@ Each fix has a test that failed first.
     • Your tester code finishes a test order that stopped
     • If the internet drops while you order, the app says what to do
     • "Ask for photo access again" always answers
-    • Albums open on their cover
+    • Albums opened from My albums start at the cover
     • "Order this album" shows its answer on screen
     • Empty frames say "Tap to add"
-    • The start screen sits in the middle when you're signed out
+    • Home sits in the middle when you're signed out
 
-488 characters (Play's limit is 500). "Albums open on their cover" covers the
-double tap after "Make my album" and an album opened from My albums.
+497 characters (Play's limit is 500). Not "Albums open on their cover": the
+owner found (2026-11-04) that Continue / Preview my album still opens on
+the page last seen, often the last page. That is on his bug list for the
+next build.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
