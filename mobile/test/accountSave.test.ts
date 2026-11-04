@@ -35,7 +35,8 @@ type Row = Record<string, unknown>;
 /** A made-up Supabase: auth with a saved sign-in, and the albums table in
  *  memory, answering the query shapes lib/albumCloud uses. updated_at is set
  *  by "the database" on every write, as 0001/0040 do. */
-function madeUpSupabase(userId: string | null, table: Row[], log: string[]) {
+function madeUpSupabase(userId: string | null | (() => string | null), table: Row[], log: string[]) {
+  const signedIn = typeof userId === 'function' ? userId : () => userId;
   let clock = Date.UTC(2026, 9, 29, 3, 0);
   const stamp = () => new Date(clock += 1000).toISOString();
   const query = (op: 'select' | 'insert' | 'update' | 'delete', payload?: Row) => {
@@ -71,7 +72,7 @@ function madeUpSupabase(userId: string | null, table: Row[], log: string[]) {
     return chain;
   };
   return {
-    auth: { getSession: async () => ({ data: { session: userId ? { user: { id: userId } } : null } }) },
+    auth: { getSession: async () => { const id = signedIn(); return { data: { session: id ? { user: { id } } : null } }; } },
     from: (t: string) => {
       if (t !== 'albums') throw new Error(`no table ${t} in this made-up database`);
       return {
@@ -201,7 +202,8 @@ describe('signing in saves the album on the phone (accountSave.useAccountSave), 
     const onPhone = phoneFor(sc);
     const inspect = async (uris: string[]) => { if (gate.wait) await gate.wait; return onPhone(uris); };
     const files = memoryFiles();
-    const client = madeUpSupabase(null, table, log);
+    // The saved sign-in is whoever is signed in now (reset asks it directly).
+    const client = madeUpSupabase(() => who.id, table, log);
     const platformOn = () => createAppPlatform({
       deviceStore: fileKeyValueStore(files), sessionStore: memoryStore(), inspect,
       lifecycle: { onLeave: () => () => {}, onReturn: () => () => {} },
@@ -258,6 +260,30 @@ describe('signing in saves the album on the phone (accountSave.useAccountSave), 
     await relaunch();
     expect(b().getAlbumId()).toBe(firstId);
     expect(first.updated_at).toBe(before);
+  }, 120_000);
+
+  it('"Start a new album" puts the album away without saving it again when nobody changed it; a change still goes (round 4b)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make } = await phoneFor2(table, log);
+    await make();
+    const firstId = b().getAlbumId()!;
+    const rowOf = (id: string) => table.find((r) => r.id === id)!;
+    const before = rowOf(firstId).updated_at;
+    await act(async () => { b().reset(); });
+    await settle();
+    expect(b().getAlbumId()).not.toBe(firstId);
+    expect(rowOf(firstId).updated_at).toBe(before);
+
+    // Opened again from My albums and renamed: putting it away saves the new name.
+    await act(async () => { await b().loadAlbum(firstId); });
+    await settle();
+    expect(rowOf(firstId).updated_at).toBe(before);
+    await act(async () => { b().setAlbumTitle('First album, renamed'); });
+    await act(async () => { b().reset(); });
+    await settle();
+    expect(rowOf(firstId).title).toBe('First album, renamed');
   }, 120_000);
 
   it('opening another album (My albums) never saves its pages into the album that was on the phone (round 3)', async () => {

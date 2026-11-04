@@ -3709,6 +3709,20 @@ Each fix has a test that failed first.
   - Left as is (owner's call): signed out, "Continue my album" still opens
     the last account's album on the phone. This was already the case
     before 2.0.4.
+- **Round 4b (Mother, then the test written for what she saw):**
+  - "Start a new album" puts away an album nobody changed without saving
+    it again (shared `reset`, the same rule as `loadAlbum`), so it no
+    longer shows "Changed just now".
+  - Another account signing in never saves the album on the phone into
+    the NEW account. reset is told whose album it is putting away (the
+    layout effect's `owner`). Before, it went by the saved draft's
+    account, and when that said none it fell back to `draftAccountRef`.
+    That ref is already the new account's by then. The saved draft says
+    none when the album was begun signed out and not saved again (30 s
+    debounce) before the switch. The website had the same hole
+    (`sharedDevice.spec.ts`). The app's account tests hid it: their
+    made-up saved sign-in was always "nobody", so reset never saved
+    there. It now follows who is signed in.
 - Left as is:
   - "Start a new album?" signed out: to say "it stays in your account", the
     app must know the latest changes reached the account. It doesn't know
