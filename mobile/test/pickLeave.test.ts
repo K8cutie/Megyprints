@@ -54,7 +54,8 @@ describe('Back with photos picked', () => {
     expect(SRC).toContain('const allowLeave = usePreventRemove(picked > 0 && !adding, ({ repeat }) => {');
     expect(SRC).toContain('askBeforeLeavingPicks(picked, { leave: repeat, add: () => { void addPicked(); } });');
     // Adding (or Files adding) goes back on its own: the question is not asked then.
-    expect(SRC.match(/allowLeave\(\);\n\s*goBack\(\);/g)?.length).toBe(1);
+    // \r?: GitHub's Windows runner checks the file out with CRLF line ends.
+    expect(SRC.match(/allowLeave\(\);\r?\n\s*goBack\(\);/g)?.length).toBe(1);
     expect(SRC).toContain('if (result.added) { allowLeave(); goBack(); }');
     expect(SRC).toContain('label={addPhotosLabel(picked)}');
   });
