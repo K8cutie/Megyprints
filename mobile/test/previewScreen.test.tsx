@@ -18,7 +18,7 @@
        the pages, the spine, and a page turn that bends and throws a shadow.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ComponentType, type ReactElement } from 'react';
-import { Animated, Dimensions, type GestureResponderEvent } from 'react-native';
+import { Animated, Dimensions, ScrollView, type GestureResponderEvent } from 'react-native';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
@@ -28,6 +28,8 @@ import { act, builder, madeAlbum, settle, useEditorBench } from './editorHarness
 const mockNav = { push: jest.fn(), replace: jest.fn(), dismissAll: jest.fn() };
 const mockSeen = {
   focused: true,
+  /** Run useFocusEffect as the screen comes on top (off: most tests press at once). */
+  focusRuns: false,
   header: [] as { headerShown?: boolean }[],
   /** The status bars on screen (React Native keeps a stack: the latest one mounted wins). */
   statusBars: new Set<{ hidden?: boolean }>(),
@@ -47,7 +49,7 @@ jest.mock('expo-router', () => ({
   },
   Stack: { Screen: ({ options }: { options: { headerShown?: boolean } }) => { mockSeen.header.push(options); return null; } },
   useIsFocused: () => mockSeen.focused,
-  useFocusEffect: () => {},
+  useFocusEffect: (fn: () => void) => { if (mockSeen.focusRuns) jest.requireActual<typeof import('react')>('react').useEffect(() => fn(), []); },
 }));
 jest.mock('expo-status-bar', () => {
   const React = jest.requireActual<typeof import('react')>('react');
@@ -94,6 +96,7 @@ import Preview from '../src/app/preview';
 import { BOOK_DRESS_X, sidewaysBook, uprightBook, UPRIGHT_EDGE } from '../src/builder/previewLayout';
 import { edgeThickness } from '../src/builder/bookLook';
 import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
+import { ARRIVING_MS } from '../src/lib/useOncePerVisit';
 const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
 const DEFAULT = 0;
@@ -251,6 +254,25 @@ describe('upright: the book as big as the screen allows', () => {
     expect(all('preview-open-book')).toHaveLength(1);
     expect(textOnScreen('or turn your phone sideways')).toBe(true);
     expect(onBook('preview-page-1')).toHaveLength(1);
+  });
+
+  it('a double tap on "Make my album" opens it on the cover: the Preview just on top ignores "Next page" for a moment (round 3)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.focusRuns = true;
+    let clock = Date.now();
+    const spy = jest.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      await open();
+      // The second tap of the double tap lands on "Next page ›", in the same spot.
+      await press('preview-next');
+      expect(textOf('preview-caption')).toBe('Front cover');
+      clock += ARRIVING_MS;
+      await press('preview-next');
+      expect(textOf('preview-caption')).toBe(`Page 1 of ${builder().albumPages.length}`);
+    } finally {
+      spy.mockRestore();
+      mockSeen.focusRuns = false;
+    }
   });
 });
 
@@ -610,6 +632,23 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     expect(mockSeen.save).not.toHaveBeenCalled();
     await press('preview-order-back-to-pages');
     expect(mockNav.push).toHaveBeenCalledWith('/edit-pages');
+  });
+
+  it('the answer to "Order this album" is scrolled into view (it came below the buttons: the tap looked dead, round 3)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    const i = builder().albumPages.findIndex((p) => (p.slotFills ?? []).some((f) => typeof f === 'number'));
+    const slot = (builder().albumPages[i].slotFills ?? []).findIndex((f) => typeof f === 'number');
+    await act(async () => { builder().goToPage(i); });
+    await act(async () => { builder().clearSlot(slot); });
+    await act(async () => { builder().goToPage(0); });
+    await open();
+    await toTheEnd();
+    const toEnd = (ScrollView as unknown as { prototype: { scrollToEnd: jest.Mock } }).prototype.scrollToEnd;
+    toEnd.mockClear();
+    await press('preview-order');
+    expect(textOf('preview-order-ask')).toMatch(/^Your album has 39 photos/);
+    expect(toEnd).toHaveBeenCalled();
   });
 
   it('on its side, the last pages: a round "Order" button where › was', async () => {

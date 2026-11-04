@@ -29,6 +29,15 @@ export function useOncePerVisit(): (go: () => unknown) => () => void {
   }, []);
 }
 
+/** True while this screen has only just come on top (ARRIVING_MS): for a
+ *  button that stays on the screen, as the Preview's "Next page", where the
+ *  second tap of a double tap on "Make my album" landed (beta round 3). */
+export function useJustArrived(): () => boolean {
+  const arrivedAt = useRef(-Infinity);
+  useFocusEffect(useCallback(() => { arrivedAt.current = Date.now(); }, []));
+  return useCallback(() => Date.now() - arrivedAt.current < ARRIVING_MS, []);
+}
+
 /** The same outside a screen (a part's tile): a second push within `ms` is ignored. */
 export function pushGuard(ms = 1000, now: () => number = Date.now): (go: () => void) => void {
   let last = -Infinity;
