@@ -3882,6 +3882,71 @@ versions:
 (sha256 488df4ab…92f2, code 105 / 2.0.5, upload key 53:1A…C0:AE, the same
 permissions as 2.0.4). Its APK opened Home on the emulator, no crash.
 
+## 2.0.6: the owner's list, from testing 2.0.1 on his phone (2026-11-04, `fix/port-owner-list`)
+
+Owner, with 2.0.5 in review: "ok begin 2.0.6 and add" these five. Each has a
+test that failed first. Each was walked on the emulator with a real album:
+100 photos at 12 MP, signed in on the local test database.
+
+- **"Add to this box" pops up by itself (`pageTapGuard.ts`).** Owner: "the
+  combo box add photo quote own text appeared during editing". Reproduced
+  two ways, both a second tap landing on an empty frame it wasn't aimed at:
+  - A tap on a layout closes the sheet at once, and a second tap falls
+    through to the page under it. It still happened with 0.7 s between the
+    taps.
+  - A tap on a photo selects it, its buttons appear, and the page shrinks
+    and moves up about 50 px, so a second tap on the photo's lower edge is
+    on the empty frame below.
+
+  Now, after a sheet closes the page ignores a tap for 0.8 s. After the page
+  moves it ignores for 0.7 s only a tap that would open the chooser, so
+  another photo can still be tapped at once. A deliberate tap on an empty
+  frame still opens it, and TalkBack's tap goes straight through. On the
+  emulator, the same taps at every gap no longer open it.
+
+  What the owner's brother did wasn't seen, so this is the reproduced cause,
+  not a confirmed match. If the box still appears by itself, the steps
+  before it are what's needed.
+- **A video QR keeps the photo's mask** (`fullBleedPhoto`, shared with the
+  website). Adding a QR, or moving it to another corner, wiped the mask, so
+  it had to be applied again. The photo's mask stays now, on the photo's
+  frame only; a moved frame still goes (it printed the QR as a big square).
+  A layout change that isn't already a badge page still drops it, as the
+  filter is dropped: a mask by slot number isn't that photo's. The page plan
+  already drew this page right (masks are per frame). On the emulator: circle
+  mask, then a real video QR, and the album row holds `["circle"]` on
+  `qr-badge-8x8-bl`. **Website too** when this reaches main.
+- **The Preview opens on the cover (`previewCover.ts`).** It showed the page
+  last seen, and it stays alive under the editor. "Done — Preview my album"
+  on the last page came back on the last page. These now open the Front
+  cover: "Done — Preview my album", a step going to the Preview
+  (`useGoToPreview`), and "Continue my album". "Back to preview" still goes
+  back to the page being worked on, by choice: it says "back". Coming back
+  from an order also stays where it was.
+- **Cover photos are a grid (`CoverPhotoGrid`, app only; the website keeps
+  its row).** Owner: "just show all the photos to choose from not a side
+  scrolling thing". Five across, every photo, and still ABOVE the cover
+  (owner, 2026-11-01: "should put the pics on top"). So it scrolls inside a
+  height of its own (3.5 rows on the cover step, 2.5 on Design your cover),
+  and a tap shows on the cover right under it.
+- **"Choose a layout" fits when sideways (`useSheetBodyWidth`).** Tiles were
+  measured from the screen, not the side panel: a row of 882 points in a
+  panel with 292 of room. The sheets measure their own room now, less the
+  system's buttons, and a list fills the panel's height. "Add a photo" had
+  the same fault and is fixed the same way.
+- **Version 2.0.6, code 106.**
+
+### Release notes 2.0.6 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Cover photos are a grid you scroll down, not one long row
+    • Done on your last page: your album opens on its cover
+    • "Choose a layout" fits when the phone is sideways
+    • A photo keeps its mask when you add a video QR
+    • A quick second tap no longer opens "Add to this box"
+
+293 characters.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
