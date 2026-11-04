@@ -97,6 +97,16 @@ describe('the look', () => {
     expect(fs.existsSync(path.join(__dirname, '..', 'assets', 'home', 'hero.jpg'))).toBe(true);
   });
 
+  it('shorter than the screen (signed out): the cards sit in the middle, as the website\'s home centers them, not a big gap at the bottom (owner, 2026-11-04)', async () => {
+    await render(<Start />);
+    const box = flat(screen.getByTestId('home-scroll').props.contentContainerStyle);
+    // As tall as the screen at least, the cards and links in its middle;
+    // longer (signed in), it scrolls as before.
+    expect(box.flexGrow).toBe(1);
+    expect(box.justifyContent).toBe('center');
+    expect(WEB_HOME).toContain('min-h-[max(100dvh,640px)] flex items-center justify-center');
+  });
+
   it('"Megy · Prints" over it, and the menu', async () => {
     await render(<Start />);
     expect(screen.getByLabelText('Megy Prints')).toBeOnTheScreen();
@@ -204,6 +214,25 @@ describe('the slides', () => {
     await fireEvent.press(screen.getByTestId('home-albums-slides-pause'));
     await act(async () => { jest.advanceTimersByTime(SLIDE_MS); });
     expect(now('albums')).toBe(4);
+  });
+
+  it('the words wrap inside the slide (beta testers 2026-11-04: lines ran past the card\'s right edge on the phone)', async () => {
+    await render(<Start />);
+    // The slide area as the phone measures it: 347.43 points (412 dp wide, 32 + 32 of card).
+    await fireEvent(screen.getByTestId('home-albums-slides').children[0] as never, 'layout', { nativeEvent: { layout: { width: 347.43, height: 150 } } });
+    // Each slide exactly the area's width (rounding it made every slide a
+    // little narrower than a page, so the next slide showed a sliver of the last).
+    expect(flat(screen.getByTestId('home-albums-slides-slide-1', { includeHiddenElements: true }).props.style).width).toBe(347.43);
+    // The words beside a 150-point picture get the rest of the slide, set
+    // outright (left to flex on Android, the line was laid out as wide as the slide).
+    /** The View the words sit in. */
+    const column = (words: string) => {
+      let n = screen.getByText(words, { includeHiddenElements: true }).parent;
+      while (n && n.type !== 'View') n = n.parent;
+      return flat(n!.props.style);
+    };
+    expect(column(ALBUMS_CARD.steps[0].desc).width).toBeCloseTo(347.43 - 150, 5);
+    expect(column(ALBUMS_CARD.hook).width).toBeCloseTo(347.43 - 146, 5);
   });
 
   it('a finger on them holds the clock; a swipe lands on its slide', async () => {

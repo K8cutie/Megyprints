@@ -194,7 +194,7 @@ describe("the words with the price are the website's", () => {
   it('the summary lines (savings, tester line, included) are the website\'s', () => {
     expect(ORDER_SRC).toContain('New lower price: you save ₱');
     expect(ORDER_SRC).toContain('Included with your album');
-    expect(ORDER_SRC).toContain('years of memory hosting');
+    expect(ORDER_SRC).toContain('includedHostingLine(includedYears, effectiveYears)');
     expect(ORDER_SRC).toContain('living-memory QRs (₱');
   });
 });

@@ -142,7 +142,7 @@ export default function Start() {
               </View>
             </View>
 
-            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]}>
+            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 24 }]} testID="home-scroll">
               <AlbumsCard>
                 {inProgress ? (
                   <>
@@ -186,7 +186,10 @@ const styles = StyleSheet.create({
   signIn: { height: 36, paddingHorizontal: 14, borderRadius: 18, backgroundColor: 'rgba(255, 255, 255, 0.92)', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.12)' },
   signInText: { fontSize: 14, color: INK.label },
   menuButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  scroll: { paddingHorizontal: 16, paddingTop: 8, gap: 12, width: '100%', maxWidth: 480, alignSelf: 'center' },
+  // At least as tall as the screen, the cards in its middle, as the website's
+  // home centers them (Home.tsx HeroSection): signed out they were at the top
+  // with a big empty gap under them (owner, 2026-11-04). Longer, it scrolls.
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 16, paddingTop: 8, gap: 12, width: '100%', maxWidth: 480, alignSelf: 'center' },
   card: { backgroundColor: '#FFFFFF', borderRadius: 22, padding: 16, gap: 10, boxShadow: '0 16px 40px rgba(0, 0, 0, 0.2)' },
   testCard: { backgroundColor: 'rgba(255, 255, 255, 0.94)' },
   label: { fontSize: 11, letterSpacing: 1.1, color: INK.label },

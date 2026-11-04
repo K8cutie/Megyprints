@@ -2,7 +2,9 @@
    Same behaviour as the website's useAccountAlbums: a failed load stays
    "couldn't load" (never a flash of "no albums"), with Try again, and it
    tries again by itself every 20 seconds and when the app comes back on
-   screen. */
+   screen. `savedAt` is the builder's last save to the account: when it
+   moves, the list is read again, so an album saved after the list opened
+   (signing in with an album on the phone) shows up on it. */
 import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { ALBUMS_RETRY_MS, listMyAlbums, type AlbumRow } from './albums';
@@ -18,7 +20,7 @@ export interface MyAlbums {
   retry: () => void;
 }
 
-export function useMyAlbums(userId: string | undefined): MyAlbums {
+export function useMyAlbums(userId: string | undefined, savedAt = 0): MyAlbums {
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<Result | null>(null);
   const retry = useCallback(() => setAttempt((a) => a + 1), []);
@@ -30,7 +32,7 @@ export function useMyAlbums(userId: string | undefined): MyAlbums {
       .then((albums) => { if (alive) setResult({ userId, attempt, albums, failed: false }); })
       .catch(() => { if (alive) setResult((r) => ({ userId, attempt, albums: r?.userId === userId ? r.albums : [], failed: true })); });
     return () => { alive = false; };
-  }, [userId, attempt]);
+  }, [userId, attempt, savedAt]);
 
   const mine = result && result.userId === userId ? result : null;
 

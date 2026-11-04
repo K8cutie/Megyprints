@@ -94,8 +94,9 @@ export interface KeeperDeps {
 const realDeps = (): KeeperDeps => ({ native: orderKeeper, askToNotify: () => askToNotify(orderKeeper), appState: () => String(AppState.currentState) });
 
 export interface Keeper {
-  /** It runs and notifications are on: the person may use other apps. */
-  background: boolean;
+  /** It runs and notifications are on: the person may use other apps.
+   *  Known once Android's question is answered; the order never waits for it. */
+  background: Promise<boolean>;
   /** A step of the bar (placeRun.ts sendFrame). */
   step(frame: { progress: PlaceProgress; message: string }): void;
   /** Sent: stops; says so if the person is in another app. */
@@ -106,14 +107,19 @@ export interface Keeper {
   end(): Promise<void>;
 }
 
-/** Place order was tapped: notifications asked for, the keeper started with
- *  the bar's first words. */
+/** Place order was tapped: notifications asked for, and the keeper started
+ *  with the bar's first words without waiting for the answer. Android keeps
+ *  the answer while the person is away from the app (React Native hands it
+ *  over when they come back), so an order that waited for it did not start
+ *  until they returned (beta round 2). */
 export async function startKeeper(firstMessage: string, deps: KeeperDeps = realDeps()): Promise<Keeper> {
   const { native } = deps;
   if (!native) {
-    return { background: false, step: () => {}, sent: async () => {}, failed: async () => {}, end: async () => {} };
+    return { background: Promise.resolve(false), step: () => {}, sent: async () => {}, failed: async () => {}, end: async () => {} };
   }
-  const notify = await deps.askToNotify().catch(() => false);
+  // No "done" notification until it is allowed (none could show before).
+  let notify = false;
+  const asked = deps.askToNotify().catch(() => false).then((ok) => { notify = ok; return ok; });
   // Started even when notifications are off: if the person leaves anyway,
   // the order still goes on (the notification is then not shown).
   let started = false;
@@ -136,7 +142,7 @@ export async function startKeeper(firstMessage: string, deps: KeeperDeps = realD
     }
   };
   return {
-    background: started && notify,
+    background: asked.then((ok) => started && ok),
     step(frame) {
       if (!open || frame.message === lastMessage) return;
       lastMessage = frame.message;

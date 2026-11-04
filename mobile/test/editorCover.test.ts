@@ -51,8 +51,18 @@ describe("the cover editor uses the website's words", () => {
     expect(web.preview).toContain(`<Pencil size={13} /> ${W.EDIT_COVER}`);
   });
 
+  it('the row\'s line says the order it really has: the app runs no photo check yet (beta round 2)', () => {
+    // The website's "best ones first" is its photo check's order. The app's
+    // check is off (appPlatform.ts), so every photo ties and the row keeps
+    // the album's order: the app's own words, until the check is on.
+    const platform = fs.readFileSync(path.join(__dirname, '../src/builder/appPlatform.ts'), 'utf8');
+    expect(platform).toMatch(/photoCheck: \{\s*available: \(\) => false,/);
+    expect(W.YOUR_PHOTOS).toBe('Your photos. Tap one for the cover.');
+    expect(W.YOUR_PHOTOS).not.toMatch(/best/);
+  });
+
   it('the Background tab (CoverEditor.tsx, PageColorPicker.tsx)', () => {
-    expect(web.cover).toContain(`>${W.YOUR_PHOTOS}</span>`);
+    expect(web.cover).toContain(`>${W.WEBSITE_YOUR_PHOTOS}</span>`);
     // Since #235 the photos are one row, every photo: no "Show all".
     expect(web.cover).not.toContain('Show all');
     expect(web.cover).toContain('data-testid="cover-photo-row"');

@@ -19,7 +19,12 @@
    except that the Play build hides the start screen's test buttons and
    "Test version" note (extra.build, src/lib/buildKind.ts).
    Held by test/playRelease.test.ts.
+
+   A dev build made for a test server on this PC (a plain-http server
+   address in .env.local) may talk plain http (plugins/withLocalServer.js);
+   the Play build refuses such an address. Held by test/localServerBuild.test.ts.
    ══════════════════════════════════════════════════════════════════════════ */
+const { localServerUrls } = require('./plugins/withLocalServer');
 
 /** The Play build's settings on top of app.json's. */
 function playConfig(config) {
@@ -49,7 +54,12 @@ function playConfig(config) {
 
 /** Which build this is: the Play build only when MEGY_PLAY is '1'. */
 function appConfig({ config }, env = process.env) {
-  return env.MEGY_PLAY === '1' ? playConfig(config) : config;
+  const local = localServerUrls(env);
+  if (env.MEGY_PLAY === '1') {
+    if (local.length) throw new Error(`The Play build must talk to the shop over https, not ${local.join(', ')} (mobile/.env.local is set for a test server).`);
+    return playConfig(config);
+  }
+  return local.length ? { ...config, plugins: [...(config.plugins ?? []), './plugins/withLocalServer'] } : config;
 }
 
 module.exports = appConfig;
