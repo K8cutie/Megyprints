@@ -16,6 +16,7 @@ import { BACKGROUND_NOTE, startKeeper, startSending, type Keeper } from '../../l
 import type { CheckoutAlbum, PlaceOrderPlan } from '../../lib/checkout/orderPayload';
 import { KEEP_OPEN_NOTE, sendFrame } from '../../lib/checkout/placeRun';
 import type { PlacedOrder, SendStep } from '../../lib/checkout/sendOrder';
+import type { SentFiles } from '../../lib/checkout/sentFiles';
 import { colors, space } from '../../lib/theme';
 import type { PageText } from '../../render/pageText';
 import { PlaceProgressBar } from './PlaceProgressBar';
@@ -23,8 +24,10 @@ import { PlaceProgressBar } from './PlaceProgressBar';
 /** The checkout screen's words for an error with none of its own. */
 const SOMETHING_WRONG = 'Something went wrong placing your order.';
 
-export function Sending({ plan, album, cover, material, text, placed, bookingNumber = null, onOrder, onSent, onFailed }: {
+export function Sending({ plan, album, cover, material, text, placed, sent, bookingNumber = null, onOrder, onSent, onFailed }: {
   plan: PlaceOrderPlan; album: CheckoutAlbum; cover: CoverType; material: MaterialType; text: PageText; placed: PlacedOrder | null;
+  /** The files already sent (sentFiles.ts): not made or sent again. */
+  sent?: SentFiles;
   /** An event album its booking pays for: the booking's number (the notification says it). */
   bookingNumber?: string | null;
   onOrder: (o: PlacedOrder) => void;
@@ -45,11 +48,11 @@ export function Sending({ plan, album, cover, material, text, placed, bookingNum
     // would stop the order half-way).
     const sendDone = startSending();
     void (async () => {
-      // Notifications asked for first (Android shows its question), then the
-      // order is made and sent.
+      // The keeper starts and Android asks about notifications; the order is
+      // made and sent meanwhile, whatever the answer and however long it takes.
       keeper = await startKeeper(first.message);
       if (!live) { void keeper.end(); sendDone(); return; }
-      setBackground(keeper.background);
+      void keeper.background.then((b) => { if (live) setBackground(b); });
       const k = keeper;
       const onStep = (s: SendStep) => {
         const f = sendFrame(prev, s);
@@ -60,7 +63,7 @@ export function Sending({ plan, album, cover, material, text, placed, bookingNum
       // Loaded only here: it needs the phone's Skia and the live database.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { sendFromPhone } = require('../../lib/checkout/phoneSend') as typeof import('../../lib/checkout/phoneSend');
-      sendFromPhone({ plan, album, cover, material, text, placed, onStep, onOrder: (o) => handlers.current.onOrder(o) })
+      sendFromPhone({ plan, album, cover, material, text, placed, sent, onStep, onOrder: (o) => handlers.current.onOrder(o) })
         .then(async (r) => {
           await k.sent(r.order, r.paidByTester, r.paidByBooking ? bookingNumber : null);
           if (live) handlers.current.onSent(r);

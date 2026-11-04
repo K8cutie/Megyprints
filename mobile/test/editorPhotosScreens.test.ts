@@ -195,6 +195,16 @@ describe('the sheets', () => {
     expect(takeIntake()?.reopen).toEqual({ id: 'photos:pick', params: { kind: 'slot', index: t.index } });
   });
 
+  it('for a frame that has a photo (Replace photo), the sheet says "Replace photo", not "Add a photo" (beta round 2)', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await act(async () => { editThePages(builder()); builder().goToPage(3); });
+    const t = firstPhoto(platform);
+    await show(createElement(PickPhotoSheet, { ctx: ctxOn(platform), params: { kind: 'slot', index: t.index }, close: jest.fn() }));
+    expect(texts()).toContain(words.REPLACE_PHOTO);
+    expect(texts()).not.toContain(words.ADD_A_PHOTO);
+    expect(texts()).toContain(words.UPLOAD_MORE);
+  });
+
   it('Mask and Filter tick the photo\'s own and change it; Pages says the 40-page floor instead of offering a delete', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     await act(async () => { editThePages(builder()); builder().goToPage(6); });

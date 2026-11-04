@@ -14,7 +14,7 @@
    Album card's button: "Start Creating" (the website's); with an album in
    progress, "Continue my album" and "Start a new album" instead, as before.
    ══════════════════════════════════════════════════════════════════════════ */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Animated, Image, type ImageSourcePropType, Pressable, ScrollView, type ScrollViewInstance, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { GOLD, VideoMark } from '../editor/core/GoldButton';
 import { useHomeMotion } from './homeMotion';
@@ -28,6 +28,15 @@ const TRAVEL: ImageSourcePropType = require('../../assets/home/travel.jpg');
 const WEDDING: ImageSourcePropType = require('../../assets/home/wedding.jpg');
 const MEGY: ImageSourcePropType = require('../../assets/home/megy.png');
 /* eslint-enable @typescript-eslint/no-require-imports */
+
+/** The slide area's width, points (0 until it is measured). The words beside
+ *  a slide's picture get the rest of it outright: left to flex, Android laid
+ *  each line out as wide as the whole slide, so the words ran past its right
+ *  edge (beta testers 2026-11-04: "Every page laid out for you. Cha|"). */
+const SlideWidth = createContext(0);
+/** The picture beside a step's words, and the fan beside the hook line (its 10 gap + 136). */
+const PICTURE = 150;
+const FAN_ROOM = 146;
 
 /** One slide's time on screen (the website's). */
 export const SLIDE_MS = 4000;
@@ -91,21 +100,25 @@ export function StepCarousel({ name, slides, startDelayMs = 0, testID }: {
 
   return (
     <View testID={testID} accessibilityLabel={`${name}, how it works`}>
-      <View style={styles.region} onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}>
-        <ScrollView ref={scroller} horizontal pagingEnabled showsHorizontalScrollIndicator={false} testID={`${testID}-track`}
-          onScrollBeginDrag={() => setHeld(true)}
-          onScrollEndDrag={() => setHeld(false)}
-          onMomentumScrollEnd={(e) => {
-            const k = width > 0 ? Math.round(e.nativeEvent.contentOffset.x / width) : i;
-            if (k !== i && k >= 0 && k < n) go(k);
-          }}>
-          {list.map((slide, k) => (
-            <View key={k} style={{ width: width || undefined }} testID={`${testID}-slide-${k}`}
-              accessibilityElementsHidden={k !== i} importantForAccessibility={k === i ? 'auto' : 'no-hide-descendants'}>
-              {slide}
-            </View>
-          ))}
-        </ScrollView>
+      {/* The exact width: a rounded one made each slide a little narrower than
+          a page, so a later slide showed a sliver of the one before. */}
+      <View style={styles.region} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        <SlideWidth.Provider value={width}>
+          <ScrollView ref={scroller} horizontal pagingEnabled showsHorizontalScrollIndicator={false} testID={`${testID}-track`}
+            onScrollBeginDrag={() => setHeld(true)}
+            onScrollEndDrag={() => setHeld(false)}
+            onMomentumScrollEnd={(e) => {
+              const k = width > 0 ? Math.round(e.nativeEvent.contentOffset.x / width) : i;
+              if (k !== i && k >= 0 && k < n) go(k);
+            }}>
+            {list.map((slide, k) => (
+              <View key={k} style={{ width: width || undefined }} testID={`${testID}-slide-${k}`}
+                accessibilityElementsHidden={k !== i} importantForAccessibility={k === i ? 'auto' : 'no-hide-descendants'}>
+                {slide}
+              </View>
+            ))}
+          </ScrollView>
+        </SlideWidth.Provider>
       </View>
       <View style={styles.dots}>
         {list.map((_s, k) => (
@@ -256,8 +269,9 @@ function Picture({ children }: { children: ReactNode }) {
 /** "STEP 1", its title and its line, beside the picture. */
 function StepText({ n, step, gold = false }: { n: number; step: HomeStep; gold?: boolean }) {
   const t = useType();
+  const w = useContext(SlideWidth);
   return (
-    <View style={styles.stepText}>
+    <View style={[styles.stepText, w > 0 && { flex: 0, width: w - PICTURE }]}>
       <View style={styles.stepRow}>
         <Text style={[t.bodyBold, styles.stepWord, { color: gold ? INK.goldLabel : INK.label }]}>STEP</Text>
         <Text style={[t.display, styles.stepNumber, { color: gold ? INK.goldNumber : INK.peach }]}>{n}</Text>
@@ -279,9 +293,10 @@ const FAN_PHONES: ViewStyle[] = [{ left: -6, top: -8 }, { right: -6, top: -8 }, 
 function HookSlide({ text, how, onHow, phones = false, testID }: { text: string; how: string; onHow: () => void; phones?: boolean; testID: string }) {
   const t = useType();
   const m = useHomeMotion();
+  const w = useContext(SlideWidth);
   return (
     <Scene circle="right">
-      <View style={styles.hookText}>
+      <View style={[styles.hookText, w > 0 && { flex: 0, width: w - FAN_ROOM }]}>
         <Text style={[t.body, styles.hookLine]}>{text}</Text>
         <Pressable onPress={onHow} accessibilityRole="button" testID={testID} hitSlop={8}>
           <Text style={[t.bodyBold, styles.how]}>{how} ›</Text>
@@ -602,7 +617,7 @@ const styles = StyleSheet.create({
   circle: { position: 'absolute' },
   circleLeft: { left: -36, top: -24, width: 196, height: 196, borderRadius: 98 },
   circleRight: { right: -40, top: -30, width: 200, height: 200, borderRadius: 100 },
-  picture: { width: 150, height: 150 },
+  picture: { width: PICTURE, height: 150 },
   stepText: { flex: 1, minWidth: 0, gap: 3, paddingRight: 14 },
   stepRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   stepWord: { fontSize: 11, letterSpacing: 1.3 },

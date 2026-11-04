@@ -22,7 +22,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
 import path from 'node:path';
-import { render, screen } from '@testing-library/react-native';
+import { act, render, screen } from '@testing-library/react-native';
 import {
   BACKGROUND_NOTE, FAILED_TITLE, KEEPER_TITLE, placedNotice, startKeeper, type KeeperDeps, type KeeperNative,
 } from '../src/lib/checkout/backgroundSend';
@@ -80,7 +80,33 @@ describe('the order keeper', () => {
     const k = await startKeeper('Placing your order…', d);
     expect(d.asked).toBe(1);
     expect(n.calls).toEqual([{ fn: 'start', args: [KEEPER_TITLE, 'Placing your order…'] }]);
-    expect(k.background).toBe(true);
+    await expect(k.background).resolves.toBe(true);
+  });
+
+  it('Android\'s question not answered yet (Home pressed while it is up): the keeper starts anyway; the order never waits for it', async () => {
+    // Beta round 2 (Mother): Android keeps the answer while the person is
+    // away from the app, so an order waiting for it did not start until they
+    // came back.
+    const n = fakeNative();
+    let answer: (ok: boolean) => void = () => {};
+    const d: KeeperDeps = { native: n, askToNotify: () => new Promise<boolean>((r) => { answer = r; }), appState: () => 'background' };
+    const k = await startKeeper('Placing your order…', d);
+    expect(n.calls).toEqual([{ fn: 'start', args: [KEEPER_TITLE, 'Placing your order…'] }]);
+    let background: boolean | null = null;
+    void k.background.then((b) => { background = b; });
+    await new Promise((r) => setImmediate(r));
+    expect(background).toBeNull();
+    answer(true);
+    await expect(k.background).resolves.toBe(true);
+    await k.sent({ order_number: 'MP-2026-ABC1234' }, false);
+    expect(n.calls.at(-1)).toEqual({ fn: 'finish', args: ['Order MP-2026-ABC1234 is placed', 'Pay by bank transfer to finish.'] });
+  });
+
+  it('done before the question is answered: no "done" notification (it may not show one yet)', async () => {
+    const n = fakeNative();
+    const k = await startKeeper('Placing your order…', { native: n, askToNotify: () => new Promise<boolean>(() => {}), appState: () => 'background' });
+    await k.sent({ order_number: 'MP-2026-ABC1234' }, false);
+    expect(n.calls.at(-1)).toEqual({ fn: 'finish', args: [null, null] });
   });
 
   it('follows every page, with the bar\'s words and how far it is', async () => {
@@ -144,7 +170,7 @@ describe('the order keeper', () => {
     const n = fakeNative({ allowed: false });
     const k = await startKeeper('Placing your order…', deps(n, { ask: false, appState: 'background' }));
     expect(n.calls[0].fn).toBe('start');
-    expect(k.background).toBe(false);
+    await expect(k.background).resolves.toBe(false);
     await k.sent({ order_number: 'MP-2026-ABC1234' }, false);
     expect(n.calls.at(-1)).toEqual({ fn: 'finish', args: [null, null] });
   });
@@ -152,14 +178,14 @@ describe('the order keeper', () => {
   it('Android refused to start it: as before (keep the screen open)', async () => {
     const n = fakeNative({ started: { service: false, task: false } });
     const k = await startKeeper('Placing your order…', deps(n));
-    expect(k.background).toBe(false);
+    await expect(k.background).resolves.toBe(false);
   });
 
   it('an older APK without the module: nothing asked, nothing started, nothing breaks', async () => {
     const d = deps(null);
     const k = await startKeeper('Placing your order…', d);
     expect(d.asked).toBe(0);
-    expect(k.background).toBe(false);
+    await expect(k.background).resolves.toBe(false);
     k.step(steps([{ step: 'cover' }])[0]);
     await k.sent({ order_number: 'MP-1' }, false);
     await k.failed('x');
@@ -177,14 +203,14 @@ describe('the order keeper', () => {
 });
 
 /* ── The Sending screen ── */
-const mockKeeper: { native: (KeeperNative & { calls: Call[] }) | null; ask: boolean } = { native: null, ask: true };
+const mockKeeper: { native: (KeeperNative & { calls: Call[] }) | null; ask: boolean; asking?: Promise<boolean> } = { native: null, ask: true };
 const mockSend: { run: (c: { onStep: (s: SendStep) => void; onOrder: (o: unknown) => void }) => Promise<unknown> } = { run: async () => ({}) };
 jest.mock('../src/lib/checkout/backgroundSend', () => {
   const actual = jest.requireActual('../src/lib/checkout/backgroundSend');
   return {
     ...actual,
     // The screen passes no stand-ins: the screen tests' ones (the tests above pass their own).
-    startKeeper: (first: string, d?: unknown) => actual.startKeeper(first, d ?? { native: mockKeeper.native, askToNotify: async () => mockKeeper.ask, appState: () => 'background' }),
+    startKeeper: (first: string, d?: unknown) => actual.startKeeper(first, d ?? { native: mockKeeper.native, askToNotify: () => mockKeeper.asking ?? Promise.resolve(mockKeeper.ask), appState: () => 'background' }),
   };
 });
 jest.mock('../src/lib/checkout/phoneSend', () => ({ sendFromPhone: (c: never) => mockSend.run(c) }));
@@ -200,7 +226,7 @@ function renderSending(onSent = jest.fn(), onFailed = jest.fn()) {
 }
 
 describe('the Sending screen', () => {
-  beforeEach(() => { mockKeeper.native = fakeNative(); mockKeeper.ask = true; });
+  beforeEach(() => { mockKeeper.native = fakeNative(); mockKeeper.ask = true; mockKeeper.asking = undefined; });
 
   it('notifications allowed: says they can use other apps; the notification follows the pages; done says the order', async () => {
     let finish!: (v: unknown) => void;
@@ -240,6 +266,19 @@ describe('the Sending screen', () => {
     await new Promise((r) => setImmediate(r));
     expect(mockKeeper.native!.calls.at(-1)).toEqual({ fn: 'finish', args: [FAILED_TITLE, why] });
     expect(onFailed).toHaveBeenCalledTimes(1);
+  });
+
+  it('the order is sent while Android\'s question is still up; "you can use other apps" once it is answered yes', async () => {
+    let answer: (ok: boolean) => void = () => {};
+    mockKeeper.asking = new Promise<boolean>((r) => { answer = r; });
+    let sending = false;
+    mockSend.run = () => { sending = true; return new Promise(() => {}); };
+    await renderSending();
+    await new Promise((r) => setImmediate(r));
+    expect(sending).toBe(true);
+    expect(screen.getByText(KEEP_OPEN_NOTE)).toBeOnTheScreen();
+    await act(async () => { answer(true); });
+    expect(await screen.findByText(BACKGROUND_NOTE)).toBeOnTheScreen();
   });
 
   it('an older APK: the screen as before', async () => {

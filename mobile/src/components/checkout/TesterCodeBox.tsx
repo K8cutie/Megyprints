@@ -1,21 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { testerLine, type TesterCheck, type TesterCode } from '../../lib/checkout/testerCode';
+import { testerCheckMessage, testerLine, type TesterCheck, type TesterCode } from '../../lib/checkout/testerCode';
 import { colors, space } from '../../lib/theme';
 import { Button } from '../Button';
 
+const SIGN_IN_FIRST = testerCheckMessage('sign_in');
+
 /** The tester code at checkout (the website's TesterCodeBox). Closed, one
  *  line: "Have a tester code?". Open, a box and "Use code". Once a code
- *  works it says what it does, with "Remove". */
-export function TesterCodeBox({ tester, onChange, check }: {
+ *  works it says what it does, with "Remove". Signed out, "Sign in first"
+ *  comes with its Sign in button (beta round 2: the only other way to sign
+ *  in from here was a button that said "pay ₱2,016"); signed in, those
+ *  words go, and the code stays typed. */
+export function TesterCodeBox({ tester, onChange, check, signedIn, onSignIn }: {
   tester: TesterCode | null;
   onChange: (next: TesterCode | null) => void;
   check: (typed: string) => Promise<TesterCheck>;
+  signedIn: boolean;
+  onSignIn: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
+  useEffect(() => { if (signedIn) setError((e) => (e === SIGN_IN_FIRST ? '' : e)); }, [signedIn]);
 
   if (tester) {
     return (
@@ -67,6 +75,7 @@ export function TesterCodeBox({ tester, onChange, check }: {
         <Button label={checking ? 'Checking…' : 'Use code'} kind="plain" busy={checking} onPress={() => void use()} style={styles.use} testID="tester-code-apply" />
       </View>
       {!!error && <Text style={styles.error} testID="tester-code-error">{error}</Text>}
+      {error === SIGN_IN_FIRST && !signedIn && <Button label="Sign in" kind="plain" onPress={onSignIn} testID="tester-code-sign-in" />}
     </View>
   );
 }

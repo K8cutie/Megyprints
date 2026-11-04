@@ -249,7 +249,7 @@ describe('Swap photo, then a tap on the other one', () => {
 });
 
 describe('Replace photo, Remove photo and "Add a photo"', () => {
-  it('Replace photo opens "Add a photo" for the frame; photos are tagged with their page; a photo from another page swaps in, said', async () => {
+  it('Replace photo opens the photo sheet for the frame (titled "Replace photo"); photos are tagged with their page; a photo from another page swaps in, said', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     let ctx = await openOn(platform, 4);
     const t = firstPhoto(platform);

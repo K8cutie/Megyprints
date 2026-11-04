@@ -28,6 +28,7 @@ import { copyNotesMessage, missingPhotos } from '@web/lib/photoPresence';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '@web/pages/builder/types';
 import { missingOnPhoneMessage } from '../../builder/screenWords';
 import type { CheckoutAlbum, OrderAlbumRow } from './orderPayload';
+import { isNoConnection } from './sendOrder';
 
 export interface OrderInput {
   pages: AlbumPage[];
@@ -77,13 +78,29 @@ export function orderSaveError(conflict: boolean): string {
 /** lib/orderAlbum AlbumNotSavedError's words. */
 export const ALBUM_NOT_SAVED = "This album isn't saved to your account yet, so we can't order it. Open it in the builder and tap Order again. It saves on the way.";
 
+/** No connection while reading it: plain words, not the phone's error. */
+export const ALBUM_LOAD_OFFLINE = "We couldn't reach your account to get this album. Check your internet, then tap Place order again.";
+
 /** The album's row in the account, by its id (selectOrderAlbum with an id:
  *  that row or nothing, never another album). */
 export async function loadOrderAlbumRow(client: Pick<SupabaseClient, 'from'>, userId: string, albumId: string): Promise<OrderAlbumRow> {
   const { data, error } = await client.from('albums').select('*').eq('user_id', userId).eq('id', albumId).maybeSingle();
-  if (error) throw new Error(`Could not load your album: ${error.message}`);
+  if (error) throw new Error(isNoConnection(error.message) ? ALBUM_LOAD_OFFLINE : `Could not load your album: ${error.message}`);
   if (!data) throw new Error(ALBUM_NOT_SAVED);
   return data as OrderAlbumRow;
+}
+
+/** The photo on the front cover, for checkout's "Your cover" card when the
+ *  cover can't be drawn: the one the cover step put on it (its background,
+ *  the website's setCoverToPhoto), else the first photo in a cover slot. The
+ *  card read only the slot, so it showed an empty "Cover" box for every
+ *  album made in the app (beta testers, 2026-11-04). */
+export function coverPhotoUri(coverFront: AlbumPage | null, photos: readonly Pick<UploadedPhoto, 'id' | 'previewUrl'>[]): string | null {
+  const bg = coverFront?.background as { type?: string; photoId?: string } | undefined;
+  const onCover = bg?.type === 'image' && bg.photoId ? photos.find((p) => p.id === bg.photoId) : undefined;
+  if (onCover) return onCover.previewUrl;
+  const index = (coverFront?.slotFills ?? []).find((f): f is number => typeof f === 'number');
+  return index != null ? photos[index]?.previewUrl ?? null : null;
 }
 
 /** What checkout orders: the album on screen, with its row from the account. */
@@ -91,7 +108,6 @@ export function checkoutAlbumFrom(
   b: { getAlbumId: () => string | undefined; albumTitle: string; albumSize: AlbumSizePreset; albumPages: AlbumPage[]; uploadedPhotos: UploadedPhoto[]; coverFront: AlbumPage | null },
   row: OrderAlbumRow,
 ): CheckoutAlbum {
-  const coverIndex = (b.coverFront?.slotFills ?? []).find((f): f is number => typeof f === 'number');
   return {
     albumId: b.getAlbumId() ?? row.id,
     title: b.albumTitle,
@@ -100,7 +116,7 @@ export function checkoutAlbumFrom(
     photoUris: b.uploadedPhotos.map((p) => p.previewUrl),
     photoIds: b.uploadedPhotos.map((p) => p.id),
     coverFront: b.coverFront,
-    coverPhotoUri: coverIndex != null ? b.uploadedPhotos[coverIndex]?.previewUrl ?? null : null,
+    coverPhotoUri: coverPhotoUri(b.coverFront, b.uploadedPhotos),
     row,
   };
 }

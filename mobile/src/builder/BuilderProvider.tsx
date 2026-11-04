@@ -7,7 +7,7 @@
    website's steps do. The page renderer's fonts load here too: they draw the
    pages and measure the captions (the builder's textMeasurer).
    ══════════════════════════════════════════════════════════════════════════ */
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import '@shopify/react-native-skia/lib/commonjs/skia/NativeSetup';
 import { Skia } from '@shopify/react-native-skia/lib/commonjs/skia/Skia';
@@ -15,6 +15,9 @@ import { BuilderPlatformContext, type AppLifecycle, type TextMeasurer } from '@w
 import { useBuilderState, type BuilderActions } from '@web/pages/builder/useBuilderState';
 import { inspectPhotos } from '../../modules/photo-files';
 import { useAuth } from '../lib/auth';
+import { useDraft } from '../lib/draftStore';
+import { useDraftFollowsAlbum } from '../lib/draftFollowsAlbum';
+import { useAccountSave } from './accountSave';
 import { withQrOnOuterSide } from '../lib/memories/qrSide';
 import { supabase } from '../lib/supabase';
 import { PageText } from '../render/pageText';
@@ -100,6 +103,15 @@ function BuilderHost({ platform: p, children }: { platform: AppPlatform; childre
   // Every screen reads the pages with each video memory's QR on the page's
   // outer edge, away from the binding (lib/memories/qrSide.ts).
   const builder = withQrOnOuterSide(useBuilderState());
+  // Signed in, a made album goes to the account (accountSave.ts), whichever
+  // screen is open: signing in from Home included.
+  const signedIn = !!useAuth().session;
+  useAccountSave(builder, p.deviceStore, signedIn);
+  // The picked photos are the album's: another album on the phone (opened,
+  // or fresh for another account) brings its own (draftFollowsAlbum.ts).
+  const { replace } = useDraft();
+  const keptAt = useCallback((id: string) => p.photoStore.records().find((r) => r.id === id)?.uri, [p]);
+  useDraftFollowsAlbum(builder.getAlbumId, builder.isLoadingCloud, builder.uploadedPhotos, replace, keptAt);
   const [text, setText] = useState<PageText | null>(pageText);
   useEffect(() => {
     let live = true;

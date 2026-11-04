@@ -27,13 +27,16 @@ import { fileKeyValueStore, memoryStore, type SyncFiles } from '../src/builder/d
 import type { PhotoHeader } from '../src/builder/appPhotos';
 import { chooseCover, makeAlbum, nameAlbum, occasionOf, syncPhotos } from '../src/builder/albumFlow';
 import { addPhotos, emptyDraft, type DraftPhoto } from '../src/lib/photoDraft';
+import { useAccountSave } from '../src/builder/accountSave';
+import { useDraftFollowsAlbum } from '../src/lib/draftFollowsAlbum';
 
 type Row = Record<string, unknown>;
 
 /** A made-up Supabase: auth with a saved sign-in, and the albums table in
  *  memory, answering the query shapes lib/albumCloud uses. updated_at is set
  *  by "the database" on every write, as 0001/0040 do. */
-function madeUpSupabase(userId: string | null, table: Row[], log: string[]) {
+function madeUpSupabase(userId: string | null | (() => string | null), table: Row[], log: string[]) {
+  const signedIn = typeof userId === 'function' ? userId : () => userId;
   let clock = Date.UTC(2026, 9, 29, 3, 0);
   const stamp = () => new Date(clock += 1000).toISOString();
   const query = (op: 'select' | 'insert' | 'update' | 'delete', payload?: Row) => {
@@ -69,7 +72,7 @@ function madeUpSupabase(userId: string | null, table: Row[], log: string[]) {
     return chain;
   };
   return {
-    auth: { getSession: async () => ({ data: { session: userId ? { user: { id: userId } } : null } }) },
+    auth: { getSession: async () => { const id = signedIn(); return { data: { session: id ? { user: { id } } : null } }; } },
     from: (t: string) => {
       if (t !== 'albums') throw new Error(`no table ${t} in this made-up database`);
       return {
@@ -177,6 +180,197 @@ describe('the album on the phone', () => {
     await settle();
     expect(again().uploadedPhotos.find((p) => p.id === gone.id)?.previewUrl).toBe('');
     expect(again().uploadedPhotos.filter((p) => !p.previewUrl)).toHaveLength(1);
+  }, 120_000);
+});
+
+describe('signing in saves the album on the phone (accountSave.useAccountSave), never into another account', () => {
+  /** The app's builder with the whole app's sign-in save (BuilderProvider), signed in as `who`. */
+  const who: { id: string | null } = { id: null };
+  /** What the picked photos became each time the album on the phone changed (BuilderProvider). */
+  const picked: DraftPhoto[][] = [];
+  function SignedInProbe({ name, platform }: { name: string; platform: AppPlatform }) {
+    const b = useBuilderState();
+    useAccountSave(b, platform.deviceStore, !!b.user);
+    useDraftFollowsAlbum(b.getAlbumId, b.isLoadingCloud, b.uploadedPhotos, (d) => { picked.push(d); }, (id) => platform.photoStore.records().find((r) => r.id === id)?.uri);
+    useEffect(() => { builders[name] = b; });
+    return null;
+  }
+  async function phoneFor2(table: Row[], log: string[]) {
+    // The phone answers about its photos when `gate.wait` lets it (a real
+    // phone takes a moment: loadAlbum waits for it with the pages already in).
+    const gate: { wait: Promise<void> | null } = { wait: null };
+    const onPhone = phoneFor(sc);
+    const inspect = async (uris: string[]) => { if (gate.wait) await gate.wait; return onPhone(uris); };
+    const files = memoryFiles();
+    // The saved sign-in is whoever is signed in now (reset asks it directly).
+    const client = madeUpSupabase(() => who.id, table, log);
+    const platformOn = () => createAppPlatform({
+      deviceStore: fileKeyValueStore(files), sessionStore: memoryStore(), inspect,
+      lifecycle: { onLeave: () => () => {}, onReturn: () => () => {} },
+      measurer: () => null, client, useUser: () => (who.id ? { id: who.id } : null),
+    });
+    let platform = platformOn();
+    let root = createRoot();
+    roots.push(root);
+    const draw = () => act(async () => { root.render(createElement(BuilderPlatformContext.Provider, { value: platform }, createElement(SignedInProbe, { name: 'shared', platform }))); });
+    await draw();
+    await settle();
+    const b = () => builders.shared;
+    const make = async (title = sc.title, size = sc.size) => {
+      await act(async () => { nameAlbum(b(), platform.deviceStore, title, sc.occasion, platform.occasionChanged); });
+      await act(async () => { b().setAlbumSize(size); });
+      await act(async () => { await syncPhotos(b(), draft(), inspect); });
+      for (let i = 0; i < 50 && b().uploadedPhotos.some((p) => !(p.width > 0)); i++) await settle();
+      await act(async () => { chooseCover(b(), b().uploadedPhotos.find((p) => p.name === sc.cover)!.id); });
+      const spy = jest.spyOn(Math, 'random').mockImplementation(seeded(sc.seed));
+      try { await act(async () => { await makeAlbum(b()); }); } finally { spy.mockRestore(); }
+      await settle();
+    };
+    const signIn = async (id: string | null) => { who.id = id; await draw(); await settle(); await settle(); };
+    /** The app closed (its album saved on the phone) and opened again. */
+    const relaunch = async () => {
+      await act(async () => { b().saveDraftNow(); platform.photoStore.flush(); });
+      await act(async () => { root.unmount(); });
+      roots.splice(roots.indexOf(root), 1);
+      platform = platformOn();
+      root = createRoot();
+      roots.push(root);
+      await draw();
+      for (let i = 0; i < 3; i++) await settle();
+    };
+    return { b, make, signIn, gate, relaunch };
+  }
+
+  it('an album opened from My albums is not saved again when the app opens next: nobody changed it ("Changed just now", round 4)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make, relaunch } = await phoneFor2(table, log);
+    await make();
+    const firstId = b().getAlbumId()!;
+    await act(async () => { b().reset(); });
+    await settle();
+    await new Promise((r) => setTimeout(r, 5));
+    await make('Second album', sc.size === '6x6' ? '8x8' : '6x6');
+    await act(async () => { await b().loadAlbum(firstId); });
+    await settle();
+    expect(b().getAlbumId()).toBe(firstId);
+    const first = table.find((r) => r.id === firstId)!;
+    const before = first.updated_at;
+    await relaunch();
+    expect(b().getAlbumId()).toBe(firstId);
+    expect(first.updated_at).toBe(before);
+  }, 120_000);
+
+  it('"Start a new album" puts the album away without saving it again when nobody changed it; a change still goes (round 4b)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make } = await phoneFor2(table, log);
+    await make();
+    const firstId = b().getAlbumId()!;
+    const rowOf = (id: string) => table.find((r) => r.id === id)!;
+    const before = rowOf(firstId).updated_at;
+    await act(async () => { b().reset(); });
+    await settle();
+    expect(b().getAlbumId()).not.toBe(firstId);
+    expect(rowOf(firstId).updated_at).toBe(before);
+
+    // Opened again from My albums and renamed: putting it away saves the new name.
+    await act(async () => { await b().loadAlbum(firstId); });
+    await settle();
+    expect(rowOf(firstId).updated_at).toBe(before);
+    await act(async () => { b().setAlbumTitle('First album, renamed'); });
+    await act(async () => { b().reset(); });
+    await settle();
+    expect(rowOf(firstId).title).toBe('First album, renamed');
+  }, 120_000);
+
+  it('opening another album (My albums) never saves its pages into the album that was on the phone (round 3)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make, gate } = await phoneFor2(table, log);
+    await make();
+    const firstId = b().getAlbumId()!;
+    // A second album, another size, made on the same phone with the same photos.
+    await act(async () => { b().reset(); });
+    await settle();
+    await new Promise((r) => setTimeout(r, 5)); // made at another moment (madeAt)
+    const otherSize = sc.size === '6x6' ? '8x8' : '6x6';
+    await make('Second album', otherSize);
+    const secondId = b().getAlbumId()!;
+    expect(secondId).not.toBe(firstId);
+    const rowOf = (id: string) => table.find((r) => r.id === id)!;
+    const second = JSON.parse(JSON.stringify(rowOf(secondId)));
+    const first = JSON.parse(JSON.stringify(rowOf(firstId)));
+    expect(second.album_size).not.toBe(first.album_size);
+
+    // Open the first album while the phone takes its time over the photos.
+    let letGo!: () => void;
+    gate.wait = new Promise<void>((r) => { letGo = r; });
+    let opening!: Promise<void>;
+    await act(async () => { opening = b().loadAlbum(firstId); });
+    await settle();
+    await settle();
+    gate.wait = null;
+    letGo();
+    await act(async () => { await opening; });
+    await settle();
+
+    expect(b().getAlbumId()).toBe(firstId);
+    // The picked photos are the opened album's own (here the same phone photos), once.
+    expect(picked.at(-1)!.map((p) => p.name).sort()).toEqual(b().uploadedPhotos.map((p) => p.name).sort());
+    // The second album's row still holds its own pages and size.
+    const after = rowOf(secondId);
+    expect(after.pages).toEqual(second.pages);
+    expect(after.album_size).toBe(second.album_size);
+    // Nobody changed either album: neither is saved again ("Changed just now"
+    // on both cards, and My albums reordered, for albums nobody touched).
+    expect(after.updated_at).toBe(second.updated_at);
+    expect(rowOf(firstId).updated_at).toBe(first.updated_at);
+    // The first album's row holds its own pages too.
+    expect(rowOf(firstId).pages).toEqual(first.pages);
+
+    // A change not yet in the account still goes there before another album opens.
+    await act(async () => { b().setAlbumTitle('First album, renamed'); });
+    await act(async () => { await b().loadAlbum(secondId); });
+    await settle();
+    expect(b().getAlbumId()).toBe(secondId);
+    expect(rowOf(firstId).title).toBe('First album, renamed');
+    // Its own layout (opened, its pages carry the empty lists an open adds).
+    const layout = (pages: unknown) => (pages as { templateId: string; slotFills: unknown }[]).map((p) => [p.templateId, p.slotFills]);
+    expect(layout(rowOf(firstId).pages)).toEqual(layout(first.pages));
+  }, 120_000);
+
+  it('made signed out, then signed in: it goes to that account, once', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = null;
+    const { b, make, signIn } = await phoneFor2(table, log);
+    await make();
+    expect(table).toEqual([]);
+    await signIn('user-a');
+    expect(table.map((r) => [r.user_id, r.title])).toEqual([['user-a', sc.title]]);
+    expect(table[0].id).toBe(b().getAlbumId());
+  }, 120_000);
+
+  it('another account signing in on the same phone never gets the album on it (the builder gives it a fresh album)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make, signIn } = await phoneFor2(table, log);
+    await make();
+    expect(table.map((r) => r.user_id)).toEqual(['user-a']);
+    picked.length = 0;
+    await signIn(null);
+    await signIn('user-b');
+    expect(table.filter((r) => r.user_id === 'user-b')).toEqual([]);
+    // The photos A picked are not B's picked photos either ("Continue my album" carried them, round 3).
+    expect(picked).toEqual([[]]);
+    // B has a fresh album: blank pages, none of A's photos or title.
+    expect(b().albumTitle).not.toBe(sc.title);
+    expect(b().albumPages.some((p) => (p.slotFills ?? []).some((f) => f != null))).toBe(false);
   }, 120_000);
 });
 

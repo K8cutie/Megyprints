@@ -17,6 +17,7 @@ import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { nameAlbum, occasionOf, saveStep } from '../builder/albumFlow';
 import { colors, space } from '../lib/theme';
+import { useOncePerVisit } from '../lib/useOncePerVisit';
 
 export default function AlbumName() {
   const { builder, platform } = useBuilder();
@@ -32,12 +33,15 @@ export default function AlbumName() {
   const ready = nameReady && themeReady;
   const nudged = nudge > 0 && !ready;
 
-  const next = () => {
-    if (!ready) { setNudge((n) => n + 1); return; }
+  // Once per visit, and not while this screen comes on (useOncePerVisit).
+  const once = useOncePerVisit();
+  const next = once(() => {
+    if (!ready) { setNudge((n) => n + 1); return false; }
     nameAlbum(builder, platform.deviceStore, name, occasion, platform.occasionChanged);
     saveStep(platform.deviceStore, 'size');
     router.push('/album-size');
-  };
+    return true;
+  });
 
   return (
     <KeyboardAvoidingView style={styles.page} behavior="height">

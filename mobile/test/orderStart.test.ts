@@ -23,8 +23,9 @@ import { BLANK_COVER_MESSAGE, checkOrderReadiness, PLACEHOLDER_TEXT, readinessMe
 import { missingPhotos } from '@web/lib/photoPresence';
 import { SCENARIOS } from '../../tools/parity/scenarios';
 import { missingOnPhoneMessage } from '../src/builder/screenWords';
-import { checkoutAlbumFrom, loadOrderAlbumRow, orderCheck, orderSaveError, ORDER_SAVE_CONFLICT, ORDER_SAVE_FAILED } from '../src/lib/checkout/orderStart';
-import { builder, madeAlbum, useEditorBench } from './editorHarness';
+import { ALBUM_LOAD_OFFLINE, checkoutAlbumFrom, loadOrderAlbumRow, orderCheck, orderSaveError, ORDER_SAVE_CONFLICT, ORDER_SAVE_FAILED } from '../src/lib/checkout/orderStart';
+import { act, builder, madeAlbum, useEditorBench } from './editorHarness';
+import { chooseCover, coverPhotoId } from '../src/builder/albumFlow';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
 
 jest.mock('@web/lib/supabase', () => jest.requireActual('./helpers/fakeSupabase').supabaseModule);
@@ -148,6 +149,12 @@ describe('checkout reads the album back from the account (lib/orderAlbum selectO
     await expect(loadOrderAlbumRow(fakeClient as never, 'user-1', 'album-7')).rejects.toThrow(webMessage);
   });
 
+  it('no connection: plain words, not the phone\'s error (beta round 2)', async () => {
+    const offline = { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'TypeError: Network request failed' } }) }) }) }) }) };
+    await expect(loadOrderAlbumRow(offline as never, 'user-1', 'album-7')).rejects.toThrow(ALBUM_LOAD_OFFLINE);
+    expect(ALBUM_LOAD_OFFLINE).toBe("We couldn't reach your account to get this album. Check your internet, then tap Place order again.");
+  });
+
   it('the album checkout orders: the pages on screen, the account\'s row', async () => {
     await madeAlbum(SCENARIOS[1]);
     const b = builder();
@@ -158,9 +165,18 @@ describe('checkout reads the album back from the account (lib/orderAlbum selectO
     expect(album.pages).toBe(b.albumPages);
     expect(album.coverFront).toBe(b.coverFront);
     expect(album.photoUris).toEqual(b.uploadedPhotos.map((p) => p.previewUrl));
-    const coverIndex = (b.coverFront.slotFills ?? []).find((f): f is number => typeof f === 'number');
-    expect(album.coverPhotoUri).toBe(coverIndex != null ? b.uploadedPhotos[coverIndex].previewUrl : null);
     expect(album.row.id).toBe(b.getAlbumId());
     expect(album.fixture).toBeFalsy();
+  });
+
+  it('its cover photo: the one picked in the cover step (beta testers 2026-11-04: the card showed an empty "Cover" box)', async () => {
+    await madeAlbum(SCENARIOS[1]);
+    // The cover step's tap (album-cover.tsx chooseCover): the photo goes on
+    // the cover as its background, not into a slot.
+    const pick = builder().uploadedPhotos[3];
+    await act(async () => { chooseCover(builder(), pick.id); });
+    const b = builder();
+    expect(coverPhotoId(b)).toBe(pick.id);
+    expect(checkoutAlbumFrom(b, { ...row, id: b.getAlbumId()! }).coverPhotoUri).toBe(pick.previewUrl);
   });
 });

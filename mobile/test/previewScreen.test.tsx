@@ -18,7 +18,7 @@
        the pages, the spine, and a page turn that bends and throws a shadow.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ComponentType, type ReactElement } from 'react';
-import { Animated, Dimensions, type GestureResponderEvent } from 'react-native';
+import { Animated, Dimensions, ScrollView, type GestureResponderEvent } from 'react-native';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
@@ -28,6 +28,8 @@ import { act, builder, madeAlbum, settle, useEditorBench } from './editorHarness
 const mockNav = { push: jest.fn(), replace: jest.fn(), dismissAll: jest.fn() };
 const mockSeen = {
   focused: true,
+  /** Run useFocusEffect as the screen comes on top (off: most tests press at once). */
+  focusRuns: false,
   header: [] as { headerShown?: boolean }[],
   /** The status bars on screen (React Native keeps a stack: the latest one mounted wins). */
   statusBars: new Set<{ hidden?: boolean }>(),
@@ -38,6 +40,14 @@ const mockSeen = {
   /** What saving the album to the account answers (Order this album). */
   save: jest.fn(async () => true),
   conflict: null as { updatedAt: string } | null,
+  /** The album's photos are not on this phone (opened from My albums on another phone). */
+  photosGone: false,
+};
+/** The album's photos as the phone finds them: none, while photosGone (one list per album's list). */
+const goneLists = new WeakMap<object, unknown[]>();
+const goneFrom = (photos: { previewUrl: string }[]) => {
+  if (!goneLists.has(photos)) goneLists.set(photos, photos.map((p) => ({ ...p, previewUrl: '' })));
+  return goneLists.get(photos);
 };
 
 jest.mock('expo-router', () => ({
@@ -47,7 +57,7 @@ jest.mock('expo-router', () => ({
   },
   Stack: { Screen: ({ options }: { options: { headerShown?: boolean } }) => { mockSeen.header.push(options); return null; } },
   useIsFocused: () => mockSeen.focused,
-  useFocusEffect: () => {},
+  useFocusEffect: (fn: () => void) => { if (mockSeen.focusRuns) jest.requireActual<typeof import('react')>('react').useEffect(() => fn(), []); },
 }));
 jest.mock('expo-status-bar', () => {
   const React = jest.requireActual<typeof import('react')>('react');
@@ -72,13 +82,22 @@ jest.mock('../src/builder/BuilderProvider', () => ({
     const b = jest.requireActual('./editorHarness').builder();
     // The real builder, but saving to the account answers what the test says.
     const builder = new Proxy(b, {
-      get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict : t[k]),
+      get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict
+        : k === 'uploadedPhotos' && mockSeen.photosGone ? goneFrom(t.uploadedPhotos) : t[k]),
     });
     return { builder, platform: { deviceStore: { getItem: () => null, setItem: () => {} }, textMeasurer: () => null }, text: null };
   },
 }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockSeen.session }) }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ clear: () => {} }) }));
+// The Preview's buttons pressed as a person presses them, after the screen is
+// up: the once-per-visit guard ignores a press in its first 0.5 s, so a test
+// pressing right after the first render passed or failed by the runner's speed
+// (CI, "Edit pages" on its side). The guard has its own tests (wizardDoubleTap).
+jest.mock('../src/lib/useOncePerVisit', () => ({
+  ...jest.requireActual<typeof import('../src/lib/useOncePerVisit')>('../src/lib/useOncePerVisit'),
+  useOncePerVisit: () => (go: () => unknown) => () => { go(); },
+}));
 jest.mock('../src/builder/usePagePicture', () => ({
   usePagePicture: (_text: unknown, req: { width: number; pageIndex: number; coverMode?: boolean } | null) => {
     if (req) mockSeen.pictureWidths.push(req.width);
@@ -94,6 +113,7 @@ import Preview from '../src/app/preview';
 import { BOOK_DRESS_X, sidewaysBook, uprightBook, UPRIGHT_EDGE } from '../src/builder/previewLayout';
 import { edgeThickness } from '../src/builder/bookLook';
 import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
+import { ARRIVING_MS } from '../src/lib/useOncePerVisit';
 const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
 const DEFAULT = 0;
@@ -251,6 +271,25 @@ describe('upright: the book as big as the screen allows', () => {
     expect(all('preview-open-book')).toHaveLength(1);
     expect(textOnScreen('or turn your phone sideways')).toBe(true);
     expect(onBook('preview-page-1')).toHaveLength(1);
+  });
+
+  it('a double tap on "Make my album" opens it on the cover: the Preview just on top ignores "Next page" for a moment (round 3)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.focusRuns = true;
+    let clock = Date.now();
+    const spy = jest.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      await open();
+      // The second tap of the double tap lands on "Next page ›", in the same spot.
+      await press('preview-next');
+      expect(textOf('preview-caption')).toBe('Front cover');
+      clock += ARRIVING_MS;
+      await press('preview-next');
+      expect(textOf('preview-caption')).toBe(`Page 1 of ${builder().albumPages.length}`);
+    } finally {
+      spy.mockRestore();
+      mockSeen.focusRuns = false;
+    }
   });
 });
 
@@ -539,8 +578,9 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     await press('preview-next');
     await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
     await refresh();
-    // Signed in, the Preview saves a newly made album once on opening
-    // (accountSave.ts): only the saves "Order this album" makes count here.
+    // Signed in, a newly made album is saved once by the whole app
+    // (accountSave.ts useAccountSave): only the saves "Order this album"
+    // makes count here.
     mockSeen.save.mockClear();
   }
   /** Taps Order; a warning (an empty caption box in a made album) is answered "Order anyway". */
@@ -609,6 +649,42 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     expect(mockSeen.save).not.toHaveBeenCalled();
     await press('preview-order-back-to-pages');
     expect(mockNav.push).toHaveBeenCalledWith('/edit-pages');
+  });
+
+  it('the answer to "Order this album" is scrolled into view (it came below the buttons: the tap looked dead, round 3)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    const i = builder().albumPages.findIndex((p) => (p.slotFills ?? []).some((f) => typeof f === 'number'));
+    const slot = (builder().albumPages[i].slotFills ?? []).findIndex((f) => typeof f === 'number');
+    await act(async () => { builder().goToPage(i); });
+    await act(async () => { builder().clearSlot(slot); });
+    await act(async () => { builder().goToPage(0); });
+    await open();
+    await toTheEnd();
+    const toEnd = (ScrollView as unknown as { prototype: { scrollToEnd: jest.Mock } }).prototype.scrollToEnd;
+    toEnd.mockClear();
+    await press('preview-order');
+    expect(textOf('preview-order-ask')).toMatch(/^Your album has 39 photos/);
+    expect(toEnd).toHaveBeenCalled();
+  });
+
+  it('photos not on this phone: "Order this album" says so once, not a second copy of the note above it (round 4)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    mockSeen.photosGone = true;
+    try {
+      await open();
+      await toTheEnd();
+      expect(all('preview-missing-photos')).toHaveLength(1);
+      await press('preview-order');
+      expect(textOf('preview-order-ask')).toMatch(/aren't on this phone/);
+      // The answer takes the note's place: one message, one "Add the photos".
+      expect(all('preview-missing-photos')).toHaveLength(0);
+      expect(all('preview-order-add-photos')).toHaveLength(1);
+      expect(mockSeen.save).not.toHaveBeenCalled();
+    } finally {
+      mockSeen.photosGone = false;
+    }
   });
 
   it('on its side, the last pages: a round "Order" button where › was', async () => {

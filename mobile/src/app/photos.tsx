@@ -38,6 +38,7 @@ import { formatCount } from '../lib/photoDays';
 import { photoStep, photoStepFor, type DraftPhoto } from '../lib/photoDraft';
 import { COULD_NOT_OPEN } from '../lib/pickWords';
 import { colors, space } from '../lib/theme';
+import { useOncePerVisit } from '../lib/useOncePerVisit';
 
 const COLUMNS = 3;
 const GAP = 3;
@@ -125,16 +126,20 @@ export default function YourPhotos() {
     setTook(note || r.goingIn < photoStep(draft.photos).count ? { at: draft.updatedAt, goingIn: r.goingIn, note } : null);
     return photosShortBy(r.goingIn) === 0;
   };
-  const busyWhile = async (job: () => Promise<void>) => {
+  const busyWhile = async <T,>(job: () => Promise<T>): Promise<T> => {
     setGoing(true);
-    try { await job(); } finally { setGoing(false); }
+    try { return await job(); } finally { setGoing(false); }
   };
+  // The ways on: once per visit, and not while this screen comes on
+  // (useOncePerVisit); one that stays here (too few photos) lets the next go.
+  const once = useOncePerVisit();
 
   const goOn = () => busyWhile(async () => {
-    if (step.main !== 'next') { router.push('/pick-photos'); return; }
-    if (!(await putIn())) return;
+    if (step.main !== 'next') { router.push('/pick-photos'); return true; }
+    if (!(await putIn())) return false;
     saveStep(platform.deviceStore, 'cover');
     router.push('/album-cover');
+    return true;
   });
 
   // A made album: back to its pages (photos taken out are left out of the
@@ -222,15 +227,15 @@ export default function YourPhotos() {
         )}
         {made && step.main === 'next' ? (
           <>
-            <Button label={KEEP_PAGES} onPress={() => { void keepPages(); }} busy={going} testID="photos-keep-pages" />
-            {step.secondLabel && <Button label={step.secondLabel} kind="plain" onPress={() => router.push('/pick-photos')} testID="photos-add-more" />}
+            <Button label={KEEP_PAGES} onPress={once(keepPages)} busy={going} testID="photos-keep-pages" />
+            {step.secondLabel && <Button label={step.secondLabel} kind="plain" onPress={once(() => router.push('/pick-photos'))} testID="photos-add-more" />}
             <Button label={REMAKE_ALBUM} kind="plain" onPress={remake} testID="photos-remake" />
           </>
         ) : (
           <>
-            <Button label={step.main === 'next' ? TO_COVER : step.mainLabel} onPress={() => { void goOn(); }} busy={going} testID="photos-main" />
-            {!made && step.secondLabel && <Button label={step.secondLabel} kind="plain" onPress={() => router.push('/pick-photos')} testID="photos-add-more" />}
-            {made && <Button label={KEEP_PAGES} kind="plain" onPress={() => { void keepPages(); }} testID="photos-keep-pages" />}
+            <Button label={step.main === 'next' ? TO_COVER : step.mainLabel} onPress={once(goOn)} busy={going} testID="photos-main" />
+            {!made && step.secondLabel && <Button label={step.secondLabel} kind="plain" onPress={once(() => router.push('/pick-photos'))} testID="photos-add-more" />}
+            {made && <Button label={KEEP_PAGES} kind="plain" onPress={once(keepPages)} testID="photos-keep-pages" />}
           </>
         )}
       </SafeAreaView>

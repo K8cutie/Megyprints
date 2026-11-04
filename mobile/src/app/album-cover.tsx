@@ -32,6 +32,7 @@ import { forgetPhotoPictures, usePagePicture } from '../builder/usePagePicture';
 import { useGoToPreview } from '../builder/useGoToPreview';
 import { bundledFace, familyFaces } from '../render/fontTable';
 import { colors, space } from '../lib/theme';
+import { useOncePerVisit } from '../lib/useOncePerVisit';
 
 /** The cover picture waits this long after the last key typed in the title. */
 const TYPING_MS = 350;
@@ -92,6 +93,10 @@ export default function AlbumCover() {
     width: Math.round(coverW * 2), coverMode: true,
   } : null);
 
+  // Once per visit, and not while this screen comes on: a double tap on the
+  // Photos step's Next would land on Make my album, in the same spot
+  // (useOncePerVisit).
+  const once = useOncePerVisit();
   const goOn = () => {
     if (next.go === 'photos') { saveStep(platform.deviceStore, 'photos'); router.push('/photos'); return; }
     if (next.go === 'pages') { goToPreview(); return; }
@@ -136,7 +141,7 @@ export default function AlbumCover() {
         )}
       </ScrollView>
       <SafeAreaView edges={['bottom']} style={styles.bar}>
-        <Button label={next.label} onPress={goOn} testID="cover-next" />
+        <Button label={next.label} onPress={once(goOn)} testID="cover-next" />
       </SafeAreaView>
     </View>
   );
