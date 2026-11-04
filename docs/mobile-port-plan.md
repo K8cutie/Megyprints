@@ -3677,12 +3677,26 @@ Each fix has a test that failed first.
     (`useJustArrived`), so a double tap on "Make my album" opens the cover.
   - "Order this album"'s answer is scrolled into view.
 - **Photo access:**
-  - Whether Android showed its question is seen by the app going to the
-    background, not by a 0.4 s timer, so "Ask again" is never a dead tap.
+  - Whether Android showed its question is seen by how long the app was
+    away for it: under 1 s means no question was shown
+    (`QUESTION_SHOWN_MS`).
+    - Android opens its permission screen on every ask, so the app always
+      goes to the background and loses focus. With no question it is back
+      in 130-360 ms (round 4, Android's event log).
+    - Round 3's 0.4 s timer timed the whole ask: a cold phone took 556 ms,
+      which made a dead tap.
+    - The first 2.0.4 build took any trip to the background as a question,
+      so every tap was dead.
   - "Won't ask" is remembered until access changes, and the screen says
     "Your phone will not ask again."
   - A question that was only closed says "not allowed", not "off".
 - **An empty frame says "Tap to add:".**
+- **Round 4 (Mother, on the first 2.0.4 build):**
+  - An album opened from My albums is noted as the account's own copy, so
+    the next app start doesn't save it again ("Changed just now").
+  - Owner: "If signed out theres a huge awkward space at the bottom." Home
+    now centres its cards when it is shorter than the screen, as the
+    website's home does (`HeroSection`). Signed in, it scrolls as before.
 - Left as is:
   - "Start a new album?" signed out: to say "it stays in your account", the
     app must know the latest changes reached the account. It doesn't know
@@ -3702,6 +3716,7 @@ Each fix has a test that failed first.
     • A double tap opens your album on its cover
     • "Order this album" shows its answer on screen
     • Empty frames say "Tap to add"
+    • The start screen sits in the middle when you're signed out
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
