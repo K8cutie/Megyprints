@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, extraPagesCharge,
   qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
-  hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
+  hostingTiersOf, hostingTermCharge, includedHostingYears, includedHostingLine, DEFAULT_HOSTING_TIERS,
   hdMemoriesPriceOf, hdMemoriesCharge, shippingAllowanceOf, freeShippingValueOf, compareAtPriceOf, manilaToday,
   MIN_PAGES, SIZE_LABELS,
   type Binding, type PricingModel,
@@ -191,6 +191,30 @@ describe('living-memory QR add-on (7 included, ₱20 each after — owner, 2026-
     for (const size of SIZE_KEYS)
       for (const pages of PAGE_COUNTS)
         expect(priceBreakdown(schedule, size, 'hard', pages)).toEqual(priceBreakdown(schedule, size, 'hard', pages, 0));
+  });
+});
+
+// Owner, 2026-11-04 (a 20-year album's order): the summary said "7 QR
+// memories", the box under it "7 living-memory QRs", and the box's "5 years of
+// memory hosting" sat next to "Memories stay live · 20 years". One name each.
+describe('checkout calls the QRs and the hosting term one name each', () => {
+  it('the album line says living-memory QRs, as the included box and the QR note do', () => {
+    const schedule = scheduleFrom(MODEL, 3);
+    for (const pages of [40, 60]) {
+      const album = priceBreakdown(schedule, '8x8', 'soft', pages).items[0].label;
+      expect(album).toContain(`${FREE_QR_MEMORIES} living-memory QRs included`);
+      expect(album).not.toContain('QR memories');
+    }
+  });
+
+  it('the included box says "stay live", as the price line and the term picker do', () => {
+    expect(includedHostingLine(5, null)).toBe('Memories stay live for 5 years');
+    expect(includedHostingLine(5, 5)).toBe('Memories stay live for 5 years');
+  });
+
+  it('a longer term the customer picked is named in the box, so it never reads 5 next to 20', () => {
+    expect(includedHostingLine(5, 20)).toBe('Memories stay live for 5 years (you added 15 more years)');
+    expect(includedHostingLine(5, 10)).toBe('Memories stay live for 5 years (you added 5 more years)');
   });
 });
 

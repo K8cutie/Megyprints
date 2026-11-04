@@ -50,6 +50,8 @@ export async function sendFromPhone(o: {
   material: MaterialType;
   text: PageText;
   placed: PlacedOrder | null;
+  /** The files this checkout visit already sent (sendOrder `sent`). */
+  sent?: Set<string>;
   onStep: (s: SendStep) => void;
   onOrder: (order: PlacedOrder) => void;
 }): Promise<{ order: PlacedOrder; paidByTester: boolean; paidByBooking?: boolean }> {
@@ -62,7 +64,7 @@ export async function sendFromPhone(o: {
     { Skia, drawer, text: o.text, files: siteFile },
   );
   try {
-    return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips }, o.placed);
+    return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips, sent: o.sent }, o.placed);
   } finally {
     files.dispose();
     drawer.dispose();

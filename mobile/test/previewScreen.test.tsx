@@ -79,6 +79,14 @@ jest.mock('../src/builder/BuilderProvider', () => ({
 }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockSeen.session }) }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ clear: () => {} }) }));
+// The Preview's buttons pressed as a person presses them, after the screen is
+// up: the once-per-visit guard ignores a press in its first 0.5 s, so a test
+// pressing right after the first render passed or failed by the runner's speed
+// (CI, "Edit pages" on its side). The guard has its own tests (wizardDoubleTap).
+jest.mock('../src/lib/useOncePerVisit', () => ({
+  ...jest.requireActual<typeof import('../src/lib/useOncePerVisit')>('../src/lib/useOncePerVisit'),
+  useOncePerVisit: () => (go: () => unknown) => () => { go(); },
+}));
 jest.mock('../src/builder/usePagePicture', () => ({
   usePagePicture: (_text: unknown, req: { width: number; pageIndex: number; coverMode?: boolean } | null) => {
     if (req) mockSeen.pictureWidths.push(req.width);
@@ -539,8 +547,9 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     await press('preview-next');
     await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
     await refresh();
-    // Signed in, the Preview saves a newly made album once on opening
-    // (accountSave.ts): only the saves "Order this album" makes count here.
+    // Signed in, a newly made album is saved once by the whole app
+    // (accountSave.ts useAccountSave): only the saves "Order this album"
+    // makes count here.
     mockSeen.save.mockClear();
   }
   /** Taps Order; a warning (an empty caption box in a made album) is answered "Order anyway". */

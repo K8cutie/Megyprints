@@ -3514,6 +3514,136 @@ Home, then the notification). 2.0.0 (code 100) was never uploaded.
     What's new:
     • The app tells you when a new version is ready, so you always have the latest
 
+## 2.0.3: the beta testers' fixes (2026-11-04, `fix/port-crew-round1`)
+
+Owner: "all the fixes make it 2.0.3". The Overseer beta testers (six
+personas on two emulators, a local test database) and Mother, who
+reproduced each defect herself before it was fixed and checked each fix on
+the phone after:
+
+- **"Your cover" on Your order showed an empty "Cover" box.** The cover step
+  puts the photo on the cover as its background; checkout read only the
+  cover's slots (and its test expected the empty box). The card now draws
+  the cover as it prints, as the Preview and the website's Order Summary do
+  (`CoverThumb.tsx`, `orderStart.coverPhotoUri`).
+- **One Back from Your order wiped the name, phone and address.** The form is
+  kept as the website keeps it (`lib/checkoutSession` rules: the same album,
+  the same account, a guest's goes to whoever signs in; forgotten on sign
+  out), in memory only (`src/lib/checkout/formKeep.ts`).
+- **Back in the photo picker dropped every picked photo without asking.** It
+  asks "Add the 50 photos you picked?" with Leave them out and Add 50 photos
+  (`src/lib/pickLeave.ts`, expo-router's `usePreventRemove`).
+- **The start screen's "how it works" slides cut their words at the right
+  edge on Android.** The words beside the picture get the rest of the slide
+  outright; each slide is the exact width (`HomeCards.tsx`).
+- **Signed out with Your order open, the next account saw the typed name,
+  phone and address** (Mother, round 2: the sign-in ran out on the form).
+  Auth forgot the form, then the open screen kept it again as a guest's. An
+  account going away now clears the fields and keeps nothing (`order.tsx`;
+  the website's `Order.tsx` had the same shape, fixed with it).
+- **"Included with your album" said "5 years of memory hosting" beside a
+  20-year order** (owner, from the app). It now reads "Memories stay live
+  for 5 years (you added 15 more years)", in the price line's and the
+  picker's words, and the album line says "7 living-memory QRs" like the box
+  under it (`pricing.includedHostingLine`, shared with the website).
+- **My albums was a list you couldn't open** (owner: "Why cant i open the
+  albums is that just a list"). Phase 1 made it read-only. Each album now
+  says Open: tapping it loads it from the account with the website's own
+  `loadAlbum` (what `/builder?album=<id>` does) and goes where "Continue my
+  album" goes, its pages once made. While it loads the card says
+  "Opening…"; a failed read stays on My albums and says to check the
+  phone is online (`src/app/albums.tsx`). Photos that aren't on this phone
+  show the missing-photos note the editor already has.
+- **Round 2: all six testers reached checkout** (round 1: none). Mother
+  checked the round-1 fixes on the phone (all fixed; the one regression is
+  the sign-out item above) and reproduced ten more, each fixed with a test
+  that failed first:
+  - Signing in from Home with an album made signed out: My albums said "No
+    albums yet". The save at sign-in lived only in the Preview; it is the
+    whole app's now (`accountSave.useAccountSave` in `BuilderProvider`), and
+    My albums reads the list again when a save lands.
+  - Place order again after a failed send could never finish: the cover was
+    sent again (409 at once, before its bytes were read) and the pages file
+    after it on the same connection got 502 every time. A file a try sent is
+    not made or sent again (`sendOrder` `sent`), the pages file gets 3 tries
+    like the cover, and the form opens at the words under Place order (they
+    were below the fold). No connection says so in plain words.
+  - Signed in on Your order: the first read of the album came before its
+    save, and "isn't saved to your account" stayed for good. It is read
+    again when the save lands, and Place order reads it again and goes on.
+  - A free test order that stopped half-way said "To finish it, pay that
+    order" (nothing to pay). It says it didn't finish, and Place order with
+    the code finishes that same order (an unfinished one counts toward the 3
+    unpaid orders, 0042). The website has the same words; not checked there.
+  - Place order waited for Android's notification question: Home while it
+    was up held the order until you came back. The order goes on now.
+  - "Sign in first" by the tester code has its Sign in button.
+  - A double tap on Next skipped Album size (the second tap hit the next
+    screen's Next as it slid in). Each step's way forward goes once per
+    visit, and a screen just on top ignores it for 0.5 s (`useOncePerVisit`).
+  - Closing Android's photo question without answering left "Photo access
+    is off" for good (Expo saves it as blocked). It still offers to ask
+    again, until Android answers at once without asking.
+  - "Add the 50 photos you picked?" showed a blank gap (an empty Android
+    message): it has a line. The cover row said "best ones first" with no
+    photo check in the app: it says what it is. "Replace photo" opened a
+    sheet titled "Add a photo": it says Replace photo.
+  Left as designed (Mother: by design): a cover with no photo is allowed (a
+  title-only cover); "Pick 1 photo for the front cover" reads as a must.
+  Owner's call.
+- **A shared phone** (found in my own sign-in save before round 3): another
+  account signing in gets a fresh album, and the sign-in save no longer
+  sends the old account's pages into the new account (`useAccountSave`
+  saves only the album its render shows).
+- **Test builds for a server on this PC** (a plain-http address in
+  `.env.local`) may talk plain http; the Play build refuses such an address
+  (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
+  at all without it.
+- **Version 2.0.3, code 103.** Same permissions as 2.0.1 and 2.0.2. It has
+  everything in 2.0.2: if 2.0.2 was never uploaded, upload 2.0.3 instead
+  (as 2.0.0 was skipped).
+
+### Release notes 2.0.3 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Your order shows your album's real cover
+    • Going back from checkout keeps your name and address
+    • The photo picker asks before dropping photos you picked
+    • Your order says clearly how long your videos stay live
+    • Tap an album in My albums to open it
+    • Albums made before you sign in now show in My albums
+    • Place order again finishes an order that stopped
+    • A double tap on Next no longer skips a step
+    Also new:
+    • The app tells you when a new version is ready
+
+(Drop the last line if 2.0.2 went out first: it is 2.0.2's.)
+
+### Known in 2.0.3 (round 3 of the testers; to be fixed in 2.0.4)
+
+The owner asked for 2.0.3 to be built from the round 2 fixes as they were,
+and round 3's findings to go into 2.0.4. Mother's round 3 on the 2.0.3 test
+build found:
+- **Opening an album from My albums can overwrite the album open before it**
+  (its pages and size become the opened album's), when the opened album's
+  photos are on this phone. The sign-in save sees the new pages while the
+  old album id is still set (`loadAlbum` waits for the photos first).
+- A shared phone: the photos one account picked stay on the phone, and
+  "Continue my album" carries them into the next account's album.
+- After opening an album, "Add the photos" lists the photos of the album
+  open before it.
+- Opening an album re-saves it and the album left behind ("Changed just now").
+- With a stuck test order, applying the tester code after the "didn't
+  finish" question leaves the question up and hides Place order.
+- Finishing a stopped order after leaving checkout sends the cover again,
+  and the pages file after it can wait about 40 s (it still goes through).
+- "Ask for photo access again" can be a dead tap when Android is slow
+  (over 0.4 s); while blocked, it comes back on every visit; a closed
+  question says "Photo access is off".
+- A double tap on "Make my album" opens the Preview at page 1, not the cover.
+- Small words: an empty frame says "Click to add"; signed out, "Start a new
+  album?" says the album is lost though it is in the account.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

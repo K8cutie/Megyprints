@@ -27,6 +27,7 @@ import { fileKeyValueStore, memoryStore, type SyncFiles } from '../src/builder/d
 import type { PhotoHeader } from '../src/builder/appPhotos';
 import { chooseCover, makeAlbum, nameAlbum, occasionOf, syncPhotos } from '../src/builder/albumFlow';
 import { addPhotos, emptyDraft, type DraftPhoto } from '../src/lib/photoDraft';
+import { useAccountSave } from '../src/builder/accountSave';
 
 type Row = Record<string, unknown>;
 
@@ -177,6 +178,70 @@ describe('the album on the phone', () => {
     await settle();
     expect(again().uploadedPhotos.find((p) => p.id === gone.id)?.previewUrl).toBe('');
     expect(again().uploadedPhotos.filter((p) => !p.previewUrl)).toHaveLength(1);
+  }, 120_000);
+});
+
+describe('signing in saves the album on the phone (accountSave.useAccountSave), never into another account', () => {
+  /** The app's builder with the whole app's sign-in save (BuilderProvider), signed in as `who`. */
+  const who: { id: string | null } = { id: null };
+  function SignedInProbe({ name, platform }: { name: string; platform: AppPlatform }) {
+    const b = useBuilderState();
+    useAccountSave(b, platform.deviceStore, !!b.user);
+    useEffect(() => { builders[name] = b; });
+    return null;
+  }
+  async function phoneFor2(table: Row[], log: string[]) {
+    const inspect = phoneFor(sc);
+    const platform = createAppPlatform({
+      deviceStore: fileKeyValueStore(memoryFiles()), sessionStore: memoryStore(), inspect,
+      lifecycle: { onLeave: () => () => {}, onReturn: () => () => {} },
+      measurer: () => null, client: madeUpSupabase(null, table, log), useUser: () => (who.id ? { id: who.id } : null),
+    });
+    const root = createRoot();
+    roots.push(root);
+    const draw = () => act(async () => { root.render(createElement(BuilderPlatformContext.Provider, { value: platform }, createElement(SignedInProbe, { name: 'shared', platform }))); });
+    await draw();
+    await settle();
+    const b = () => builders.shared;
+    const make = async () => {
+      await act(async () => { nameAlbum(b(), platform.deviceStore, sc.title, sc.occasion, platform.occasionChanged); });
+      await act(async () => { b().setAlbumSize(sc.size); });
+      await act(async () => { await syncPhotos(b(), draft(), inspect); });
+      for (let i = 0; i < 50 && b().uploadedPhotos.some((p) => !(p.width > 0)); i++) await settle();
+      await act(async () => { chooseCover(b(), b().uploadedPhotos.find((p) => p.name === sc.cover)!.id); });
+      const spy = jest.spyOn(Math, 'random').mockImplementation(seeded(sc.seed));
+      try { await act(async () => { await makeAlbum(b()); }); } finally { spy.mockRestore(); }
+      await settle();
+    };
+    const signIn = async (id: string | null) => { who.id = id; await draw(); await settle(); await settle(); };
+    return { b, make, signIn };
+  }
+
+  it('made signed out, then signed in: it goes to that account, once', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = null;
+    const { b, make, signIn } = await phoneFor2(table, log);
+    await make();
+    expect(table).toEqual([]);
+    await signIn('user-a');
+    expect(table.map((r) => [r.user_id, r.title])).toEqual([['user-a', sc.title]]);
+    expect(table[0].id).toBe(b().getAlbumId());
+  }, 120_000);
+
+  it('another account signing in on the same phone never gets the album on it (the builder gives it a fresh album)', async () => {
+    const table: Row[] = [];
+    const log: string[] = [];
+    who.id = 'user-a';
+    const { b, make, signIn } = await phoneFor2(table, log);
+    await make();
+    expect(table.map((r) => r.user_id)).toEqual(['user-a']);
+    await signIn(null);
+    await signIn('user-b');
+    expect(table.filter((r) => r.user_id === 'user-b')).toEqual([]);
+    // B has a fresh album: blank pages, none of A's photos or title.
+    expect(b().albumTitle).not.toBe(sc.title);
+    expect(b().albumPages.some((p) => (p.slotFills ?? []).some((f) => f != null))).toBe(false);
   }, 120_000);
 });
 

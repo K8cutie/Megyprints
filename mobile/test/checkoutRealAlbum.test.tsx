@@ -17,11 +17,15 @@
    Only the outside is a stand-in, as in checkoutWalk.test.tsx: the
    database (helpers/fakeSupabase.ts), who is signed in, the navigator.
    ══════════════════════════════════════════════════════════════════════════ */
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import fs from 'node:fs';
+import path from 'node:path';
+import { ScrollView } from 'react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { PriceSchedule } from '@web/lib/pricing';
 import OrderScreen from '../src/app/order';
 import { fixtureCheckoutAlbum, fixturePhotos } from '../src/lib/checkout/fixtureAlbum';
 import { ALBUM_NOT_SAVED } from '../src/lib/checkout/orderStart';
+import { forgetCheckoutOnPhone } from '../src/lib/checkout/formKeep';
 import { fake, rec, resetFake } from './helpers/fakeSupabase';
 import { BASE, fetchFromDisk } from './helpers/psgcFiles';
 
@@ -73,6 +77,15 @@ jest.mock('../src/lib/events/albumEventLink', () => ({
 const mockTier = { value: 'standard' as 'standard' | 'hd', asked: [] as string[][] };
 jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; } }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: async () => ({ canceled: true, assets: null }) }));
+// The page renderer (Skia on the phone): the picture it would draw, by what was asked.
+const mockPictures: { page: { id?: string; background?: unknown }; coverMode?: boolean; width: number }[] = [];
+jest.mock('../src/builder/usePagePicture', () => ({
+  usePagePicture: (_text: unknown, req: { page: { id?: string }; coverMode?: boolean; width: number } | null) => {
+    if (req) mockPictures.push(req);
+    return { uri: req ? `file:///cache/megy-pages/${req.coverMode ? 'cover' : 'page'}-${req.width}.jpg` : null, notDrawn: [], missing: 0, error: null };
+  },
+  PRIORITY: { editing: 3, shown: 2, thumbnail: 1, ahead: 0 },
+}));
 
 /** Like the live list (as in checkoutWalk.test.tsx). */
 const LIVE = {
@@ -102,6 +115,7 @@ const ROW = {
 
 beforeEach(() => {
   resetFake();
+  forgetCheckoutOnPhone();
   fake.rpc.public_price_schedule = { data: LIVE, error: null };
   fake.albumRow = ROW;
   mockAuth.session = { user: { id: 'user-1' } };
@@ -134,6 +148,118 @@ async function fillDetails() {
   await fireEvent.changeText(screen.getByTestId('address-street'), '123 Rizal St., Purok 2');
   await fireEvent.changeText(screen.getByTestId('address-zip'), '1105');
 }
+
+describe('"Your cover": the front of the book, as it prints (beta testers 2026-11-04)', () => {
+  it('draws the album\'s own cover, the photo picked in the cover step on it, as the Preview does', async () => {
+    // The cover step puts the photo on the cover as its background (setCoverToPhoto).
+    const cover = { ...ownAlbum.coverFront, slotFills: [], background: { type: 'image', photoId: photos[5].id } };
+    mockAlbum.builder = { ...ownAlbum, coverFront: cover };
+    mockPictures.length = 0;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    const asked = mockPictures.find((r) => r.coverMode);
+    expect(asked?.page).toBe(cover);
+    expect([screen.getByTestId('order-cover').props.source].flat()[0]).toEqual({ uri: `file:///cache/megy-pages/cover-${asked!.width}.jpg` });
+    expect(screen.queryByTestId('order-cover-empty')).toBeNull();
+  });
+});
+
+describe('Back from checkout keeps what was typed (beta testers 2026-11-04: one Back wiped the form)', () => {
+  /** The form as the screen shows it. */
+  const shown = () => ({
+    name: screen.getByTestId('order-name').props.value,
+    phone: screen.getByTestId('order-phone').props.value,
+    street: screen.getByTestId('address-street').props.value,
+    zip: screen.getByTestId('address-zip').props.value,
+  });
+  const TYPED = { name: 'Juan Dela Cruz', phone: '+63 917 123 4567', street: '123 Rizal St., Purok 2', zip: '1105' };
+
+  it('Back to the album and Order this album again: the same name, phone and address, the paper and cover kept', async () => {
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent(screen.getByTestId('order-phone'), 'blur');
+    await fireEvent.press(screen.getByText('Glossy'));
+    expect(shown()).toEqual(TYPED);
+    await first.unmount();
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(shown()).toEqual(TYPED);
+    expect(await screen.findByText('Metro Manila')).toBeOnTheScreen();
+    expect(screen.getByText('Quezon City')).toBeOnTheScreen();
+    expect(screen.getByText('Bagong Pag-asa')).toBeOnTheScreen();
+    expect(screen.getByRole('radio', { name: /Glossy/ })).toHaveProp('accessibilityState', { checked: true });
+  });
+
+  it('only for that album, and never for another account (the website\'s readCheckoutForm)', async () => {
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await first.unmount();
+    mockAuth.session = { user: { id: 'user-2' } };
+    const other = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('');
+    await other.unmount();
+    mockAuth.session = { user: { id: 'user-1' } };
+    mockParams.albumId = 'album-8';
+    fake.albumRow = { ...ROW, id: 'album-8' };
+    mockAlbum.builder = { ...ownAlbum, getAlbumId: () => 'album-8' };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('');
+  });
+
+  it('typed signed out, it comes back to whoever signs in; signing out forgets it', async () => {
+    mockAuth.session = null;
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.changeText(screen.getByTestId('order-name'), 'Juan Dela Cruz');
+    await first.unmount();
+    mockAuth.session = { user: { id: 'user-1' } };
+    const again = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('Juan Dela Cruz');
+    await again.unmount();
+    forgetCheckoutOnPhone();
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByTestId('order-name').props.value).toBe('');
+  });
+
+  it('signed out with Your order open (sign-in ran out, or Sign out on another device): the details go, and the next account never sees them (Mother, round 2)', async () => {
+    const screenNow = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent.press(screen.getByText('Glossy'));
+    // What auth.tsx does on SIGNED_OUT, with the screen still open.
+    forgetCheckoutOnPhone();
+    mockAuth.session = null;
+    await screenNow.rerender(<OrderScreen />);
+    expect(shown()).toEqual({ name: '', phone: '', street: '', zip: '' });
+    expect(screen.getByRole('radio', { name: /Matte/ })).toHaveProp('accessibilityState', { checked: true });
+    await screenNow.unmount();
+    mockAuth.session = { user: { id: 'user-2' } };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(shown()).toEqual({ name: '', phone: '', street: '', zip: '' });
+  });
+
+  it('a guest who signs in with Your order open keeps what they typed', async () => {
+    mockAuth.session = null;
+    const screenNow = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.changeText(screen.getByTestId('order-name'), 'Juan Dela Cruz');
+    mockAuth.session = { user: { id: 'user-1' } };
+    await screenNow.rerender(<OrderScreen />);
+    expect(screen.getByTestId('order-name').props.value).toBe('Juan Dela Cruz');
+  });
+
+  it('signing out (or being signed out) forgets it, as the website\'s forgetCheckoutOnDevice', () => {
+    const AUTH = fs.readFileSync(path.join(__dirname, '../src/lib/auth.tsx'), 'utf8');
+    expect(AUTH).toContain("if (event === 'SIGNED_OUT') forgetCheckoutOnPhone();");
+  });
+});
 
 describe('checkout on the album "Order this album" opened it with', () => {
   it('that album, not the test album; its copy read from the account by its id', async () => {
@@ -265,6 +391,111 @@ describe('checkout on the album "Order this album" opened it with', () => {
   });
 });
 
+describe('beta round 2 (Mother reproduced each one on the phone)', () => {
+  async function useTesterCode() {
+    fake.rpc.check_tester_code = { data: { ok: true, code: 'MEGYTEST' }, error: null };
+    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
+    await fireEvent.press(screen.getByTestId('tester-code-apply'));
+    expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
+  }
+  /** A free test order of this album that stopped half-way (its cover sent, nothing after). */
+  const STUCK = {
+    id: 'order-9', order_number: 'MP-2026-QCFG5G4', status: 'pending_payment', amount: null, quoted_amount: 0,
+    created_at: '2026-11-04T00:30:00Z', payment_submitted_at: null, tester_code: 'MEGYTEST',
+  };
+
+  it('a free test order that stopped half-way: never "pay that order"; Place order with the code finishes THAT order', async () => {
+    fake.orderRow = STUCK;
+    await render(<OrderScreen />);
+    const box = await screen.findByTestId('order-already-open');
+    expect(box).toHaveTextContent(/This album has a test order that didn't finish: MP-2026-QCFG5G4, placed November 4\./);
+    expect(box).toHaveTextContent(/Nothing is charged for a test order\. Use your tester code and tap Place order below to finish it\./);
+    expect(box).not.toHaveTextContent(/waiting for payment|pay that order/);
+    await fillDetails();
+    await useTesterCode();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    // No "second order?" question: the same order is finished (an unfinished
+    // one counts as unpaid, and 3 unpaid orders stop new ones: 0042).
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-second-ask')).toBeNull();
+    expect(mockSend.calls).toHaveLength(1);
+    expect(mockSend.calls[0].placed).toEqual({ id: 'order-9', order_number: 'MP-2026-QCFG5G4', status: 'pending_payment' });
+  });
+
+  it('the same test order, Place order WITHOUT a code: asked first, in words that fit a test order', async () => {
+    fake.orderRow = STUCK;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-already-open');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    const ask = await screen.findByTestId('order-second-ask');
+    expect(ask).toHaveTextContent(/This album has test order MP-2026-QCFG5G4 that didn't finish\. Place a new order for it\?/);
+    expect(ask).not.toHaveTextContent(/waiting for payment/);
+    expect(mockSend.calls).toHaveLength(0);
+  });
+
+  it('signed in on Your order while the album was going to the account: Place order reads it again and goes on', async () => {
+    // The read right at sign-in found nothing yet (the album was still being saved).
+    fake.albumRow = null;
+    const s = await render(<OrderScreen />);
+    expect(await screen.findByText(ALBUM_NOT_SAVED)).toBeOnTheScreen();
+    fake.albumRow = ROW;
+    await fillDetails();
+    await useTesterCode();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(1);
+    await s.unmount();
+  });
+
+  it('the builder\'s save landing reads the account\'s copy again: the "isn\'t saved" note goes by itself', async () => {
+    fake.albumRow = null;
+    const s = await render(<OrderScreen />);
+    expect(await screen.findByTestId('order-not-saved')).toBeOnTheScreen();
+    fake.albumRow = ROW;
+    mockAlbum.builder = { ...ownAlbum, lastSavedAt: new Date(Date.UTC(2026, 10, 4, 0, 44)) };
+    await s.rerender(<OrderScreen />);
+    await waitFor(() => expect(screen.queryByTestId('order-not-saved')).toBeNull());
+  });
+
+  it('a send that stopped: the screen goes down to its words and Place order (they were below the fold)', async () => {
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+      throw new Error("We couldn't send your album's pages. Your order is saved: check your internet, then tap Place order again.");
+    };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText(/We couldn't send your album's pages/)).toBeOnTheScreen();
+    const toEnd = (ScrollView as unknown as { prototype: { scrollToEnd: jest.Mock } }).prototype.scrollToEnd;
+    toEnd.mockClear();
+    await fireEvent(screen.getByTestId('order-form'), 'contentSizeChange', 400, 3000);
+    expect(toEnd).toHaveBeenCalledTimes(1);
+    // Only once: typing afterwards does not jump the page down again.
+    await fireEvent(screen.getByTestId('order-form'), 'contentSizeChange', 400, 3100);
+    expect(toEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('tester code signed out: "Sign in first" has its Sign in button; signed in, the old words go and the code stays typed', async () => {
+    mockAuth.session = null;
+    const s = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
+    await fireEvent.press(screen.getByTestId('tester-code-apply'));
+    expect(await screen.findByText('Sign in first, then type the code.')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('tester-code-sign-in'));
+    expect(mockNav.push).toHaveBeenCalledWith({ pathname: '/sign-in', params: { then: 'back' } });
+    mockAuth.session = { user: { id: 'user-1' } };
+    await s.rerender(<OrderScreen />);
+    expect(screen.queryByText('Sign in first, then type the code.')).toBeNull();
+    expect(screen.queryByTestId('tester-code-sign-in')).toBeNull();
+    expect(screen.getByTestId('tester-code-input').props.value).toBe('MEGYTEST');
+  });
+});
+
 describe('an album with a video memory', () => {
   const clip = { code: 'k3m9p2qz', destination: 'https://example.supabase.co/storage/v1/object/public/memory-clips/k3m9p2qz.mp4', qrPngDataUrl: 'data:image/png;base64,AAAA', memoryUrl: 'https://megyprints.vercel.app/m/k3m9p2qz', createdAt: 1, kind: 'clip' as const, clipExt: 'mp4' as const };
   const withClip = pages.map((p, i) => (i === 9 ? { ...p, qrFills: [clip, null] } : p));
@@ -311,6 +542,14 @@ describe('an album with a video memory', () => {
     expect(pesos() - before).toBe(99);
     expect(screen.getByTestId('order-term-10').props.accessibilityState).toEqual(expect.objectContaining({ checked: true }));
     expect(screen.getByTestId('order-term-5').props.accessibilityState).toEqual(expect.objectContaining({ checked: false }));
+    // Owner, 2026-11-04: the box said "5 years of memory hosting" beside a
+    // 20-year line. It names the longer term, in the picker's words.
+    expect(screen.getByTestId('order-included')).toHaveTextContent(/Memories stay live for 5 years \(you added 5 more years\)/);
+    await fireEvent.press(screen.getByTestId('order-term-20'));
+    expect(screen.getByTestId('order-included')).toHaveTextContent(/Memories stay live for 5 years \(you added 15 more years\)/);
+    expect(screen.queryByText(/QR memories/)).toBeNull();
+    expect(screen.getAllByText(/7 living-memory QRs included/).length).toBeGreaterThan(0);
+    await fireEvent.press(screen.getByTestId('order-term-10'));
     await fillDetails();
     await fireEvent.press(screen.getByTestId('order-place'));
     await screen.findByTestId('pay-order-placed').catch(() => null);

@@ -15,6 +15,7 @@ import { BuilderPlatformContext, type AppLifecycle, type TextMeasurer } from '@w
 import { useBuilderState, type BuilderActions } from '@web/pages/builder/useBuilderState';
 import { inspectPhotos } from '../../modules/photo-files';
 import { useAuth } from '../lib/auth';
+import { useAccountSave } from './accountSave';
 import { withQrOnOuterSide } from '../lib/memories/qrSide';
 import { supabase } from '../lib/supabase';
 import { PageText } from '../render/pageText';
@@ -100,6 +101,10 @@ function BuilderHost({ platform: p, children }: { platform: AppPlatform; childre
   // Every screen reads the pages with each video memory's QR on the page's
   // outer edge, away from the binding (lib/memories/qrSide.ts).
   const builder = withQrOnOuterSide(useBuilderState());
+  // Signed in, a made album goes to the account (accountSave.ts), whichever
+  // screen is open: signing in from Home included.
+  const signedIn = !!useAuth().session;
+  useAccountSave(builder, p.deviceStore, signedIn);
   const [text, setText] = useState<PageText | null>(pageText);
   useEffect(() => {
     let live = true;

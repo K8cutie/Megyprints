@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
-import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES } from '@web/lib/pricing';
+import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES, includedHostingLine } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
@@ -49,13 +49,14 @@ import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
 import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
+import { forgetCheckoutOnPhone, keepCheckoutForm, keptCheckoutForm } from '../lib/checkout/formKeep';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
 import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
 import { useOptionalBuilder } from '../builder/BuilderProvider';
 import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
 import { TesterCodeGoneError } from '../lib/checkout/testerCode';
 import type { PlacedOrder } from '../lib/checkout/sendOrder';
-import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, type OpenOrder } from '../lib/checkout/openOrder';
+import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
 import { checkoutPrice, peso, placeOrderLabel } from '../lib/checkout/price';
@@ -82,9 +83,15 @@ export default function OrderScreen() {
   const { albumId: ownId } = useLocalSearchParams<{ albumId?: string }>();
   const own = useOptionalBuilder();
   const ordersOwn = !!ownId && !!own;
-  // The account's copy of it, read by its id once signed in (never another album).
+  // The account's copy of it, read by its id once signed in (never another
+  // album). Read again when the builder's save to the account lands, and on
+  // Place order after a read that found nothing: signing in here saves the
+  // album, and the first read, made before that save, said "isn't saved" for
+  // good (beta round 2).
   const [ownRow, setOwnRow] = useState<OrderAlbumRow | null>(null);
   const [ownRowError, setOwnRowError] = useState('');
+  const [rowAttempt, setRowAttempt] = useState(0);
+  const savedAt = own?.builder.lastSavedAt?.getTime() ?? 0;
   useEffect(() => {
     if (!ordersOwn || !userId || !ownId) return;
     let live = true;
@@ -93,13 +100,19 @@ export default function OrderScreen() {
       .then((row) => { if (live) setOwnRow(row); })
       .catch((e: unknown) => { if (live) setOwnRowError(e instanceof Error ? e.message : String(e)); });
     return () => { live = false; };
-  }, [ordersOwn, userId, ownId]);
+  }, [ordersOwn, userId, ownId, rowAttempt, savedAt]);
+  // Place order tapped before the copy was read: it goes on once it is.
+  const placeWhenRead = useRef(false);
   const fixture = useMemo(() => (ordersOwn ? null : fixtureCheckoutAlbum()), [ordersOwn]);
   // Ordering your own album sends it for real (the test album never does).
   const live = ordersOwn;
   const ownText = own?.text ?? null;
   // The order a try made: Place order again reuses it (never a second order).
   const placedRef = useRef<PlacedOrder | null>(null);
+  // The files a try sent: never made or sent again (sendOrder `sent`).
+  const sentRef = useRef(new Set<string>());
+  // A send that stopped: the form opens again at its words and Place order.
+  const showFailure = useRef(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   // The end: a tester order placed, or a payment sent.
   const [done, setDone] = useState<{ number: string; test: boolean; receiptError: string | null; booking?: string } | null>(null);
@@ -113,16 +126,37 @@ export default function OrderScreen() {
   const prices = usePriceSchedule(loadSchedule);
 
   const [step, setStep] = useState<Step>('form');
-  const [material, setMaterial] = useState<MaterialType>(DEFAULT_MATERIAL);
-  const [cover, setCover] = useState<CoverType>(DEFAULT_COVER);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
+  // The form as typed the last time checkout was open for this album
+  // (Back to the album and Order this album again), as the website keeps it.
+  const [kept] = useState(() => keptCheckoutForm(album.albumId, userId));
+  const [material, setMaterial] = useState<MaterialType>(kept?.material ?? DEFAULT_MATERIAL);
+  const [cover, setCover] = useState<CoverType>(kept?.cover ?? DEFAULT_COVER);
+  const [name, setName] = useState(kept?.name ?? '');
+  const [phone, setPhone] = useState(kept?.phone ?? '');
+  const [address, setAddress] = useState<AddressValue>(kept?.address ?? EMPTY_ADDRESS);
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const [addressErrors, setAddressErrors] = useState<AddressErrors>({});
   const [tester, setTester] = useState<TesterCode | null>(null);
   // How long the memories stay live (the website's hostingYears): null = the included term.
-  const [hostingYears, setHostingYears] = useState<number | null>(null);
+  const [hostingYears, setHostingYears] = useState<number | null>(kept?.hostingYears ?? null);
+  // Kept as typed while the form is open (the website's saveCheckoutForm).
+  // Signed out with the form open (the sign-in ran out, or Sign out on
+  // another device): the details go with the account, as on Sign out, and are
+  // not kept again as a guest's for the next person (Mother, round 2). A guest
+  // who signs in keeps what they typed.
+  const typedUnder = useRef(userId);
+  useEffect(() => {
+    if (typedUnder.current && userId !== typedUnder.current) {
+      typedUnder.current = userId;
+      forgetCheckoutOnPhone();
+      setName(''); setPhone(''); setAddress(EMPTY_ADDRESS);
+      setMaterial(DEFAULT_MATERIAL); setCover(DEFAULT_COVER); setHostingYears(null);
+      return;
+    }
+    typedUnder.current = userId;
+    if (step !== 'form') return;
+    keepCheckoutForm({ albumId: album.albumId, name, phone, address, material, cover, hostingYears, userId });
+  }, [album.albumId, step, name, phone, address, material, cover, hostingYears, userId]);
   const [message, setMessage] = useState('');
   const [signInAsk, setSignInAsk] = useState(false);
   const [openAlbumAsk, setOpenAlbumAsk] = useState(false);
@@ -244,6 +278,9 @@ export default function OrderScreen() {
   const signInSaid = message.startsWith('You must be signed in');
   const shownMessage = userId && signInSaid ? '' : message;
 
+  // Sign in comes back here, to this order (then=back), not to My albums.
+  const signIn = () => router.push({ pathname: '/sign-in', params: { then: 'back' } });
+
   const scrollToSpot = (spot: 'name' | 'phone' | 'address') => {
     // The name and phone boxes sit inside the "Your Details" card: their own
     // place is measured from the card, so add the card's.
@@ -251,11 +288,18 @@ export default function OrderScreen() {
     scrollRef.current?.scrollTo({ y: Math.max(0, y - space.lg), animated: true });
   };
 
+  // A free test order of this album that stopped half-way: Place order with
+  // the code finishes that order, not a new one (openOrder.ts).
+  const finishing = !!openOrder && unfinishedTestOrder(openOrder) && !!tester && !eventLink;
+
   const startPlacing = (cleanName: string, cleanPhone: string) => {
     if (!userId) return;
-    // The order freezes the account's copy: not until it is read.
+    // The order freezes the account's copy: not until it is read. Read again
+    // after one that found nothing, and placed as soon as it is there.
     if (ordersOwn && !ownRow) {
-      setMessage(ownRowError || 'Getting your album from your account… Tap Place order again in a moment.');
+      placeWhenRead.current = true;
+      if (ownRowError) setRowAttempt((n) => n + 1);
+      setMessage('Getting your album from your account…');
       return;
     }
     // The print files are drawn with the album's fonts: not until they are ready.
@@ -278,6 +322,7 @@ export default function OrderScreen() {
       });
       setPlan(p);
       setPlacedAmount(price.payTotal);
+      if (finishing && !placedRef.current) placedRef.current = { id: openOrder!.id, order_number: openOrder!.order_number, status: openOrder!.status };
       setStep('placing');
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Something went wrong placing your order.');
@@ -294,7 +339,7 @@ export default function OrderScreen() {
     setMessage('');
     setSignInAsk(false);
     setOpenAlbumAsk(false);
-    const r = checkCheckout({ name, phone, address, coverFits, coverNote, signedIn: !!userId, openOrderUnanswered: !!openOrder && !secondOk.current, pages: album.pages });
+    const r = checkCheckout({ name, phone, address, coverFits, coverNote, signedIn: !!userId, openOrderUnanswered: !!openOrder && !finishing && !secondOk.current, pages: album.pages });
     if (r.ok) {
       setErrors({}); setAddressErrors({});
       setName(r.name); setPhone(r.phone);
@@ -316,6 +361,14 @@ export default function OrderScreen() {
     setOpenAlbumAsk(!!r.openAlbum);
   };
   const placeSecond = () => { secondOk.current = true; setAskSecond(false); onPlace(); };
+  useEffect(() => {
+    if (!placeWhenRead.current || (!ownRow && !ownRowError)) return;
+    placeWhenRead.current = false;
+    if (ownRow) onPlace();
+    else setMessage(ownRowError);
+    // The read's answer only; onPlace is this render's.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownRow, ownRowError]);
   // "Open order MP-…": that order, in the app (see openOrderView): its
   // payment step while nobody has paid it, else where it is. The question
   // about a second order is closed: back on the form, Place order asks again.
@@ -329,7 +382,7 @@ export default function OrderScreen() {
   if (step === 'placing' && plan && live && ownText) {
     return (
       <Sending
-        plan={plan} album={album} cover={cover} material={material} text={ownText} placed={placedRef.current}
+        plan={plan} album={album} cover={cover} material={material} text={ownText} placed={placedRef.current} sent={sentRef.current}
         bookingNumber={eventLink?.bookingNumber ?? null}
         onOrder={(o) => { placedRef.current = o; }}
         onSent={(r) => {
@@ -340,6 +393,7 @@ export default function OrderScreen() {
           setStep('payment');
         }}
         onFailed={(e) => {
+          showFailure.current = true;
           if (e instanceof TesterCodeGoneError) setTester(null);
           // A memory video that's gone: the website's words, naming its pages.
           if (e instanceof MissingClipError) { setMessage(missingClipMessage(album.pages, e.codes)); setStep('form'); return; }
@@ -408,7 +462,10 @@ export default function OrderScreen() {
   const words = openOrder ? openOrderWords(openOrder) : null;
 
   return (
-    <ScrollView ref={scrollRef} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+    <ScrollView ref={scrollRef} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" testID="order-form"
+      // Back from a send that stopped: down to its words, under Place order
+      // (the form opened at the top, the words below the fold: beta round 2).
+      onContentSizeChange={() => { if (!showFailure.current) return; showFailure.current = false; scrollRef.current?.scrollToEnd({ animated: false }); }}>
       {ordersOwn && <View testID="order-own-album" />}
       {!!ownRowError && (
         <View style={styles.notice} testID="order-not-saved">
@@ -455,7 +512,7 @@ export default function OrderScreen() {
       {/* What you're paying for: the front of the book. */}
       <View style={styles.card}>
         <View style={styles.coverRow}>
-          <CoverThumb uri={album.coverPhotoUri} albumSize={albumSize} />
+          <CoverThumb cover={album.coverFront} photos={ordersOwn && b ? b.uploadedPhotos : null} text={ownText} photoUri={album.coverPhotoUri} albumSize={albumSize} />
           <View style={styles.flex}>
             <Text style={styles.strong}>Your cover</Text>
             <Text style={styles.small}>{pageCount} pages inside, printed as they look in your preview.</Text>
@@ -530,12 +587,13 @@ export default function OrderScreen() {
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
             test album writes nothing, so it checks the code's shape only. */}
-        {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => (live && userId ? checkTesterCode(supabase, typed, supabaseConfigured) : checkTesterCodeOffline(typed, !!userId))} />}
+        {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => (live && userId ? checkTesterCode(supabase, typed, supabaseConfigured) : checkTesterCodeOffline(typed, !!userId))}
+          signedIn={!!userId} onSignIn={signIn} />}
         <View style={styles.included} testID="order-included">
           <Text style={styles.strongSmall}>Included with your album</Text>
           <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>
           <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>
-          {price.includedYears !== null && <Text style={styles.small}>✓ {price.includedYears} years of memory hosting</Text>}
+          {price.includedYears !== null && <Text style={styles.small}>✓ {includedHostingLine(price.includedYears, price.effectiveYears)}</Text>}
         </View>
         {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
           // Order.tsx: "How long should your memories stay live?"
@@ -592,7 +650,7 @@ export default function OrderScreen() {
       )}
       {!!shownMessage && <Text style={styles.error} accessibilityRole="alert">{shownMessage}</Text>}
       {/* Sign in comes back here, to this order (then=back), not to My albums. */}
-      {signInAsk && !userId && <Button label="Sign in" kind="plain" onPress={() => router.push({ pathname: '/sign-in', params: { then: 'back' } })} testID="order-sign-in" />}
+      {signInAsk && !userId && <Button label="Sign in" kind="plain" onPress={signIn} testID="order-sign-in" />}
       {(openAlbumAsk || tooFew) && <Button label="Open my album" kind="plain" onPress={() => router.push('/photos')} testID="order-open-album" />}
     </ScrollView>
   );

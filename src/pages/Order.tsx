@@ -12,9 +12,9 @@ import { saveDraftToAccount as saveDraftAlbumToAccount } from '../lib/draftAccou
 import { rebuildPrintJobFromAlbum } from '../lib/printJobRebuild';
 import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, AlbumChangedElsewhereError } from '../lib/orderAlbum';
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
-import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
+import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, forgetCheckoutOnDevice, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, includedHostingLine, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -420,9 +420,24 @@ export default function Order() {
   // payment or thank-you screen, or the form with the SAME order row behind
   // Place order — instead of a second, duplicate order. And the form comes
   // back as typed.
+  // Signed out with the page open (the sign-in ran out, or Sign out in
+  // another tab or device): the details go with the account, as on Sign out,
+  // and are not saved again as a guest's for the next person (the 2.0 app's
+  // beta test, Mother, 2026-11-04). A guest who signs in keeps what they typed.
+  const typedUnderRef = useRef(user?.id ?? null);
   useEffect(() => {
+    const userId = user?.id ?? null;
+    if (typedUnderRef.current && userId !== typedUnderRef.current) {
+      typedUnderRef.current = userId;
+      forgetCheckoutOnDevice();
+      setName(''); setPhone(''); setAddress(EMPTY_ADDRESS);
+      setMaterial(DEFAULT_MATERIAL); setCover(DEFAULT_COVER); setHostingYears(null);
+      setPrefilled(null);
+      return;
+    }
+    typedUnderRef.current = userId;
     if (!info?.albumId || step !== 'form') return;
-    saveCheckoutForm({ albumId: info.albumId, name, phone, address, material, cover, hostingYears, userId: user?.id ?? null });
+    saveCheckoutForm({ albumId: info.albumId, name, phone, address, material, cover, hostingYears, userId });
   }, [info, step, name, phone, address, material, cover, hostingYears, user]);
   const recordOrder = (stage: CheckoutStage) => {
     if (orderRecordRef.current) saveCheckoutOrder({ ...orderRecordRef.current, stage });
@@ -1274,7 +1289,7 @@ export default function Order() {
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />Free shipping{freeShippingValue > 0 && <> (₱{freeShippingValue.toLocaleString('en-PH')} value)</>}</li>
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs (₱{(FREE_QR_MEMORIES * EXTRA_QR_RATE).toLocaleString('en-PH')} value)</li>
                   {includedYears !== null && (
-                    <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedYears} years of memory hosting</li>
+                    <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedHostingLine(includedYears, effectiveYears)}</li>
                   )}
                 </ul>
               </div>

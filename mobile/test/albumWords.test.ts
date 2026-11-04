@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as wizardSteps from '@web/assistant/wizardSteps';
 import { remakeLosesMessage } from '@web/assistant/rebuildQuestion';
-import { YOUR_PHOTOS } from '../src/editor/cover/words';
+import { WEBSITE_YOUR_PHOTOS } from '../src/editor/cover/words';
 import { COVER_TO_PAGES, COVER_TO_PHOTOS, GENERATING_COPY, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MAKE_ALBUM, remakeQuestion, REMAKE_ALBUM, SIZE_LINE, startNewNote, TO_COVER } from '../src/builder/albumFlow';
 
 const REPO = path.resolve(__dirname, '..', '..');
@@ -96,7 +96,7 @@ describe("the app's album steps use the website's words", () => {
 
   it('the cover (CoverEditor.tsx)', () => {
     // The photos: one row above the cover (CoverPhotoRow, the website's since #235), its words the row's own.
-    expect(web.cover).toContain(YOUR_PHOTOS);
+    expect(web.cover).toContain(WEBSITE_YOUR_PHOTOS);
     expect(app.cover).toContain('<CoverPhotoRow');
     for (const w of ['Design your cover', 'Pick 1 photo for the front cover', 'Cover title', 'e.g. The Cruz Family',
       'Too long for the front cover: part of it will be cut off in print. Shorten it', ', or make the text smaller', 'Make it fit (size ']) {

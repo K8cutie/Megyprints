@@ -12,13 +12,18 @@
      2. the cover file, made on the phone and sent first (the phone has the
         most memory free then), tried 3 times, waiting 1.5 s then 4 s
         (orders.ts COVER_RETRY_WAITS_MS);
-     3. the pages file, made page by page (progress), then sent;
+     3. the pages file, made page by page (progress), then sent, tried 3
+        times like the cover (the same file: it is not made again);
      4. the album's QR memories (best effort for links, as on the website;
         required for videos);
      5. a tester order: claim_tester_order (the database marks it paid);
         else the payment step.
    Every upload is create-only: a file already in the bucket (an earlier
-   try for this same order) counts as sent (storageUpload uploadOnce).
+   try for this same order) counts as sent (storageUpload uploadOnce). A
+   file this visit already sent (`sent`) is not made or sent again: the
+   cover sent a second time was answered 409 at once, before its bytes were
+   read, and the pages file after it on the same connection then got 502
+   every time, so Place order again could never finish (beta round 2).
    Memory videos (the website's steps 0, 2b and 3c): before the order row,
    every video must be on this phone or already in the cloud (a video
    that's gone names its pages and leaves no unpaid order behind); after
@@ -99,6 +104,9 @@ export interface SendDeps {
   wait?: (ms: number) => Promise<void>;
   /** Memory videos (none: an album with one can't be sent from here). */
   clips?: ClipSender;
+  /** The files this checkout visit already sent (their paths), kept by the
+   *  checkout across tries: each is made and sent once. */
+  sent?: Set<string>;
 }
 
 /** The order row as the insert answered it. */
@@ -111,8 +119,19 @@ export const COVER_RETRY_WAITS_MS = [1500, 4000];
  *  connection), or making it on this phone (memory). */
 export const COVER_SEND_FAILED = "We couldn't send your album's cover. Your order is saved: check your internet, then tap Place order again.";
 export const COVER_MAKE_FAILED = "We couldn't make your album's cover on this phone. Your order is saved: close your other apps, then tap Place order again. If it keeps happening, message us.";
+/** The pages file that didn't go up after 3 tries: the cover's words. The
+ *  website said "Print file upload failed: <the server's words>". */
+export const PAGES_SEND_FAILED = "We couldn't send your album's pages. Your order is saved: check your internet, then tap Place order again.";
+/** No connection as the order is placed: plain words, not the phone's
+ *  ("fetch failed: java.net.ConnectException…"). */
+export const ORDER_OFFLINE = "We couldn't reach Megy Prints. Check your internet, then tap Place order again.";
 /** testerCode.ts claimTesterOrder's words. */
 export const TESTER_CLAIM_FAILED = "We couldn't finish your free tester order. Your order is saved: tap Place order again.";
+
+/** The phone's words for a request that never reached the server. */
+export function isNoConnection(message: string): boolean {
+  return /fetch failed|network request failed|failed to connect|connectexception|unknownhostexception|unable to resolve host|no address associated|socket ?timeout|timed out/i.test(message);
+}
 
 /** An album with a memory video, sent without the video part (an older
  *  caller): the video can't be sent. */
@@ -151,7 +170,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
     const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status').single();
     if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
     if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(String(plan.orderRow.tester_code ?? ''));
-    if (error) throw new Error(`Could not place your order: ${error.message}`);
+    if (error) throw new Error(isNoConnection(error.message) ? ORDER_OFFLINE : `Could not place your order: ${error.message}`);
     order = data as PlacedOrder;
     deps.onOrder?.(order);
   }
@@ -163,16 +182,21 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
   let videosSent = false;
   let replaced: string[] = [];
   for (const step of plan.steps) {
-    if (step.kind === 'upload' && step.path === `${ORDER_ID}-cover.pdf`) await sendCover(step, named(step.path), deps, onStep, wait);
-    else if (step.kind === 'upload' && step.bucket === 'memory-clips') {
+    if (step.kind === 'upload' && step.path === `${ORDER_ID}-cover.pdf`) {
+      const path = named(step.path);
+      if (!deps.sent?.has(path)) { await sendCover(step, path, deps, onStep, wait); deps.sent?.add(path); }
+    } else if (step.kind === 'upload' && step.bucket === 'memory-clips') {
       // 2b. Every memory video, once (the plan lists one step per video).
       if (!videosSent) { replaced = (await sendVideos()).replaced; videosSent = true; }
     } else if (step.kind === 'upload' && step.path === `${ORDER_ID}.pdf`) {
-      onStep({ step: 'pages', done: 0, total: 0, smaller: false });
-      const bytes = await deps.makePages((done, total, smaller) => onStep({ step: 'pages', done, total, smaller }));
-      onStep({ step: 'sending' });
-      const error = await upload(step.bucket, named(step.path), bytes, { contentType: step.contentType });
-      if (error) throw new Error(`Print file upload failed: ${error.message}`);
+      const path = named(step.path);
+      if (!deps.sent?.has(path)) {
+        onStep({ step: 'pages', done: 0, total: 0, smaller: false });
+        const bytes = await deps.makePages((done, total, smaller) => onStep({ step: 'pages', done, total, smaller }));
+        onStep({ step: 'sending' });
+        await sendTried(() => upload(step.bucket, path, bytes, { contentType: step.contentType }), wait, PAGES_SEND_FAILED);
+        deps.sent?.add(path);
+      }
     } else if (step.kind === 'upsert') {
       const hasClips = step.rows.some((r) => r.kind === 'clip');
       if (hasClips && clips) {
@@ -237,6 +261,17 @@ async function sendCover(step: Extract<PlanStep, { kind: 'upload' }>, path: stri
       if (attempt > COVER_RETRY_WAITS_MS.length) throw new Error(sending ? COVER_SEND_FAILED : COVER_MAKE_FAILED);
       await wait(COVER_RETRY_WAITS_MS[attempt - 1]);
     }
+  }
+}
+
+/** A file already made, sent: 3 tries, as the cover (a dropped connection
+ *  or a 502 on one try is often gone on the next); `failed` after the last. */
+async function sendTried(send: () => Promise<{ message: string } | null>, wait: (ms: number) => Promise<void>, failed: string): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    const error = await send().catch((e: unknown) => ({ message: e instanceof Error ? e.message : String(e) }));
+    if (!error) return;
+    if (attempt > COVER_RETRY_WAITS_MS.length) throw new Error(failed);
+    await wait(COVER_RETRY_WAITS_MS[attempt - 1]);
   }
 }
 
