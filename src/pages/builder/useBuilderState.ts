@@ -3719,7 +3719,14 @@ export function useBuilderState(): BuilderActions {
       const onScreen = persistRef.current?.local;
       const wasOnScreen = albumIdRef.current === albumId;
       if (albumIdRef.current !== albumId && draftHasContent(onScreen)) {
-        void saveToCloud(user.id, serializeAlbum(), { quiet: true });
+        // Unchanged since the version this device saved or opened: no write
+        // (flushCloud's rule). Re-saving it marked an album nobody touched
+        // "Changed just now" and moved it up the album list (beta round 3).
+        const leaving = serializeAlbum();
+        const rec = syncRecFor(leaving.id);
+        if (!(rec?.base && rec.key === albumContentKey(toAlbumRow(leaving)))) {
+          void saveToCloud(user.id, leaving, { quiet: true });
+        }
       }
       const albumData = await albumSync.load(user.id, albumId);
       // SAME album already on screen: which version is newer is decided by

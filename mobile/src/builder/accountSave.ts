@@ -40,11 +40,22 @@ export function useAccountSave(builder: BuilderActions, store: KeyValueStore, si
   // saving them would put that album in this account. Not this time: the
   // fresh album comes in the next render.
   const shownId = builder.getAlbumId();
+  const opening = builder.isLoadingCloud;
+  // The album and its pages as the last render showed them.
+  const seen = useRef({ id: shownId, madeAt });
   const sending = useRef<string | null>(null);
   useEffect(() => {
+    const before = seen.current;
     if (!signedIn) return;
+    // An album being opened (My albums: loadAlbum) puts its pages in first
+    // and its id, title and photos only once the phone has found its photos:
+    // a save then sent the opened album's pages into the album that was on
+    // the phone (beta round 3). Opened, it is the account's own copy: there
+    // is nothing to save, so pages that came with a new id are not saved.
+    if (opening) return;
     const albumId = builder.getAlbumId();
     if (albumId !== shownId) return;
+    if (madeAt !== before.madeAt && albumId !== before.id) return;
     if (!accountSaveDue(store, albumId, madeAt)) return;
     const key = mark(albumId, madeAt);
     if (sending.current === key) return;
@@ -56,4 +67,6 @@ export function useAccountSave(builder: BuilderActions, store: KeyValueStore, si
     // Once per album made (madeAt), and when the customer signs in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, madeAt]);
+  // After the save above has looked at what the last render showed.
+  useEffect(() => { seen.current = { id: shownId, madeAt }; });
 }
