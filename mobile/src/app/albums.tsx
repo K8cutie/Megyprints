@@ -43,6 +43,9 @@ export default function Albums() {
     setOpened(null);
     openingRef.current = null;
     setOpening(null);
+    // At its cover: opening keeps the page the album before it was left on
+    // (Mother, round 4: another album opened at "Page 37 of 40").
+    builder.goToPage(0);
     router.push(resumeRoute(builder, platform.deviceStore));
   }, [opened, builder, platform.deviceStore]);
 

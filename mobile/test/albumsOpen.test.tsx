@@ -17,9 +17,12 @@ const mockCloud: {
   rows: Record<string, { title: string; pages: unknown[] }>;
   release: (() => void) | null;
   hold: boolean;
-} = { online: true, onScreen: undefined, asked: [], rows: {}, release: null, hold: false };
+  /** The page the builder is on (the Preview opens there: at the cover from page 0), and each move and push in order. */
+  page: number;
+  steps: string[];
+} = { online: true, onScreen: undefined, asked: [], rows: {}, release: null, hold: false, page: 0, steps: [] };
 
-jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockNav.push(...a) }, Redirect: () => null }));
+jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => { mockCloud.steps.push(`push ${String(a[0])}`); mockNav.push(...a); } }, Redirect: () => null }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: { user: { id: 'user-1' } }, loading: false }) }));
 jest.mock('../src/lib/useMyAlbums', () => ({
   useMyAlbums: () => ({ albums: mockList.albums, loading: false, failed: false, retrying: false, retry: jest.fn() }),
@@ -37,6 +40,8 @@ jest.mock('../src/builder/BuilderProvider', () => {
       const builder = {
         albumTitle: st.title, albumPages: st.pages, uploadedPhotos: [], isLoadingCloud: st.loading,
         getAlbumId: () => mockCloud.onScreen,
+        currentPageIndex: mockCloud.page,
+        goToPage: (i: number) => { mockCloud.page = i; mockCloud.steps.push(`page ${i}`); },
         loadAlbum: async (id: string) => {
           mockCloud.asked.push(id);
           setSt((s) => ({ ...s, loading: true }));
@@ -67,6 +72,8 @@ beforeEach(() => {
   mockCloud.hold = false;
   mockCloud.release = null;
   mockCloud.rows = { a1: { title: 'Beach week', pages: madePages }, a2: { title: 'HK 2026', pages: madePages } };
+  mockCloud.page = 0;
+  mockCloud.steps = [];
 });
 
 describe('My albums opens the album you tap', () => {
@@ -77,6 +84,13 @@ describe('My albums opens the album you tap', () => {
     await fireEvent.press(screen.getByTestId('album-open-a2'));
     expect(mockCloud.asked).toEqual(['a2']);
     expect(mockNav.push).toHaveBeenCalledWith('/preview');
+  });
+
+  it('it opens at its cover, not at the page the album before it was left on (Mother, round 4: page 37 of the last one)', async () => {
+    mockCloud.page = 36;
+    await render(<Albums />);
+    await fireEvent.press(screen.getByTestId('album-open-a2'));
+    expect(mockCloud.steps).toEqual(['page 0', 'push /preview']);
   });
 
   it('while it opens, the card says so and a second tap opens nothing else', async () => {
