@@ -629,7 +629,8 @@ export default function Preview() {
           {missingHere.length > 0 && (
             <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>
           )}
-          {missing.count > 0 && (
+          {/* "Order this album" answering the same (orderAskBox, below) takes its place: it said it twice (round 4). */}
+          {missing.count > 0 && orderAsk?.kind !== 'missing' && (
             <View style={styles.ask} testID="preview-missing-photos">
               <Text style={styles.askText}>{missingOnPhoneMessage(missing)}</Text>
               <Button label="Add the photos" kind="plain" onPress={() => router.push('/photos')} testID="preview-missing-add" />

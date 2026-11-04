@@ -40,6 +40,14 @@ const mockSeen = {
   /** What saving the album to the account answers (Order this album). */
   save: jest.fn(async () => true),
   conflict: null as { updatedAt: string } | null,
+  /** The album's photos are not on this phone (opened from My albums on another phone). */
+  photosGone: false,
+};
+/** The album's photos as the phone finds them: none, while photosGone (one list per album's list). */
+const goneLists = new WeakMap<object, unknown[]>();
+const goneFrom = (photos: { previewUrl: string }[]) => {
+  if (!goneLists.has(photos)) goneLists.set(photos, photos.map((p) => ({ ...p, previewUrl: '' })));
+  return goneLists.get(photos);
 };
 
 jest.mock('expo-router', () => ({
@@ -74,7 +82,8 @@ jest.mock('../src/builder/BuilderProvider', () => ({
     const b = jest.requireActual('./editorHarness').builder();
     // The real builder, but saving to the account answers what the test says.
     const builder = new Proxy(b, {
-      get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict : t[k]),
+      get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict
+        : k === 'uploadedPhotos' && mockSeen.photosGone ? goneFrom(t.uploadedPhotos) : t[k]),
     });
     return { builder, platform: { deviceStore: { getItem: () => null, setItem: () => {} }, textMeasurer: () => null }, text: null };
   },
@@ -657,6 +666,25 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     await press('preview-order');
     expect(textOf('preview-order-ask')).toMatch(/^Your album has 39 photos/);
     expect(toEnd).toHaveBeenCalled();
+  });
+
+  it('photos not on this phone: "Order this album" says so once, not a second copy of the note above it (round 4)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    mockSeen.photosGone = true;
+    try {
+      await open();
+      await toTheEnd();
+      expect(all('preview-missing-photos')).toHaveLength(1);
+      await press('preview-order');
+      expect(textOf('preview-order-ask')).toMatch(/aren't on this phone/);
+      // The answer takes the note's place: one message, one "Add the photos".
+      expect(all('preview-missing-photos')).toHaveLength(0);
+      expect(all('preview-order-add-photos')).toHaveLength(1);
+      expect(mockSeen.save).not.toHaveBeenCalled();
+    } finally {
+      mockSeen.photosGone = false;
+    }
   });
 
   it('on its side, the last pages: a round "Order" button where › was', async () => {
