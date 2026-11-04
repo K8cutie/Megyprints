@@ -34,10 +34,17 @@ export function markAccountSaved(store: KeyValueStore, albumId: string | undefin
  *  own saves try again meanwhile). */
 export function useAccountSave(builder: BuilderActions, store: KeyValueStore, signedIn: boolean): void {
   const madeAt = builder.albumPages[0]?.madeAt ?? 0;
+  // The album this render shows. Another account signing in on this phone
+  // gets a fresh album, made by the builder just before this hook's effect
+  // runs (a new id); that effect still holds the other account's pages, and
+  // saving them would put that album in this account. Not this time: the
+  // fresh album comes in the next render.
+  const shownId = builder.getAlbumId();
   const sending = useRef<string | null>(null);
   useEffect(() => {
     if (!signedIn) return;
     const albumId = builder.getAlbumId();
+    if (albumId !== shownId) return;
     if (!accountSaveDue(store, albumId, madeAt)) return;
     const key = mark(albumId, madeAt);
     if (sending.current === key) return;
