@@ -10,7 +10,7 @@
    photo as it is picked (owner, 2026-11-03). A tap on the page closes it. */
 import { createContext, useContext, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, space } from '../../lib/theme';
 import { CLOSE } from '../editorWords';
 
@@ -23,13 +23,27 @@ export const SIDE_PANEL_W = 372;
 /** The side panel on a narrower screen: never more than this much of it. */
 export const sidePanelWidth = (screenW: number) => Math.min(SIDE_PANEL_W, Math.round(screenW * 0.46));
 
-export function EditorSheet({ title, onClose, children, testID, scroll = false }: {
+/** The room a grid has in a sheet's body. On its side the sheet is the panel,
+ *  not the screen, and the system's buttons can take its right edge: grids
+ *  measured from the screen ran out of the panel ("the layout is cut", owner,
+ *  2026-11-04). */
+export function useSheetBodyWidth(): number {
+  const placement = useContext(SheetPlacement);
+  const { width } = useWindowDimensions();
+  const { right } = useSafeAreaInsets();
+  return (placement === 'side' ? sidePanelWidth(width) - right : width) - space.md * 2;
+}
+
+export function EditorSheet({ title, onClose, children, testID, scroll = false, list = false }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   testID?: string;
   /** A long list (a photo grid): the sheet's body scrolls. */
   scroll?: boolean;
+  /** The body holds its own list, which scrolls itself. On its side the list
+   *  gets the panel's whole height, not a ScrollView around it. */
+  list?: boolean;
 }) {
   const placement = useContext(SheetPlacement);
   const { width: screenW } = useWindowDimensions();
@@ -48,7 +62,7 @@ export function EditorSheet({ title, onClose, children, testID, scroll = false }
           <Pressable style={styles.flex} onPress={onClose} accessibilityLabel={CLOSE} testID={testID ? `${testID}-dim` : undefined} />
           <SafeAreaView edges={['top', 'right', 'bottom']} style={[styles.side, { width: sidePanelWidth(screenW) }]} testID={testID}>
             {head}
-            <ScrollView contentContainerStyle={styles.body}>{children}</ScrollView>
+            {list ? <View style={[styles.body, styles.flex]}>{children}</View> : <ScrollView contentContainerStyle={styles.body}>{children}</ScrollView>}
           </SafeAreaView>
         </View>
       </Modal>

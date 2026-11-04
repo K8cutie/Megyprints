@@ -10,12 +10,13 @@
        Megy's chat): add a page after this one, delete this one (never under
        the 40-page floor: said instead of offered).
    ══════════════════════════════════════════════════════════════════════════ */
+import { useContext } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { MASKS, isMaskId, type MaskId } from '@web/pages/builder/maskShapes';
 import { LOOKS, isLookId, type LookId } from '@web/pages/builder/lookRules';
 import { Thumb } from '../../components/Thumb';
 import { colors, space } from '../../lib/theme';
-import { EditorSheet, SheetChoice } from '../core/EditorSheet';
+import { EditorSheet, SheetChoice, SheetPlacement, useSheetBodyWidth } from '../core/EditorSheet';
 import type { SheetProps } from '../registry';
 import { addPageAfter, canDeletePage, deleteThisPage, photoTags, pickLook, pickMask, placePicked, type PickTarget } from './actions';
 import { pickFromPhone } from './pickFromPhone';
@@ -34,15 +35,17 @@ const COLUMNS = 3;
 const GAP = 8;
 
 export function PickPhotoSheet({ ctx, params, close }: SheetProps<PickTarget>) {
-  const { width, height } = useWindowDimensions();
-  const cell = Math.floor((width - space.md * 2 - GAP * (COLUMNS - 1)) / COLUMNS);
+  const { height } = useWindowDimensions();
+  const room = useSheetBodyWidth();
+  const onItsSide = useContext(SheetPlacement) === 'side';
+  const cell = Math.floor((room - GAP * (COLUMNS - 1)) / COLUMNS);
   const photos = ctx.builder.uploadedPhotos;
   const tags = photoTags(ctx);
   // A frame that has a photo (its "Replace photo") says so: the sheet said
   // "Add a photo" for both (beta round 2).
   const replacing = params.kind === 'slot' && ctx.page.slotFills?.[params.index] != null;
   return (
-    <EditorSheet title={replacing ? REPLACE_PHOTO : ADD_A_PHOTO} onClose={close} testID="photos-pick-sheet">
+    <EditorSheet title={replacing ? REPLACE_PHOTO : ADD_A_PHOTO} onClose={close} list={photos.length > 0} testID="photos-pick-sheet">
       {/* Running out of photos is found HERE, so the way to more is here too (MobileReview). */}
       <Pressable accessibilityRole="button" accessibilityLabel={UPLOAD_MORE} testID="photos-pick-upload"
         onPress={() => { close(); pickFromPhone({ id: PICK_SHEET, params }); }}
@@ -54,7 +57,7 @@ export function PickPhotoSheet({ ctx, params, close }: SheetProps<PickTarget>) {
       ) : (
         <FlatList
           data={photos} keyExtractor={(p) => p.id} numColumns={COLUMNS}
-          style={{ maxHeight: height * 0.5 }} columnWrapperStyle={styles.row} contentContainerStyle={styles.grid}
+          style={onItsSide ? styles.fill : { maxHeight: height * 0.5 }} columnWrapperStyle={styles.row} contentContainerStyle={styles.grid}
           renderItem={({ item, index }) => (
             <Pressable accessibilityRole="button" accessibilityLabel={tags[index] ? `Photo ${index + 1}, ${tags[index]}` : `Photo ${index + 1}`}
               testID={`photos-pick-${index}`} onPress={() => { placePicked(ctx, params, index); close(); }}
@@ -116,6 +119,7 @@ export function PagesSheet({ ctx, close }: SheetProps<undefined>) {
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
   upload: { minHeight: 48, borderRadius: 12, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.md },
   uploadText: { fontSize: 15, fontWeight: '700', color: colors.accent },
   pressed: { opacity: 0.85 },

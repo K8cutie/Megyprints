@@ -34,6 +34,7 @@ import '../src/editor/parts';
 import { builder, ctxOn, firstPhoto, madeAlbum, settle, tapOn, useEditorBench } from './editorHarness';
 
 const mockPush = jest.fn();
+jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('expo-router', () => {
   const { useEffect } = jest.requireActual('react');
   return { router: { push: (...a: unknown[]) => mockPush(...a) }, useFocusEffect: (fn: () => void | (() => void)) => useEffect(fn, [fn]) };

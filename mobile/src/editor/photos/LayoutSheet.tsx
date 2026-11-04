@@ -13,7 +13,7 @@
    (PRIORITY.thumbnail), and a picture not drawn yet when it scrolls away or
    the sheet closes is never drawn (usePagePicture drops it).
    ══════════════════════════════════════════════════════════════════════════ */
-import { useMemo, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
 import { ALBUM_SIZES, type PageTemplate } from '@web/pages/builder/types';
@@ -22,7 +22,7 @@ import { memoriesOn } from '@web/pages/builder/generateAlbum';
 import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { Button } from '../../components/Button';
 import { colors, space } from '../../lib/theme';
-import { EditorSheet } from '../core/EditorSheet';
+import { EditorSheet, SheetPlacement, useSheetBodyWidth } from '../core/EditorSheet';
 import type { EditorContext, SheetProps } from '../registry';
 import { applyLayout, chooseLayout, layoutChoices, photosHeld, type LayoutAsk } from './actions';
 import { LAYOUT_CURRENT, LAYOUT_MEMORY_NOTE, LAYOUT_NONE, LAYOUT_TITLE, leftoverWords } from './words';
@@ -49,13 +49,15 @@ function LayoutThumb({ ctx, t, width, height }: { ctx: EditorContext; t: PageTem
 
 export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
   const [asking, setAsking] = useState<LayoutAsk | null>(null);
-  const { width: screenW, height: screenH } = useWindowDimensions();
+  const { height: screenH } = useWindowDimensions();
+  const room = useSheetBodyWidth();
+  const onItsSide = useContext(SheetPlacement) === 'side';
   const layouts = layoutChoices(ctx);
   const current = ctx.page.templateId;
   // A video memory only ever sits on a full-page photo: say why there are no more.
   const hasMemory = memoriesOn(ctx.page).length > 0;
   const size = ALBUM_SIZES.find((s) => s.preset === ctx.builder.albumSize) ?? ALBUM_SIZES[1];
-  const tileW = Math.floor((screenW - space.md * 2 - GAP * (COLUMNS - 1)) / COLUMNS) - 12;
+  const tileW = Math.floor((room - GAP * (COLUMNS - 1)) / COLUMNS) - TILE_EDGE;
   const tileH = Math.round(tileW * (size.height / size.width));
 
   const choose = (t: PageTemplate) => {
@@ -71,7 +73,7 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
   const memoryNote = hasMemory ? <Text style={styles.note} testID="photos-layout-memory">{LAYOUT_MEMORY_NOTE}</Text> : null;
   const onlyCurrent = layouts.length === 1 && layouts[0].id === current && !hasMemory;
   return (
-    <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll={!!asking || layouts.length === 0} testID="photos-layout-sheet">
+    <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll={!!asking || layouts.length === 0} list={!asking && layouts.length > 0} testID="photos-layout-sheet">
       {asking ? (
         <Leftover ask={asking} onNewPage={() => apply('new-page')} onLeaveOut={() => apply('leave-out')} onBack={() => setAsking(null)} />
       ) : layouts.length === 0 ? (
@@ -84,7 +86,7 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
           data={layouts}
           keyExtractor={(t) => t.id}
           numColumns={COLUMNS}
-          style={{ maxHeight: Math.round(screenH * 0.62) }}
+          style={onItsSide ? styles.fill : { maxHeight: Math.round(screenH * 0.62) }}
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.list}
           initialNumToRender={6}
@@ -136,6 +138,7 @@ function Leftover({ ask, onNewPage, onLeaveOut, onBack }: { ask: LayoutAsk; onNe
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
   note: { fontSize: 14, lineHeight: 20, color: colors.muted },
   none: { fontSize: 14, color: colors.muted, textAlign: 'center', padding: space.md },
   list: { gap: GAP },
