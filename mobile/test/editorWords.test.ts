@@ -49,6 +49,13 @@ describe("the editor uses the website's words", () => {
 
   it('an empty frame or box (BuilderPreview.tsx EmptyChooserBox) and "Add to this box" (SlotChooser.tsx)', () => {
     expect(CHOOSER_TITLE).toBe('Click to add:');
+    // A phone is tapped, not clicked (Mother, round 3): the app's own word,
+    // no longer than the website's, so it fits where the website's is sized.
+    expect(words.TAP_TO_ADD).toBe('Tap to add:');
+    expect(words.TAP_TO_ADD.length).toBeLessThanOrEqual(CHOOSER_TITLE.length);
+    const stage = read('mobile/src/editor/PageStage.tsx');
+    expect(stage).toContain('{TAP_TO_ADD}');
+    expect(stage).not.toContain('{CHOOSER_TITLE}');
     expect(web.preview).toContain(`options={${JSON.stringify(words.SLOT_OPTIONS).replace(/"/g, "'").replace(/,/g, ', ')}}`);
     expect(web.preview).toContain(`options={${JSON.stringify(words.BOX_OPTIONS).replace(/"/g, "'").replace(/,/g, ', ')}}`);
     expect(web.preview).toContain(`quote: '${words.ROLL_LABELS.quote}'`);
