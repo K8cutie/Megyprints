@@ -32,7 +32,7 @@ import {
   COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, ORDER_OFFLINE, PAGES_SEND_FAILED, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
   type ClipSender, type PlacedOrder, type SendDeps, type SendStep,
 } from '../src/lib/checkout/sendOrder';
-import { createOnlyUpload, isAlreadyExists } from '../src/lib/checkout/storage';
+import { createOnlyUpload, isAlreadyExists, uploadTimeLimitMs } from '../src/lib/checkout/storage';
 import { MissingClipError } from '../src/lib/memories/clips';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
 
@@ -193,6 +193,24 @@ describe('a retry, and files already sent', () => {
     expect(rec.uploads.map((u) => u.path)).toEqual(['order-1.pdf']);
     expect(again.made).toEqual(['pages']);
     expect([...sent].sort()).toEqual(['order-1-cover.pdf', 'order-1.pdf']);
+  });
+
+  it('the connection dropped under the pages file (no answer at all): three tries, each its time limit, then the plain words, not a wait forever (round 4)', async () => {
+    jest.useFakeTimers();
+    try {
+      const went: string[] = [];
+      // Storage's upload, gone quiet: it never answers (React Native's client has no time limit).
+      const quiet = { storage: { from: () => ({ upload: (path: string) => { went.push(path); return new Promise<never>(() => {}); } }) } };
+      const d = deps({ sent: new Set(['order-1-cover.pdf']), upload: createOnlyUpload(quiet) });
+      let failed: string | null = null;
+      void sendOrder(placeOrderPlan(input()), d, { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' })
+        .catch((e: Error) => { failed = e.message; });
+      for (let i = 0; i < 3 && !failed; i++) await jest.advanceTimersByTimeAsync(uploadTimeLimitMs(PAGES.byteLength));
+      expect(failed).toBe(PAGES_SEND_FAILED);
+      expect(went).toEqual(['order-1.pdf', 'order-1.pdf', 'order-1.pdf']);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('a file already in the bucket (an earlier try) counts as sent', async () => {
