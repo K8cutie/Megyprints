@@ -97,6 +97,16 @@ describe('the look', () => {
     expect(fs.existsSync(path.join(__dirname, '..', 'assets', 'home', 'hero.jpg'))).toBe(true);
   });
 
+  it('shorter than the screen (signed out): the cards sit in the middle, as the website\'s home centers them, not a big gap at the bottom (owner, 2026-11-04)', async () => {
+    await render(<Start />);
+    const box = flat(screen.getByTestId('home-scroll').props.contentContainerStyle);
+    // As tall as the screen at least, the cards and links in its middle;
+    // longer (signed in), it scrolls as before.
+    expect(box.flexGrow).toBe(1);
+    expect(box.justifyContent).toBe('center');
+    expect(WEB_HOME).toContain('min-h-[max(100dvh,640px)] flex items-center justify-center');
+  });
+
   it('"Megy · Prints" over it, and the menu', async () => {
     await render(<Start />);
     expect(screen.getByLabelText('Megy Prints')).toBeOnTheScreen();
