@@ -3766,6 +3766,27 @@ owner found (2026-11-04) that Continue / Preview my album still opens on
 the page last seen, often the last page. That is on his bug list for the
 next build.
 
+### Release notes 2.0.4 when uploaded ALONE (2.0.2 and 2.0.3 skipped)
+
+Recommended (2026-11-04): 2.0.3 has round 3's HIGH defect (opening an
+album from My albums can overwrite the one open before it), and its notes
+advertise that very feature. 2.0.4 has every 2.0.2 and 2.0.3 change plus
+those fixes, so testers go 2.0.1 → 2.0.4 and the notes cover all three:
+
+    From tester feedback:
+    • Tap an album in My albums to open it at its cover
+    • Albums made before you sign in now show in My albums
+    • Your albums stay yours when someone else signs in on your phone
+    • Your order shows your album's real cover
+    • Going back from checkout keeps your name and address
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    • Empty frames say "Tap to add"
+    Also new:
+    • The app tells you when a new version is ready
+
+493 characters.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
