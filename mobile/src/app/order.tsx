@@ -50,6 +50,7 @@ import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
 import { forgetCheckoutOnPhone, keepCheckoutForm, keptCheckoutForm } from '../lib/checkout/formKeep';
+import { sentFiles, type SentFiles } from '../lib/checkout/sentFiles';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
 import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
 import { useOptionalBuilder } from '../builder/BuilderProvider';
@@ -110,7 +111,10 @@ export default function OrderScreen() {
   // The order a try made: Place order again reuses it (never a second order).
   const placedRef = useRef<PlacedOrder | null>(null);
   // The files a try sent: never made or sent again (sendOrder `sent`).
-  const sentRef = useRef(new Set<string>());
+  // The files this phone sent, known again when this order is finished on a
+  // later visit (sentFiles.ts: the app closed on a stopped send, round 3).
+  const sentRef = useRef<SentFiles | null>(null);
+  sentRef.current ??= sentFiles(own?.platform?.deviceStore ?? null);
   // A send that stopped: the form opens again at its words and Place order.
   const showFailure = useRef(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);

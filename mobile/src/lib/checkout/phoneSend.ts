@@ -27,6 +27,7 @@ import type { CheckoutAlbum, PlaceOrderPlan } from './orderPayload';
 import type { PaymentSubmitPlan } from './payment';
 import type { PickedReceipt } from './receipt';
 import { sendOrder, sendPayment, type ClipSender, type PlacedOrder, type SendDb, type SendStep } from './sendOrder';
+import type { SentFiles } from './sentFiles';
 import { createOnlyUpload } from './storage';
 
 const db = supabase as unknown as SendDb;
@@ -50,8 +51,8 @@ export async function sendFromPhone(o: {
   material: MaterialType;
   text: PageText;
   placed: PlacedOrder | null;
-  /** The files this checkout visit already sent (sendOrder `sent`). */
-  sent?: Set<string>;
+  /** The files already sent (sendOrder `sent`, sentFiles.ts). */
+  sent?: SentFiles;
   onStep: (s: SendStep) => void;
   onOrder: (order: PlacedOrder) => void;
 }): Promise<{ order: PlacedOrder; paidByTester: boolean; paidByBooking?: boolean }> {

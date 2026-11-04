@@ -38,6 +38,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { isUnpaidLimitError, UnpaidLimitError } from '@web/lib/orderExpiry';
 import { ORDER_ID, type PlaceOrderPlan, type PlanStep } from './orderPayload';
+import type { SentFiles } from './sentFiles';
 import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
 import { MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
@@ -104,9 +105,9 @@ export interface SendDeps {
   wait?: (ms: number) => Promise<void>;
   /** Memory videos (none: an album with one can't be sent from here). */
   clips?: ClipSender;
-  /** The files this checkout visit already sent (their paths), kept by the
-   *  checkout across tries: each is made and sent once. */
-  sent?: Set<string>;
+  /** The files already sent (their paths), kept by the checkout across tries
+   *  and visits (sentFiles.ts): each is made and sent once. */
+  sent?: SentFiles;
 }
 
 /** The order row as the insert answered it. */

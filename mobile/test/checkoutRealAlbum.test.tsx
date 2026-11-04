@@ -32,8 +32,8 @@ import { BASE, fetchFromDisk } from './helpers/psgcFiles';
 const mockAuth: { session: { user: { id: string } } | null } = { session: { user: { id: 'user-1' } } };
 const mockNav = { push: jest.fn(), back: jest.fn() };
 const mockParams: { albumId?: string } = { albumId: 'album-7' };
-const mockAlbum = { builder: null as unknown };
-type SendCall = { plan: { orderRow: Record<string, unknown> }; placed: unknown; cover: string; material: string; onStep: (s: unknown) => void; onOrder: (o: unknown) => void };
+const mockAlbum = { builder: null as unknown, platform: undefined as unknown };
+type SendCall = { plan: { orderRow: Record<string, unknown> }; placed: unknown; cover: string; material: string; onStep: (s: unknown) => void; onOrder: (o: unknown) => void; sent?: { has(p: string): boolean; add(p: string): void } };
 const placesAndSends = async (c: SendCall): Promise<unknown> => {
   c.onStep({ step: 'order' });
   c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
@@ -59,7 +59,7 @@ jest.mock('expo-router', () => ({
   router: { push: (...a: unknown[]) => mockNav.push(...a), back: () => mockNav.back() },
   useLocalSearchParams: () => mockParams,
 }));
-jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => (mockAlbum.builder ? { builder: mockAlbum.builder, text: {} } : null) }));
+jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => (mockAlbum.builder ? { builder: mockAlbum.builder, text: {}, platform: mockAlbum.platform } : null) }));
 // The phone's part of sending (Skia, the files, the live database): a stand-in.
 jest.mock('../src/lib/checkout/phoneSend', () => ({
   sendFromPhone: (c: SendCall) => { mockSend.calls.push(c); return mockSend.run(c); },
@@ -121,6 +121,7 @@ beforeEach(() => {
   mockAuth.session = { user: { id: 'user-1' } };
   mockParams.albumId = 'album-7';
   mockAlbum.builder = ownAlbum;
+  mockAlbum.platform = undefined;
   mockNav.push.mockClear();
   mockNav.back.mockClear();
   mockSend.calls = [];
@@ -434,6 +435,36 @@ describe('beta round 2 (Mother reproduced each one on the phone)', () => {
     expect(ask).toHaveTextContent(/This album has test order MP-2026-QCFG5G4 that didn't finish\. Place a second order for it\?/);
     expect(ask).not.toHaveTextContent(/waiting for payment/);
     expect(mockSend.calls).toHaveLength(0);
+  });
+
+  it('the app closed on a stopped send: finishing it later does not send the cover again (round 3)', async () => {
+    const { memoryStore } = jest.requireActual('../src/builder/deviceStore') as typeof import('../src/builder/deviceStore');
+    mockAlbum.platform = { deviceStore: memoryStore() };
+    // First visit: the order row and its cover went; the pages did not.
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'order-9', order_number: 'MP-2026-QCFG5G4', status: 'pending_payment' });
+      c.sent!.add('order-9-cover.pdf');
+      throw new Error("We couldn't send your album's pages. Your order is saved: check your internet, then tap Place order again.");
+    };
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fillDetails();
+    await useTesterCode();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText(/We couldn't send your album's pages/)).toBeOnTheScreen();
+    await first.unmount();
+
+    // Opened again (the app was closed): the stuck test order, finished with the code.
+    fake.orderRow = STUCK;
+    mockSend.run = placesAndSends;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-already-open');
+    // The details come back as typed (formKeep); the code is used again.
+    await useTesterCode();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(2);
+    expect(mockSend.calls[1].sent!.has('order-9-cover.pdf')).toBe(true);
   });
 
   it('asked first, then the tester code (as the box says): the question goes, Place order is back and finishes THAT order (round 3)', async () => {

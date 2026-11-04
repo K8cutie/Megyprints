@@ -16,6 +16,7 @@ import { BACKGROUND_NOTE, startKeeper, startSending, type Keeper } from '../../l
 import type { CheckoutAlbum, PlaceOrderPlan } from '../../lib/checkout/orderPayload';
 import { KEEP_OPEN_NOTE, sendFrame } from '../../lib/checkout/placeRun';
 import type { PlacedOrder, SendStep } from '../../lib/checkout/sendOrder';
+import type { SentFiles } from '../../lib/checkout/sentFiles';
 import { colors, space } from '../../lib/theme';
 import type { PageText } from '../../render/pageText';
 import { PlaceProgressBar } from './PlaceProgressBar';
@@ -25,8 +26,8 @@ const SOMETHING_WRONG = 'Something went wrong placing your order.';
 
 export function Sending({ plan, album, cover, material, text, placed, sent, bookingNumber = null, onOrder, onSent, onFailed }: {
   plan: PlaceOrderPlan; album: CheckoutAlbum; cover: CoverType; material: MaterialType; text: PageText; placed: PlacedOrder | null;
-  /** The files this checkout visit already sent: not made or sent again. */
-  sent?: Set<string>;
+  /** The files already sent (sentFiles.ts): not made or sent again. */
+  sent?: SentFiles;
   /** An event album its booking pays for: the booking's number (the notification says it). */
   bookingNumber?: string | null;
   onOrder: (o: PlacedOrder) => void;
