@@ -3723,6 +3723,22 @@ Each fix has a test that failed first.
     (`sharedDevice.spec.ts`). The app's account tests hid it: their
     made-up saved sign-in was always "nobody", so reset never saved
     there. It now follows who is signed in.
+  - Round 4c, Mother on the emulators:
+    - Both defects reproduced on the old build (r4c):
+      - lito's account got a byte-identical copy of carlo's "Leak Check
+        Old".
+      - Bea's 22nd, untouched, was PATCHed on "Start a new album".
+    - The same steps on r4d:
+      - No row for lito.
+      - Untouched albums kept their updated_at.
+      - A change still went out in one PATCH.
+      - A guest's album still went to the account they signed in with,
+        once.
+  - Seen, left for later (it was the same before 2.0.4, and the website
+    has it too): an album with a name and no photos IS saved to the
+    account by the background save (`flushCloud` keeps named albums).
+    Yet "Start a new album?" says "This one has no photos yet, so it
+    won't be kept."
 - Left as is:
   - "Start a new album?" signed out: to say "it stays in your account", the
     app must know the latest changes reached the account. It doesn't know
@@ -3736,13 +3752,17 @@ Each fix has a test that failed first.
 
     From tester feedback:
     • Opening an album keeps your other albums as they were
-    • Photos you picked stay with their album when someone else signs in
+    • Your album and photos stay yours when someone else signs in on your phone
     • Your tester code finishes a test order that stopped
+    • If the internet drops while you order, the app says what to do
     • "Ask for photo access again" always answers
-    • A double tap opens your album on its cover
+    • Albums open on their cover
     • "Order this album" shows its answer on screen
     • Empty frames say "Tap to add"
     • The start screen sits in the middle when you're signed out
+
+488 characters (Play's limit is 500). "Albums open on their cover" covers the
+double tap after "Make my album" and an album opened from My albums.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
