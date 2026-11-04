@@ -3644,6 +3644,65 @@ build found:
 - Small words: an empty frame says "Click to add"; signed out, "Start a new
   album?" says the album is lost though it is in the account.
 
+## 2.0.4: what the testers' round 3 found (2026-11-04, `fix/port-crew-round3`)
+
+Owner: "Build 2.0.3 and put this latest in 2.0.4". 2.0.4 is 2.0.3 plus
+fixes for round 3 of the beta testers (Mother, on the 2.0.3 crew build).
+Each fix has a test that failed first.
+- **Opening an album never writes it over the album that was open.**
+  `loadAlbum` puts the pages in first, and the id only once the phone has
+  found the photos. The sign-in save (`useAccountSave`) saw the new pages
+  with the old id and saved them there. It doesn't save while an album
+  opens, or pages that came with a new id. Opening an album no longer
+  re-saves the album left behind when nothing in it changed (website
+  `loadAlbum`, flushCloud's rule), so untouched albums stop showing
+  "Changed just now".
+- **The picked photos belong to the album, not the phone**
+  (`draftFollowsAlbum`). When the phone's album becomes another one, the
+  picked photos become that album's photos on this phone:
+  - none for a fresh album (another account signing in);
+  - the opened album's own once it is in.
+
+  Before, another account's "Continue my album" carried the last person's
+  picks, and an opened album listed the album before it's photos as its own.
+- **With a stuck test order, the tester code used after the "didn't finish"
+  question** hides the question and brings Place order back. The question
+  says "a second order", as its button does.
+- **Finishing a stopped order later never sends its cover again.** The files
+  sent are kept on the phone for 6 hours (`sentFiles`), by names that carry
+  the order's id. Before, the duplicate cover answer broke the connection,
+  and the pages file waited about 40 s for a 502.
+- **The Preview:**
+  - "Next page" ignores taps for 0.5 s after the Preview comes on
+    (`useJustArrived`), so a double tap on "Make my album" opens the cover.
+  - "Order this album"'s answer is scrolled into view.
+- **Photo access:**
+  - Whether Android showed its question is seen by the app going to the
+    background, not by a 0.4 s timer, so "Ask again" is never a dead tap.
+  - "Won't ask" is remembered until access changes, and the screen says
+    "Your phone will not ask again."
+  - A question that was only closed says "not allowed", not "off".
+- **An empty frame says "Tap to add:".**
+- Left as is:
+  - "Start a new album?" signed out: to say "it stays in your account", the
+    app must know the latest changes reached the account. It doesn't know
+    that while signed out. The words err on the safe side, and the website
+    says the same.
+  - The "Open order" page of an unfinished test order (website
+    `orderTracker` words). The finish no longer needs that detour.
+- **Version 2.0.4, code 104.** Same permissions as 2.0.3.
+
+### Release notes 2.0.4 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Opening an album keeps your other albums as they were
+    • Photos you picked stay with their album when someone else signs in
+    • Your tester code finishes a test order that stopped
+    • "Ask for photo access again" always answers
+    • A double tap opens your album on its cover
+    • "Order this album" shows its answer on screen
+    • Empty frames say "Tap to add"
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
