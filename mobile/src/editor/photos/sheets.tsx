@@ -78,11 +78,11 @@ export function MaskSheet({ ctx, params, close }: SheetProps<{ slot: number }>) 
   const raw = ctx.page.slotMasks?.[params.slot];
   const current: MaskId | 'none' = isMaskId(raw) ? raw : 'none';
   return (
-    <EditorSheet title={MASK} onClose={close} scroll testID="photos-mask-sheet">
+    <EditorSheet title={MASK} onClose={close} scroll live testID="photos-mask-sheet">
       <Text style={styles.hint}>{MASK_HINT}</Text>
       {MASKS.map((m) => (
         <SheetChoice key={m.id} label={tick(m.label, m.id === current)} testID={`photos-mask-${m.id}`}
-          onPress={() => { close(); pickMask(ctx, params.slot, m.id); }} />
+          onPress={() => pickMask(ctx, params.slot, m.id)} />
       ))}
     </EditorSheet>
   );
@@ -93,10 +93,10 @@ export function FilterSheet({ ctx, params, close }: SheetProps<{ slot: number }>
   const current: LookId | 'none' = isLookId(raw) ? raw : 'none';
   const items: { id: LookId | 'none'; label: string }[] = [{ id: 'none', label: ORIGINAL }, ...LOOKS.map((l) => ({ id: l.id, label: l.label }))];
   return (
-    <EditorSheet title={FILTER} onClose={close} scroll testID="photos-filter-sheet">
+    <EditorSheet title={FILTER} onClose={close} scroll live testID="photos-filter-sheet">
       {items.map((l) => (
         <SheetChoice key={l.id} label={tick(l.label, l.id === current)} testID={`photos-filter-${l.id}`}
-          onPress={() => { close(); pickLook(ctx, params.slot, l.id); }} />
+          onPress={() => pickLook(ctx, params.slot, l.id)} />
       ))}
     </EditorSheet>
   );

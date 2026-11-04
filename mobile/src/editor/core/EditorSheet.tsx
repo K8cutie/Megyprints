@@ -7,7 +7,11 @@
    With the phone on its side (Edit pages says so: SheetPlacement 'side') it
    is a panel down the right instead, where the editor's buttons are, and
    the page on the left stays in full view: a filter or a mask shows on the
-   photo as it is picked (owner, 2026-11-03). A tap on the page closes it. */
+   photo as it is picked (owner, 2026-11-03). A tap on the page closes it.
+
+   A sheet whose choices show on the page and stay open to try another (`live`:
+   Mask, Filter, Page colour; owner, 2026-11-05: "dont let the editor close"):
+   upright too it leaves the page in view, undimmed, and it is shorter. */
 import { createContext, useContext, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,7 +38,7 @@ export function useSheetBodyWidth(): number {
   return (placement === 'side' ? sidePanelWidth(width) - right : width) - space.md * 2;
 }
 
-export function EditorSheet({ title, onClose, children, testID, scroll = false, list = false }: {
+export function EditorSheet({ title, onClose, children, testID, scroll = false, list = false, live = false }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
@@ -44,6 +48,8 @@ export function EditorSheet({ title, onClose, children, testID, scroll = false, 
   /** The body holds its own list, which scrolls itself. On its side the list
    *  gets the panel's whole height, not a ScrollView around it. */
   list?: boolean;
+  /** Its choices show on the page while it stays open (see the top of this file). */
+  live?: boolean;
 }) {
   const placement = useContext(SheetPlacement);
   const { width: screenW } = useWindowDimensions();
@@ -70,9 +76,9 @@ export function EditorSheet({ title, onClose, children, testID, scroll = false, 
   }
   return (
     <Modal transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.dim}>
+      <View style={live ? styles.undimmed : styles.dim}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={CLOSE} testID={testID ? `${testID}-dim` : undefined} />
-        <SafeAreaView edges={['bottom']} style={styles.sheet} testID={testID}>
+        <SafeAreaView edges={['bottom']} style={[styles.sheet, live && styles.sheetLive]} testID={testID}>
           {head}
           {scroll ? <ScrollView contentContainerStyle={styles.body}>{children}</ScrollView> : <View style={styles.body}>{children}</View>}
         </SafeAreaView>
@@ -94,6 +100,9 @@ export function SheetChoice({ label, desc, onPress, danger = false, testID }: { 
 
 const styles = StyleSheet.create({
   dim: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  undimmed: { flex: 1, justifyContent: 'flex-end' },
+  // Under the page, however big the page is on a phone that's upright.
+  sheetLive: { maxHeight: '42%', elevation: 16 },
   sideRow: { flex: 1, flexDirection: 'row' },
   flex: { flex: 1 },
   side: { backgroundColor: colors.card, borderLeftWidth: 1, borderLeftColor: colors.border },

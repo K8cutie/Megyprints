@@ -140,6 +140,17 @@ describe('on its side', () => {
     expect(bottom.borderTopLeftRadius).toBe(16);
   });
 
+  it('a sheet whose edits show on the page (Mask, Filter), upright: no dimming, and short enough to leave the page in view', async () => {
+    await render(
+      <SheetPlacement.Provider value="bottom">
+        <EditorSheet title="Mask" onClose={() => {}} live scroll testID="sheet"><Text>Circle</Text></EditorSheet>
+      </SheetPlacement.Provider>,
+    );
+    expect(flat(screen.getByTestId('sheet').props.style).maxHeight).toBe('42%');
+    expect(flat(screen.getByTestId('sheet-dim').parent?.props.style).backgroundColor).toBeUndefined();
+    expect(screen.getByText('Circle')).toBeOnTheScreen();
+  });
+
   it('the panel is never more than 46% of the screen', () => {
     expect(sidePanelWidth(915)).toBe(SIDE_PANEL_W);
     expect(sidePanelWidth(640)).toBe(Math.round(640 * 0.46));
