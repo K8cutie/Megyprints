@@ -291,6 +291,10 @@ export default function OrderScreen() {
   // A free test order of this album that stopped half-way: Place order with
   // the code finishes that order, not a new one (openOrder.ts).
   const finishing = !!openOrder && unfinishedTestOrder(openOrder) && !!tester && !eventLink;
+  // "Place a new order?" is not asked of an order the code finishes: the
+  // code used after the question left it up, with no Place order, and its
+  // "Yes, place a second order" finished the old order (beta round 3).
+  const asking = askSecond && !!openOrder && !finishing;
 
   const startPlacing = (cleanName: string, cleanPhone: string) => {
     if (!userId) return;
@@ -626,7 +630,7 @@ export default function OrderScreen() {
 
       {tooFew ? (
         <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn)}</Text></View>
-      ) : askSecond && openOrder ? null : (
+      ) : asking ? null : (
         <>
           <Button
             label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
@@ -641,7 +645,7 @@ export default function OrderScreen() {
 
       {/* The question takes Place order's place: its filled button is the order
           already there, the second order is outlined. */}
-      {askSecond && openOrder && words && (
+      {asking && words && (
         <View style={styles.notice} testID="order-second-ask">
           <Text style={styles.noticeBody}>{secondOrderQuestion(openOrder)}</Text>
           <Button label={words.button} onPress={openExistingOrder} testID="order-second-open" />

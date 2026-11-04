@@ -117,6 +117,6 @@ export function openOrderView(o: OpenOrder): 'pay' | 'status' {
 
 /** The question under Place order before a second order. */
 export function secondOrderQuestion(o: OpenOrder): string {
-  if (unfinishedTestOrder(o)) return `This album has test order ${o.order_number} that didn't finish. Place a new order for it?`;
+  if (unfinishedTestOrder(o)) return `This album has test order ${o.order_number} that didn't finish. Place a second order for it?`;
   return `This album already has order ${o.order_number} ${o.payment_submitted_at ? 'with its payment sent' : 'waiting for payment'}. Place a second order for it?`;
 }

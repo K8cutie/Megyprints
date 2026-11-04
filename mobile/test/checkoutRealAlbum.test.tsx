@@ -430,9 +430,27 @@ describe('beta round 2 (Mother reproduced each one on the phone)', () => {
     await fillDetails();
     await fireEvent.press(screen.getByTestId('order-place'));
     const ask = await screen.findByTestId('order-second-ask');
-    expect(ask).toHaveTextContent(/This album has test order MP-2026-QCFG5G4 that didn't finish\. Place a new order for it\?/);
+    // "a second order", as its button says (it said "a new order": round 3).
+    expect(ask).toHaveTextContent(/This album has test order MP-2026-QCFG5G4 that didn't finish\. Place a second order for it\?/);
     expect(ask).not.toHaveTextContent(/waiting for payment/);
     expect(mockSend.calls).toHaveLength(0);
+  });
+
+  it('asked first, then the tester code (as the box says): the question goes, Place order is back and finishes THAT order (round 3)', async () => {
+    fake.orderRow = STUCK;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-already-open');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    await screen.findByTestId('order-second-ask');
+    await useTesterCode();
+    // It stayed up, with no Place order, and its "Yes, place a second order"
+    // finished the old order (Mother, round 3).
+    expect(screen.queryByTestId('order-second-ask')).toBeNull();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(1);
+    expect(mockSend.calls[0].placed).toEqual({ id: 'order-9', order_number: 'MP-2026-QCFG5G4', status: 'pending_payment' });
   });
 
   it('signed in on Your order while the album was going to the account: Place order reads it again and goes on', async () => {
