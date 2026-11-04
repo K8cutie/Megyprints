@@ -49,7 +49,7 @@ import { canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn,
 import { planTurn, type TurnFace, type TurnPlan } from '@web/pages/builder/pageTurn';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
-import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
+import { markAccountSaved } from '../builder/accountSave';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
@@ -254,17 +254,13 @@ export default function Preview() {
   const seq = useRef(0);
   const [notDrawn, setNotDrawn] = useState<Record<string, string[]>>({});
 
-  // On the phone now (the builder's own write, not its 30 s timer); signed
-  // in, a newly made album goes to the account once (accountSave.ts).
+  // On the phone now (the builder's own write, not its 30 s timer). Signed
+  // in, a newly made album goes to the account once: for the whole app, on
+  // any screen (accountSave.ts useAccountSave, in BuilderProvider).
   const signedIn = !!session;
   const madeAt = pages[0]?.madeAt ?? 0;
   useEffect(() => {
     builder.saveDraftNow();
-    if (!signedIn || total === 0) return;
-    const albumId = builder.getAlbumId();
-    if (!accountSaveDue(platform.deviceStore, albumId, madeAt)) return;
-    void builder.manualSave().then((ok) => { if (ok) markAccountSaved(platform.deviceStore, albumId, madeAt); }).catch(() => {});
-    // Once per album made (madeAt), and when the customer signs in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, madeAt]);
   // Made again (from the Photos step): the book opens on its cover again.

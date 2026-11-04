@@ -539,8 +539,9 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     await press('preview-next');
     await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
     await refresh();
-    // Signed in, the Preview saves a newly made album once on opening
-    // (accountSave.ts): only the saves "Order this album" makes count here.
+    // Signed in, a newly made album is saved once by the whole app
+    // (accountSave.ts useAccountSave): only the saves "Order this album"
+    // makes count here.
     mockSeen.save.mockClear();
   }
   /** Taps Order; a warning (an empty caption box in a made album) is answered "Order anyway". */

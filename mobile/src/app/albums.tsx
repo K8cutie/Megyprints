@@ -17,8 +17,9 @@ import { useMyAlbums } from '../lib/useMyAlbums';
 export default function Albums() {
   const { loading: authLoading, session } = useAuth();
   const userId = session?.user.id;
-  const { albums, loading, failed, retrying, retry } = useMyAlbums(userId);
   const { builder, platform } = useBuilder();
+  // Read again when the builder saves (an album on the phone, saved as you signed in).
+  const { albums, loading, failed, retrying, retry } = useMyAlbums(userId, builder.lastSavedAt?.getTime() ?? 0);
   const [opening, setOpening] = useState<string | null>(null);
   const openingRef = useRef<string | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
