@@ -4,10 +4,12 @@
    through the same book twice. */
 import { router, useNavigation } from 'expo-router';
 import { useCallback } from 'react';
+import { askPreviewAtCover } from './previewCover';
 
 export function useGoToPreview(): (how?: 'push' | 'replace') => void {
   const navigation = useNavigation();
   return useCallback((how: 'push' | 'replace' = 'push') => {
+    askPreviewAtCover();
     const routes = navigation.getState()?.routes ?? [];
     const here = routes[routes.length - 1];
     if (routes.some((r) => r.name === 'preview' && r !== here)) router.dismissTo('/preview');

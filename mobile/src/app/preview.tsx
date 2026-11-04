@@ -36,9 +36,9 @@
    another device too, or deleted there: the website's question, its words.
    Photos this phone no longer has are named, with the way to put them back.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router, Stack, useIsFocused } from 'expo-router';
+import { router, Stack, useFocusEffect, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Animated, Easing, PanResponder, PixelRatio, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -54,6 +54,7 @@ import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builde
 import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { useJustArrived, useOncePerVisit } from '../lib/useOncePerVisit';
 import { PAGE_FLIP_LABEL, usePageFlip } from '../lib/pageFlip';
+import { takePreviewAtCover } from '../builder/previewCover';
 import { orderCheck, orderSaveError, type OrderCheck } from '../lib/checkout/orderStart';
 import { screenCanTurn, useTurnsWithThePhone } from '../lib/screenTurning';
 import { BOARD, BOOK_DRESS_Y, isSideways, pagePictureWidth, sidewaysBook, uprightBook, UPRIGHT_CHROME_GUESS, UPRIGHT_EDGE, type Box } from '../builder/previewLayout';
@@ -251,6 +252,13 @@ export default function Preview() {
   const view: PreviewView = sideways || openBook ? 'spread' : 'page';
   const index = Math.min(builder.currentPageIndex, Math.max(0, total - 1));
   const [coverAt, setCoverAt] = useState<number | null>(() => (index === 0 ? 0 : null));
+  // Sent here to look at the album (previewCover.ts): from its cover.
+  const { goToPage } = builder;
+  useFocusEffect(useCallback(() => {
+    if (!takePreviewAtCover()) return;
+    goToPage(0);
+    setCoverAt(0);
+  }, [goToPage]));
   const onCover = coverAt === index;
   const pos: PreviewPosition = { view, index, total, onCover, hasCover: true };
   const [turn, setTurn] = useState<{ plan: TurnPlan; n: number; drive?: Animated.Value } | null>(null);

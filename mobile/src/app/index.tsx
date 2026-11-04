@@ -110,6 +110,11 @@ export default function Start() {
   };
   const openEvents = () => { void Linking.openURL(EVENTS_PAGE); };
   const go = (to: string) => router.push(to as never);
+  // On its cover: the Preview shows the page last seen, often the last one.
+  const continueAlbum = () => {
+    builder.goToPage(0);
+    go(resumeRoute(builder, platform.deviceStore));
+  };
 
   const menuItems: MenuItem[] = [
     ...(session ? [
@@ -146,7 +151,7 @@ export default function Start() {
               <AlbumsCard>
                 {inProgress ? (
                   <>
-                    <StartCreating label={HOME.continueAlbum} sparkle={false} onPress={() => go(resumeRoute(builder, platform.deviceStore))} testID="continue-album" />
+                    <StartCreating label={HOME.continueAlbum} sparkle={false} onPress={continueAlbum} testID="continue-album" />
                     <CardButton label={HOME.newAlbum} onPress={askStartNew} testID="new-album" tall={false} />
                   </>
                 ) : (

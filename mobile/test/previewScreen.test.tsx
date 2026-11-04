@@ -30,6 +30,8 @@ const mockSeen = {
   focused: true,
   /** Run useFocusEffect as the screen comes on top (off: most tests press at once). */
   focusRuns: false,
+  /** Moved by hand: the screen comes on top again (the screen on top of it left). */
+  focusTick: 0,
   header: [] as { headerShown?: boolean }[],
   /** The status bars on screen (React Native keeps a stack: the latest one mounted wins). */
   statusBars: new Set<{ hidden?: boolean }>(),
@@ -59,7 +61,7 @@ jest.mock('expo-router', () => ({
   },
   Stack: { Screen: ({ options }: { options: { headerShown?: boolean } }) => { mockSeen.header.push(options); return null; } },
   useIsFocused: () => mockSeen.focused,
-  useFocusEffect: (fn: () => void) => { if (mockSeen.focusRuns) jest.requireActual<typeof import('react')>('react').useEffect(() => fn(), []); },
+  useFocusEffect: (fn: () => void) => { if (mockSeen.focusRuns) jest.requireActual<typeof import('react')>('react').useEffect(() => fn(), [mockSeen.focusTick]); },
 }));
 jest.mock('expo-status-bar', () => {
   const React = jest.requireActual<typeof import('react')>('react');
@@ -118,6 +120,7 @@ import { edgeThickness } from '../src/builder/bookLook';
 import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
 import { ARRIVING_MS } from '../src/lib/useOncePerVisit';
 import { PAGE_FLIP_KEY, PAGE_FLIP_LABEL } from '../src/lib/pageFlip';
+import { askPreviewAtCover } from '../src/builder/previewCover';
 const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
 const DEFAULT = 0;
@@ -846,5 +849,75 @@ describe('the page flip can be turned off (owner, 2026-11-04: "add a button to t
     expect(all('preview-page-turn')).toHaveLength(0);
     expect(textOf('preview-counter')).toBe(`4-5 / ${total}`);
     await land();
+  });
+});
+
+describe('"Done — Preview my album" opens the album on its cover (owner, 2026-11-04: "the beginning of preview my album is the last page")', () => {
+  afterEach(() => { mockSeen.focusRuns = false; });
+
+  /** The Preview on a page deep in the album, the way it stays under the editor. */
+  async function deepIn() {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    mockSeen.store.set(PAGE_FLIP_KEY, 'off');
+    await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
+    await refresh();
+    await act(async () => { screen!.unmount(); });
+    mockSeen.focusRuns = true;
+    await open();
+    expect(textOf('preview-caption')).toMatch(/^Page \d+ of \d+$/);
+    expect(builder().currentPageIndex).toBe(builder().albumPages.length - 1);
+  }
+
+  it('asked to, it comes back on the Front cover, from the last page of the album', async () => {
+    await deepIn();
+    askPreviewAtCover();
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    await refresh(); // the builder's page change reaches the screen
+    expect(textOf('preview-caption')).toBe('Front cover');
+    expect(builder().currentPageIndex).toBe(0);
+  });
+
+  it('not asked ("Back to preview"): it comes back on the page it was on', async () => {
+    await deepIn();
+    const page = textOf('preview-caption');
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    expect(textOf('preview-caption')).toBe(page);
+  });
+
+  it('asked once, it does it once: the next time it comes on top, it stays where it is', async () => {
+    await deepIn();
+    askPreviewAtCover();
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    await refresh(); // the builder's page change reaches the screen
+    await act(async () => { builder().goToPage(4); });
+    await refresh();
+    const page = textOf('preview-caption');
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    expect(textOf('preview-caption')).toBe(page);
+  });
+});
+
+describe('every way into the Preview asks for its cover', () => {
+  const read = (f: string) => jest.requireActual<typeof import('node:fs')>('node:fs').readFileSync(jest.requireActual<typeof import('node:path')>('node:path').join(__dirname, '..', f), 'utf8').split(String.fromCharCode(13)).join('');
+
+  it('"Done — Preview my album" in the editor; "Back to preview" stays the way back to the same page', () => {
+    const editor = read('src/editor/EditPagesScreen.tsx');
+    expect(editor).toContain('const doneEditing = () => { askPreviewAtCover(); backToPreview(); };');
+    expect(editor).toContain('<Button label={DONE_PREVIEW} onPress={turn(doneEditing)}');
+    expect(editor).toContain('accessibilityLabel={BACK_TO_PREVIEW} onPress={turn(backToPreview)}');
+  });
+
+  it('a step going to the Preview (useGoToPreview: Photos, Cover, the making screen)', () => {
+    expect(read('src/builder/useGoToPreview.ts')).toContain('askPreviewAtCover();');
+  });
+
+  it('"Continue my album" and My albums: on page 1 before the screen opens, so its first picture is the cover', () => {
+    expect(read('src/app/index.tsx')).toMatch(/builder\.goToPage\(0\);\s+go\(resumeRoute\(builder, platform\.deviceStore\)\);/);
+    expect(read('src/app/albums.tsx')).toMatch(/builder\.goToPage\(0\);\s+router\.push\(resumeRoute\(builder, platform\.deviceStore\)\);/);
   });
 });

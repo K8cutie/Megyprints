@@ -44,11 +44,12 @@ jest.mock('../../src/lib/supabase', () => ({ supabase: {} }));
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 // The font files can't load in a test (no asset files): the hook says "in".
 jest.mock('expo-font', () => ({ ...jest.requireActual('expo-font'), useFonts: jest.fn(() => [mockState.fontsIn, null]) }));
+const mockGoToPage = jest.fn();
 const mockState: { session: unknown; inProgress: boolean; focused: boolean; fontsIn: boolean } = { session: null, inProgress: false, focused: true, fontsIn: true };
 jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useIsFocused: () => mockState.focused }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ loading: false, session: mockState.session, signOut: jest.fn(async () => {}) }) }));
 jest.mock('../src/builder/BuilderProvider', () => ({
-  useBuilder: () => ({ builder: { uploadedPhotos: [], reset: jest.fn() }, platform: { deviceStore: {} } }),
+  useBuilder: () => ({ builder: { uploadedPhotos: [], reset: jest.fn(), goToPage: mockGoToPage }, platform: { deviceStore: {} } }),
 }));
 jest.mock('../src/builder/albumFlow', () => ({ albumInProgress: () => mockState.inProgress, resumeRoute: () => '/photos', startNewNote: () => '' }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ draft: { photos: [] }, clear: jest.fn() }) }));
@@ -267,6 +268,8 @@ describe('the buttons', () => {
     expect(screen.getByTestId('new-album')).toHaveTextContent(HOME.newAlbum);
     await fireEvent.press(screen.getByTestId('continue-album'));
     expect(router.push).toHaveBeenCalledWith('/photos');
+    // Its first page: the Preview shows the page last seen, often the last one.
+    expect(mockGoToPage).toHaveBeenCalledWith(0);
     expect(CARDS).toContain('<View style={styles.cardButtons}>{children}</View>');
   });
 
