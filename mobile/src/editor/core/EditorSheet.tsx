@@ -10,8 +10,9 @@
    photo as it is picked (owner, 2026-11-03). A tap on the page closes it.
 
    A sheet whose choices show on the page and stay open to try another (`live`:
-   Mask, Filter, Page colour; owner, 2026-11-05: "dont let the editor close"):
-   upright too it leaves the page in view, undimmed, and it is shorter. */
+   Mask, Filter, Page colour, Change layout; owner, 2026-11-05: "dont let the
+   editor close"): upright too it leaves the page in view, undimmed, and it is
+   shorter. */
 import { createContext, useContext, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -80,7 +81,7 @@ export function EditorSheet({ title, onClose, children, testID, scroll = false, 
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel={CLOSE} testID={testID ? `${testID}-dim` : undefined} />
         <SafeAreaView edges={['bottom']} style={[styles.sheet, live && styles.sheetLive]} testID={testID}>
           {head}
-          {scroll ? <ScrollView contentContainerStyle={styles.body}>{children}</ScrollView> : <View style={styles.body}>{children}</View>}
+          {scroll ? <ScrollView contentContainerStyle={styles.body}>{children}</ScrollView> : <View style={[styles.body, live && styles.bodyLive]}>{children}</View>}
         </SafeAreaView>
       </View>
     </Modal>
@@ -112,6 +113,8 @@ const styles = StyleSheet.create({
   close: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },
   closeText: { fontSize: 18, color: colors.muted },
   body: { padding: space.md, gap: space.sm },
+  // A list that scrolls itself fits the shorter sheet, or its last rows are out of reach.
+  bodyLive: { flexShrink: 1 },
   choice: { minHeight: 56, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, paddingHorizontal: space.md, paddingVertical: 10, justifyContent: 'center' },
   pressed: { opacity: 0.85 },
   choiceLabel: { fontSize: 16, fontWeight: '700', color: colors.text },

@@ -4013,6 +4013,17 @@ No version number yet: he is still going through the list of similar places.
   it fit"; Back closes a list first; ✕ leaves the words; Done saves what was shown;
   sideways with a list and with the keyboard; a small phone (720×1280, density 320).
   Not walked: words in a frame and a free text (covered by the tests).
+- **Change layout stays open too (`LayoutSheet`, the builder's `tryPageLayout`).**
+  Owner: "Go work on change layout". A pick shows on the page and the sheet stays,
+  short and undimmed like Mask (`live`), three layouts across upright, two in the
+  side panel. The list and its pictures stay as the sheet opened, so tiles don't
+  jump and nothing is drawn again. Each try starts from that same page, so a tile
+  is what a tap gives; the first layout brings the page back as it was, zoom too;
+  all the tries are one Undo, so trying many can't push the rest out of the
+  20-step history. A layout that can't hold every photo or caption still asks and
+  closes after the answer ("Choose another layout" keeps the place in the list).
+  On the emulator: try, back to the first, one Undo; the question, Back, a new
+  page; a tap on the page closes it; sideways.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

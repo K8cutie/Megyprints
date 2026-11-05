@@ -876,6 +876,12 @@ export interface BuilderActions {
    *  that no longer fit go on a new page after it ('new-page') or leave the
    *  album ('leave-out', the default). */
   applyPageLayout: (templateId: string, leftover?: 'new-page' | 'leave-out') => void;
+  /** A layout being tried while the app's Change layout stays open: laid out
+   *  from `start` (the page when the sheet opened), so each try replaces the last
+   *  and nothing a try drops is gone for good; `start`'s own layout brings the page
+   *  back exactly as it was. Only the first try is an undo step (`firstTry`), so
+   *  trying many layouts doesn't push the rest out of the undo history. */
+  tryPageLayout: (start: AlbumPage, templateId: string, firstTry: boolean) => void;
   /** What a layout would take off the current page: photos that no longer fit
    *  and captions whose box it lacks. */
   layoutChangeLoses: (templateId: string) => { photos: number; captions: number };
@@ -2597,6 +2603,22 @@ export function useBuilderState(): BuilderActions {
     });
   }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
 
+  const tryPageLayout = useCallback((start: AlbumPage, templateId: string, firstTry: boolean) => {
+    const template = getTemplateById(templateId);
+    if (!template) return;
+    const tried = template.id === start.templateId ? start : relayPageOnTemplate(start, template);
+    if (firstTry) {
+      if (tried === start) return; // No change: no undo step for nothing.
+      pushSnapshot();
+    }
+    setAlbumPages((prev) => {
+      if (!prev[currentPageIndex]) return prev;
+      const next = [...prev];
+      next[currentPageIndex] = tried;
+      return next;
+    });
+  }, [currentPageIndex]);
+
   /* ── Face-centred auto-pan ──
      detectFaceCenter gives the face as a 0–1 point on the photo; every renderer
      reads the pan in DESIGN px (slotPhotoFit). Writing computeFaceOffset's −1…+1
@@ -3992,6 +4014,7 @@ export function useBuilderState(): BuilderActions {
     availableTemplatesForCurrentPage,
     layoutChangeLoses,
     applyPageLayout,
+    tryPageLayout,
     layoutPickerOpen,
     setLayoutPickerOpen,
     resizeAsk,
