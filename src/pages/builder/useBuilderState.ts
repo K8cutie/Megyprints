@@ -114,6 +114,101 @@ function reflowFills(
   return out;
 }
 
+/* What each way of saving words does to a page, as plain functions: the builder's
+   setBoxText, setSlotText and updateTextElement apply them, and the app's text
+   editor draws the page with them before anything is saved. */
+
+/** setBoxText's change. `theme` fills what `content` leaves out of a new text;
+ *  `newId` names it (the app's editor draws with one that stays the same). */
+export function pageWithBoxText(
+  page: AlbumPage,
+  slotIndex: number,
+  content: Partial<TextElement> & { text: string },
+  theme: { fontFamily: string; textColor: string },
+  newId: () => string = () => `box-${slotIndex}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+): AlbumPage {
+  const existing = page.textElements.find((t) => t.boxIndex === slotIndex);
+  const trimmed = content.text.trim();
+  // Empty → clear the box (revert to the "Tap to add text" placeholder).
+  if (!trimmed) {
+    return existing
+      ? { ...page, textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex) }
+      : page;
+  }
+  // Mutual exclusivity (third leg): writing a caption evicts a photo/QR/ornament
+  // occupying the same caption box.
+  const textSlotFills = [...(page.textSlotFills ?? [])];
+  const textSlotQr = [...(page.textSlotQr ?? [])];
+  const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
+  textSlotFills[slotIndex] = null;
+  textSlotQr[slotIndex] = null;
+  const textSlotQrGeom = (page.textSlotQrGeom ?? []).map((g, k) => (k === slotIndex ? null : g));
+  textSlotOrnament[slotIndex] = null;
+  if (existing) {
+    return {
+      ...page,
+      textSlotFills,
+      textSlotQr,
+      textSlotOrnament,
+      textSlotQrGeom,
+      textElements: page.textElements.map((t) =>
+        t.boxIndex === slotIndex
+          // A title the customer types is theirs: it stops following the album name.
+          // A line the customer writes or picks is theirs too: it stops following the occasion.
+          ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined, fromOccasion: content.text === t.text ? t.fromOccasion : undefined }
+          : t),
+    };
+  }
+  const newText: TextElement = {
+    id: newId(),
+    text: content.text,
+    x: 0,
+    y: 0,
+    fontSize: content.fontSize ?? 28,
+    fontFamily: content.fontFamily ?? theme.fontFamily,
+    color: content.color ?? theme.textColor,
+    bold: content.bold ?? false,
+    italic: content.italic ?? false,
+    underline: content.underline ?? false,
+    alignment: content.alignment ?? 'center',
+    outlineColor: content.outlineColor,
+    outlineWidth: content.outlineWidth,
+    shadow: content.shadow,
+    quote: content.quote,
+    rotation: 0,
+    opacity: 100,
+    boxIndex: slotIndex,
+  };
+  return { ...page, textSlotFills, textSlotQr, textSlotOrnament, textElements: [...page.textElements, newText] };
+}
+
+/** setSlotText's change: words in a frame clear its photo, QR and ornament. */
+export function pageWithSlotText(page: AlbumPage, slotIndex: number, content: SlotText | null): AlbumPage {
+  const slotTexts = [...(page.slotTexts ?? [])];
+  slotTexts[slotIndex] = content;
+  if (content) {
+    const fills = [...(page.slotFills ?? [])];
+    const qrFills = [...(page.qrFills ?? [])];
+    const ornamentFills = [...(page.ornamentFills ?? [])];
+    fills[slotIndex] = null;
+    qrFills[slotIndex] = null;
+    ornamentFills[slotIndex] = null;
+    return { ...page, slotTexts, slotFills: fills, qrFills, ornamentFills };
+  }
+  return { ...page, slotTexts };
+}
+
+/** updateTextElement's change. New words are the customer's: they stop
+ *  following the occasion. */
+export function pageWithTextUpdate(page: AlbumPage, id: string, updates: Partial<TextElement>): AlbumPage {
+  return {
+    ...page,
+    textElements: page.textElements.map((t) => (t.id === id
+      ? { ...t, ...updates, ...(updates.text != null && updates.text !== t.text ? { fromOccasion: undefined } : {}) }
+      : t)),
+  };
+}
+
 /* Re-lay a page onto a new template: carry QR/text (trimmed to the new slot
    count), reflow the existing photos into the new slots, and reset per-slot
    framing. Shared by shuffle / cycle / apply-layout so the "change the layout"
@@ -2783,20 +2878,7 @@ export function useBuilderState(): BuilderActions {
    *  non-null text clears any photo/QR at the same slot (mutual exclusivity). */
   const setSlotText = useCallback((slotIndex: number, content: SlotText | null, pageIndex?: number) => {
     pushSnapshot();
-    const apply = (page: AlbumPage): AlbumPage => {
-      const slotTexts = [...(page.slotTexts ?? [])];
-      slotTexts[slotIndex] = content;
-      if (content) {
-        const fills = [...(page.slotFills ?? [])];
-        const qrFills = [...(page.qrFills ?? [])];
-        const ornamentFills = [...(page.ornamentFills ?? [])];
-        fills[slotIndex] = null;
-        qrFills[slotIndex] = null;
-        ornamentFills[slotIndex] = null;
-        return { ...page, slotTexts, slotFills: fills, qrFills, ornamentFills };
-      }
-      return { ...page, slotTexts };
-    };
+    const apply = (page: AlbumPage): AlbumPage => pageWithSlotText(page, slotIndex, content);
     if (pageIndex == null) {
       updateCurrentPage(apply);
     } else {
@@ -3258,13 +3340,7 @@ export function useBuilderState(): BuilderActions {
 
   const updateTextElement = useCallback((id: string, updates: Partial<TextElement>) => {
     pushSnapshot();
-    updateCurrentPage((page) => ({
-      ...page,
-      // New words are the customer's: they stop following the occasion.
-      textElements: page.textElements.map((t) => (t.id === id
-        ? { ...t, ...updates, ...(updates.text != null && updates.text !== t.text ? { fromOccasion: undefined } : {}) }
-        : t)),
-    }));
+    updateCurrentPage((page) => pageWithTextUpdate(page, id, updates));
   }, [updateCurrentPage]);
 
   const deleteTextElement = useCallback((id: string) => {
@@ -3280,61 +3356,7 @@ export function useBuilderState(): BuilderActions {
   const setBoxText = useCallback((slotIndex: number, content: Partial<TextElement> & { text: string }, pageIndex?: number) => {
     pushSnapshot();
     const theme = THEMES[selectedTemplate];
-    const applyToPage = (page: AlbumPage): AlbumPage => {
-      const existing = page.textElements.find((t) => t.boxIndex === slotIndex);
-      const trimmed = content.text.trim();
-      // Empty → clear the box (revert to the "Tap to add text" placeholder).
-      if (!trimmed) {
-        return existing
-          ? { ...page, textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex) }
-          : page;
-      }
-      // Mutual exclusivity (third leg): writing a caption evicts a photo/QR/ornament
-      // occupying the same caption box.
-      const textSlotFills = [...(page.textSlotFills ?? [])];
-      const textSlotQr = [...(page.textSlotQr ?? [])];
-      const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
-      textSlotFills[slotIndex] = null;
-      textSlotQr[slotIndex] = null;
-      const textSlotQrGeom = (page.textSlotQrGeom ?? []).map((g, k) => (k === slotIndex ? null : g));
-      textSlotOrnament[slotIndex] = null;
-      if (existing) {
-        return {
-          ...page,
-          textSlotFills,
-          textSlotQr,
-          textSlotOrnament,
-          textSlotQrGeom,
-          textElements: page.textElements.map((t) =>
-            t.boxIndex === slotIndex
-              // A title the customer types is theirs: it stops following the album name.
-              // A line the customer writes or picks is theirs too: it stops following the occasion.
-              ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined, fromOccasion: content.text === t.text ? t.fromOccasion : undefined }
-              : t),
-        };
-      }
-      const newText: TextElement = {
-        id: `box-${slotIndex}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        text: content.text,
-        x: 0,
-        y: 0,
-        fontSize: content.fontSize ?? 28,
-        fontFamily: content.fontFamily ?? theme.fontFamily,
-        color: content.color ?? theme.textColor,
-        bold: content.bold ?? false,
-        italic: content.italic ?? false,
-        underline: content.underline ?? false,
-        alignment: content.alignment ?? 'center',
-        outlineColor: content.outlineColor,
-        outlineWidth: content.outlineWidth,
-        shadow: content.shadow,
-        quote: content.quote,
-        rotation: 0,
-        opacity: 100,
-        boxIndex: slotIndex,
-      };
-      return { ...page, textSlotFills, textSlotQr, textSlotOrnament, textElements: [...page.textElements, newText] };
-    };
+    const applyToPage = (page: AlbumPage): AlbumPage => pageWithBoxText(page, slotIndex, content, theme);
     // Default: the current page. The preview spread passes an explicit pageIndex
     // so it can edit either of the two pages on screen.
     if (pageIndex == null) {

@@ -3982,6 +3982,38 @@ test that failed first. Each was walked on the emulator with a real album:
 
 418 characters.
 
+## After 2.0.6: Edit text in the same format as Mask (2026-11-05, `fix/port-stay-open-words`)
+
+Owner, testing 2.0.6 on his phone: "its a hassle to try on changes then it closes
+automatically", and "id like to see the text box on one half of the screen and
+the input box on the other half... Its basically the same format as the mask."
+No version number yet: he is still going through the list of similar places.
+
+- **The page stays in view (`text/WordsOnPage`).** The page is above, the box being
+  edited outlined, with the words on it as they change; the box to type in and
+  the format bar are below. Sideways the page is on the left and the rest in a
+  panel down the right. Android's full-screen typing box is off
+  (`disableFullscreenUI`), so typing sideways keeps the page in view too.
+- **It is the page renderer's own picture, of the page as Done would leave it**
+  (`pageWithWords`). The website's three saves are plain functions now
+  (`pageWithBoxText`, `pageWithSlotText`, `pageWithTextUpdate` in
+  `useBuilderState`), so the rules aren't copied, and a test holds the page shown
+  to the page saved. Website behaviour is unchanged. Nothing is saved until Done,
+  and ✕ leaves the album as it was. A button draws at once; typing waits for a
+  180 ms pause (`TYPING_PAUSE_MS`). No change draws nothing new: it opens on the
+  picture the editor already has (`editorPictureWidth`).
+- **Font and colour stay open after a pick**, and so do Any color's shades (the
+  cover title's too: same picker). A list takes the keyboard's place; a tap on the
+  typing box brings the keyboard back and puts the list away; a tap on the page
+  puts either away. Upright, the box, a list and the bar take Mask's 42% of the
+  height (three rows of a list at least).
+- **Walked on the emulator (1080×2400), real photos:** typing with the keyboard up;
+  a bundled font, a font fetched from the internet and a colour, each with the list
+  open; size and bold; Any color's shades brought into view; "Too long" with "Make
+  it fit"; Back closes a list first; ✕ leaves the words; Done saves what was shown;
+  sideways with a list and with the keyboard; a small phone (720×1280, density 320).
+  Not walked: words in a frame and a free text (covered by the tests).
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
