@@ -493,6 +493,67 @@ export function buildGoldenSet(): GoldenSet {
         textElements: [title('Our Wonderful Year Travelling Around the Philippine Islands Together with Lola, Lolo and All the Cousins', { color: '#FFFFFF', fontSize: 26, shadow: true })],
       }),
     },
+    // WordArt on the cover title (owner, 2026-11-05). websiteSame.mjs skips these:
+    // the website's print code from before WordArt draws them plain.
+    {
+      name: 'cover-wordart-outline', albumSize: '8x8', pageCount: 60, cover: 'softcover', material: 'matte',
+      checks: 'WordArt: a thick outline in its own colour on a photo cover, the float shadow cast by the outline; the spine keeps a thin one',
+      coverFront: coverPage('8x8', 'cover-hero', {
+        slotFills: [],
+        background: { type: 'image', photoId: 'p0', zoom: 1, focusX: 0.5, focusY: 0.5 },
+        textElements: [title('Our Beach Days', { color: '#FFFFFF', fontFamily: PLAYFAIR, fontSize: 56, outlineColor: '#7A2E12', outlineWidth: 8 })],
+      }),
+    },
+    {
+      name: 'cover-wordart-two-colour', albumSize: '8x8', pageCount: 60, cover: 'softcover', material: 'matte',
+      checks: 'WordArt: a two-colour fill on two wrapped lines with a thin outline, on a plain colour',
+      coverFront: coverPage('8x8', 'cover-plain', {
+        background: { type: 'solid', solid: '#1F3A5F' },
+        textElements: [title('Our Wonderful Year Together', { color: '#FFE9A8', fillTo: '#E8772E', fontFamily: PLAYFAIR, fontSize: 52, outlineColor: '#FFFFFF', outlineWidth: 2 })],
+      }),
+    },
+    {
+      name: 'cover-wordart-two-colour-shadow', albumSize: '8x8', pageCount: 40, cover: 'softcover', material: 'matte',
+      checks: 'WordArt: a two-colour fill with the float shadow and no outline, left-aligned, on a photo',
+      coverFront: coverPage('8x8', 'cover-hero', {
+        slotFills: [],
+        background: { type: 'image', photoId: 'p3', zoom: 1, focusX: 0.5, focusY: 0.5 },
+        textElements: [title('Bohol 2026', { color: '#FFFFFF', fillTo: '#F48FB1', fontFamily: PLAYFAIR, fontSize: 44, alignment: 'left' })],
+      }),
+    },
+    {
+      name: 'cover-wordart-glow', albumSize: '8x8', pageCount: 60, cover: 'softcover', material: 'matte',
+      checks: 'WordArt: a glow in its own colour on a dark plain cover, in the float shadow\'s place',
+      coverFront: coverPage('8x8', 'cover-plain', {
+        background: { type: 'solid', solid: '#232323' },
+        textElements: [title('The Garcia Family', { color: '#FFFFFF', glow: '#FF8A3D', fontFamily: PLAYFAIR, fontSize: 48 })],
+      }),
+    },
+    {
+      name: 'cover-wordart-arch', albumSize: '8x8', pageCount: 60, cover: 'softcover', material: 'matte',
+      checks: 'WordArt: the words on an arch, with a two-colour fill and an outline, the shadow cast by the outline, not clipped to the box',
+      coverFront: coverPage('8x8', 'cover-hero', {
+        slotFills: [],
+        background: { type: 'image', photoId: 'p0', zoom: 1, focusX: 0.5, focusY: 0.5 },
+        textElements: [title('Our Beach Days', { color: '#FFE9A8', fillTo: '#E8772E', fontFamily: PLAYFAIR, fontSize: 64, outlineColor: '#5A2A0C', outlineWidth: 3, curve: 'arch' })],
+      }),
+    },
+    {
+      name: 'cover-wordart-smile', albumSize: '6x4', pageCount: 40, cover: 'softcover', material: 'matte',
+      checks: 'WordArt: the words on a smile with the float shadow and no outline, left-aligned on a wide album',
+      coverFront: coverPage('6x4', 'cover-plain', {
+        background: { type: 'solid', solid: '#B85C38' },
+        textElements: [title('Bohol 2026', { color: '#FFFBF7', fontFamily: PLAYFAIR, fontSize: 48, alignment: 'left', curve: 'smile' })],
+      }),
+    },
+    {
+      name: 'cover-wordart-wave', albumSize: '8x8', pageCount: 60, cover: 'softcover', material: 'matte',
+      checks: 'WordArt: the words on a wave with a glow, on a plain colour',
+      coverFront: coverPage('8x8', 'cover-plain', {
+        background: { type: 'solid', solid: '#1F3A5F' },
+        textElements: [title('Summer in Siargao', { color: '#FFFFFF', glow: '#6FA8DC', fontSize: 44, curve: 'wave' })],
+      }),
+    },
     {
       name: 'cover-88-hard-edge-words', albumSize: '8x8', pageCount: 80, cover: 'hardboundLeather', material: 'glossy',
       checks: '8x8 hardcover, glossy: a photo background, words right at the top and bottom edges (never repeated in the turn-in: print mirrors the front under its words), a sticker at the corner (mirrored with the front), a bold title in its box',

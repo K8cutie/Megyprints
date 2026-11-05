@@ -20,14 +20,14 @@ import type { AlbumPage, AlbumSizePreset } from './types';
 import { adaptTemplateToOrientation, getTemplateById } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { getCanvasDimensions } from './layouts';
-import { wrapTextLines, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArtRules';
+import { curveGlyphs, wrapTextLines, TEXT_LINE_HEIGHT, CAPTION_PAD_X, type WordArtCurve } from './wordArtRules';
 import { defaultMeasurer } from './canvasMeasurer';
 import type { TextMeasurer } from '../../shared/platform';
 
 export { defaultMeasurer };
 
 export interface Box { w: number; h: number }
-export interface CaptionStyle { fontSize?: number; fontFamily?: string; bold?: boolean; italic?: boolean }
+export interface CaptionStyle { fontSize?: number; fontFamily?: string; bold?: boolean; italic?: boolean; curve?: WordArtCurve }
 /** What measuring a caption needs: a font to set and a width to read (a
  *  browser canvas's 2D context is one). */
 export type Measurer = TextMeasurer;
@@ -64,7 +64,12 @@ export interface Fit {
 export function captionFits(text: string, s: CaptionStyle, box: Box, m: Measurer | null = defaultMeasurer()): Fit | null {
   if (!m || !text.trim() || box.w <= 0 || box.h <= 0) return m ? { fits: true, fitsAt: null } : null;
   const size = s.fontSize || 24;
-  const fitsAtSize = (px: number) => linesAt(text, s, px, box, m) * px * TEXT_LINE_HEIGHT <= box.h * 1.02;
+  const curveFitsAt = (px: number, curve: WordArtCurve) => {
+    m.font = fontOf(s, px);
+    return curveGlyphs(text, m, px, curve).width <= box.w * (1 - CAPTION_PAD_X * 2);
+  };
+  // On a curve: one line, so only its width counts (a curve isn't clipped to the box's height).
+  const fitsAtSize = (px: number) => (s.curve ? curveFitsAt(px, s.curve) : linesAt(text, s, px, box, m) * px * TEXT_LINE_HEIGHT <= box.h * 1.02);
   if (fitsAtSize(size)) return { fits: true, fitsAt: null };
   for (let px = Math.floor(size) - 1; px >= 8; px--) if (fitsAtSize(px)) return { fits: false, fitsAt: px };
   return { fits: false, fitsAt: null };

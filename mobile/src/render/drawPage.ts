@@ -443,6 +443,11 @@ export class PageDrawer {
 
   private boxText(canvas: SkCanvas, item: BoxTextItem, onCover: boolean): void {
     const look = this.look(item.style, item.fontSize);
+    // On a curve: one line, not clipped to the box (print's renderTextElement).
+    if (item.source === 'caption' && item.style.curve) {
+      this.text.drawCurve(canvas, item.style.text, item.anchorX, item.centerY, look, item.align, item.style.curve, item.style, item.scale, onCover);
+      return;
+    }
     canvas.save();
     canvas.clipRect(this.rect(item.box), ClipOp.Intersect, true);
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.maxWidth);

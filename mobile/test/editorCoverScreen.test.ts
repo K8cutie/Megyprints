@@ -78,7 +78,7 @@ jest.mock('../src/builder/usePagePicture', () => ({
 import CoverScreen from '../src/editor/cover/CoverScreen';
 import { CoverStage } from '../src/editor/cover/CoverStage';
 import { Slider } from '../src/editor/cover/Slider';
-import { coverCrop, coverTitleOf, setTitleFont, titleBoxOf } from '../src/editor/cover/coverEdits';
+import { coverCrop, coverTitleOf, OUTLINE_WIDTHS, setTitleFont, titleBoxOf } from '../src/editor/cover/coverEdits';
 import { fontSource } from '../src/editor/text/fonts/fontSources';
 import { DEFAULT_TITLE_FONT, fontNamed } from '@web/pages/builder/fontCatalog';
 import * as W from '../src/editor/cover/words';
@@ -252,6 +252,96 @@ describe('the cover screen', () => {
     await act(async () => { stage.onDrag('title', 'end', 0, -9); });
     await refresh();
     expect(coverTitleOf(builder().coverFront).offsetY).toBeCloseTo(-box.baseY, 10); // the top edge
+  });
+
+  describe('WordArt on the title (owner, 2026-11-05)', () => {
+    const titled = async () => {
+      await openCover();
+      await press('cover-tab-text');
+      await act(async () => { byId('cover-title')!.props.onChangeText('Our Boracay Trip'); });
+      await act(async () => { byId('cover-title')!.props.onBlur(); });
+      await refresh();
+    };
+    const element = () => builder().coverFront.textElements.find((t) => t.boxIndex === 0)!;
+
+    it('no words, no effects to offer', async () => {
+      await openCover();
+      await press('cover-tab-text');
+      await act(async () => { byId('cover-title')!.props.onChangeText(''); });
+      await act(async () => { byId('cover-title')!.props.onBlur(); });
+      await refresh();
+      expect(has('cover-wordart')).toBe(false);
+    });
+
+    it('Outline: none or three thicknesses in any colour; first in the colour that stands out; the panel stays open', async () => {
+      await titled();
+      await press('cover-effect-outline');
+      expect(has('cover-effect-panel-outline')).toBe(true);
+      expect(has('cover-outline-color-picker')).toBe(false); // no outline: no colour to pick
+      await press('cover-outline-thick');
+      expect(element()).toMatchObject({ outlineWidth: OUTLINE_WIDTHS.thick, outlineColor: expect.any(String) });
+      await press('cover-outline-color-Gold');
+      expect(element().outlineColor).toBe('#C9A24B');
+      await press('cover-outline-thin');
+      expect(element()).toMatchObject({ outlineWidth: OUTLINE_WIDTHS.thin, outlineColor: '#C9A24B' }); // the colour stays
+      expect(has('cover-effect-panel-outline')).toBe(true);
+      expect(byId('cover-effect-outline')!.props.accessibilityState).toMatchObject({ selected: true, expanded: true });
+      await press('cover-outline-none');
+      expect(element().outlineWidth).toBeUndefined();
+      expect(element().outlineColor).toBeUndefined();
+    });
+
+    it('Two colours: the second colour, or none', async () => {
+      await titled();
+      await press('cover-effect-fill');
+      await press('cover-fill-color-Gold');
+      expect(element().fillTo).toBe('#C9A24B');
+      expect(has('cover-effect-panel-fill')).toBe(true);
+      await press('cover-fill-none');
+      expect(element().fillTo).toBeUndefined();
+    });
+
+    it('Glow takes the shadow\'s place; the Shadow button takes the glow off and puts the shadow back', async () => {
+      await titled();
+      expect(coverTitleOf(builder().coverFront).shadow).toBe(true);
+      await press('cover-effect-glow');
+      await press('cover-glow-color-Gold');
+      expect(element().glow).toBe('#C9A24B');
+      expect(coverTitleOf(builder().coverFront).shadow).toBe(false);
+      expect(byId('cover-title-shadow')!.props.accessibilityState).toMatchObject({ selected: false });
+      await press('cover-title-shadow');
+      expect(element().glow).toBeUndefined();
+      expect(coverTitleOf(builder().coverFront).shadow).toBe(true);
+    });
+
+    it('Shape: straight, arch, smile, wave; the words on a curve follow the finger on their curve', async () => {
+      await titled();
+      await press('cover-effect-shape');
+      await press('cover-shape-arch');
+      expect(element().curve).toBe('arch');
+      await press('cover-shape-wave');
+      expect(element().curve).toBe('wave');
+      await press('cover-shape-smile');
+      expect(element().curve).toBe('smile');
+      expect(has('cover-effect-panel-shape')).toBe(true);
+      await press('cover-shape-straight');
+      expect(element().curve).toBeUndefined();
+    });
+
+    it('the effects mix, and one panel is open at a time', async () => {
+      await titled();
+      await press('cover-effect-shape');
+      await press('cover-shape-arch');
+      await press('cover-effect-fill');
+      expect(has('cover-effect-panel-shape')).toBe(false);
+      expect(has('cover-effect-panel-fill')).toBe(true);
+      await press('cover-fill-color-Gold');
+      await press('cover-effect-outline');
+      await press('cover-outline-medium');
+      expect(element()).toMatchObject({ curve: 'arch', fillTo: '#C9A24B', outlineWidth: OUTLINE_WIDTHS.medium, text: 'Our Boracay Trip' });
+      await press('cover-effect-outline'); // the same button closes it
+      expect(has('cover-effect-panel-outline')).toBe(false);
+    });
   });
 
   it('warns about a title colour that wouldn\'t show, and a blank cover; says what is drawn more simply; Done goes back', async () => {

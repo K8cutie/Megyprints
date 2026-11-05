@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { wordArtShadow, wrapTextLines, firstLineCenter, TEXT_LINE_HEIGHT, type WordArtStyle } from './wordArtRules';
+import { curveCentreX, curveGlyphs, wordArtShadow, wrapTextLines, firstLineCenter, TEXT_LINE_HEIGHT, WORDART_GLOW_PASSES, type WordArtCurve, type WordArtStyle } from './wordArtRules';
 
 // ──────────────────────────────────────────────────────────────────────────
 // WordArt text effects — outline + soft shadow — shared by ALL THREE text
@@ -23,7 +23,10 @@ export function wordArtDomStyle(s: WordArtStyle, scale: number, onCover = false)
     (css as any).paintOrder = 'stroke fill';
   }
   const sh = wordArtShadow(s, onCover);
-  if (sh) css.textShadow = `${sh.offsetX * scale}px ${sh.offsetY * scale}px ${sh.blur * scale}px ${sh.color}`;
+  if (sh) {
+    const one = `${sh.offsetX * scale}px ${sh.offsetY * scale}px ${sh.blur * scale}px ${sh.color}`;
+    css.textShadow = s.glow ? Array(WORDART_GLOW_PASSES).fill(one).join(', ') : one;
+  }
   return css;
 }
 
@@ -77,6 +80,16 @@ export function drawWrappedWordArtText(
   return lines;
 }
 
+/** The two-colour fill for a line of `size` px (scaled) whose middle is at `y`,
+ *  from the colour already on ctx.fillStyle; null for a one-colour fill. */
+function fillGradient(ctx: CanvasRenderingContext2D, s: WordArtStyle, y: number, size: number): CanvasGradient | null {
+  if (!s.fillTo) return null;
+  const g = ctx.createLinearGradient(0, y - size / 2, 0, y + size / 2);
+  g.addColorStop(0, ctx.fillStyle as string);
+  g.addColorStop(1, s.fillTo);
+  return g;
+}
+
 /** Draw one line of WordArt text onto a 2D canvas at (x, y) with the current
  *  ctx.font/textAlign already set. `scale` = the factor fontSize was scaled by.
  *  Fill color must be preset on ctx.fillStyle. Handles outline + shadow order so
@@ -100,21 +113,89 @@ export function drawWordArtText(
     ctx.shadowOffsetY = sh.offsetY * scale;
   };
   const clearShadow = () => { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; };
+  const fill = () => {
+    const g = fillGradient(ctx, s, y, (s.fontSize || 24) * scale);
+    if (!g) { ctx.fillText(line, x, y); return; }
+    const plain = ctx.fillStyle;
+    ctx.fillStyle = g;
+    ctx.fillText(line, x, y);
+    ctx.fillStyle = plain;
+  };
+  // A glow is cast more than once (the shadow, once).
+  const casts = s.glow ? WORDART_GLOW_PASSES : 1;
   if (outline) {
     if (sh) setShadow();
     ctx.save();
     ctx.lineJoin = 'round';
     ctx.lineWidth = (s.outlineWidth as number) * scale;
     ctx.strokeStyle = s.outlineColor as string;
-    ctx.strokeText(line, x, y);
+    for (let i = 0; i < casts; i++) ctx.strokeText(line, x, y);
     ctx.restore();
     if (sh) clearShadow();
-    ctx.fillText(line, x, y);
+    fill();
   } else if (sh) {
     setShadow();
-    ctx.fillText(line, x, y);
+    for (let i = 0; i < casts; i++) fill();
     clearShadow();
   } else {
-    ctx.fillText(line, x, y);
+    fill();
   }
+}
+
+/** Draw the words on `curve` around (anchorX, cy), anchored as a straight line
+ *  is. ctx.font and fillStyle must be set; `fontSize` is the scaled pixel size.
+ *  All the letters' shadows first, then their outlines, then their fills, so no
+ *  letter's shadow or outline lies over its neighbour's fill. */
+export function drawCurvedWordArtText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  anchorX: number,
+  cy: number,
+  fontSize: number,
+  align: 'left' | 'center' | 'right',
+  curve: WordArtCurve,
+  s: WordArtStyle,
+  scale: number,
+  onCover = false,
+): void {
+  const { glyphs, width } = curveGlyphs(text, ctx, fontSize, curve);
+  const cx = curveCentreX(anchorX, align, width);
+  const outline = !!(s.outlineWidth && s.outlineColor);
+  const sh = wordArtShadow(s, onCover);
+  ctx.save();
+  ctx.textAlign = 'center';
+  const letters = (draw: (ch: string) => void) => glyphs.forEach((g) => {
+    ctx.save();
+    ctx.translate(cx + g.x, cy + g.y);
+    ctx.rotate(g.angle);
+    draw(g.text);
+    ctx.restore();
+  });
+  const strokeLook = () => {
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = (s.outlineWidth as number) * scale;
+    ctx.strokeStyle = s.outlineColor as string;
+  };
+  if (sh) {
+    ctx.save();
+    ctx.shadowColor = sh.color;
+    ctx.shadowBlur = sh.blur * scale;
+    ctx.shadowOffsetX = sh.offsetX * scale;
+    ctx.shadowOffsetY = sh.offsetY * scale;
+    if (outline) strokeLook();
+    for (let i = 0; i < (s.glow ? WORDART_GLOW_PASSES : 1); i++) {
+      letters((ch) => (outline ? ctx.strokeText(ch, 0, 0) : ctx.fillText(ch, 0, 0)));
+    }
+    ctx.restore();
+  }
+  if (outline) {
+    ctx.save();
+    strokeLook();
+    letters((ch) => ctx.strokeText(ch, 0, 0));
+    ctx.restore();
+  }
+  const g = fillGradient(ctx, s, 0, fontSize);
+  if (g) ctx.fillStyle = g;
+  letters((ch) => ctx.fillText(ch, 0, 0));
+  ctx.restore();
 }

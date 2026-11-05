@@ -14,7 +14,7 @@
 import type { AlbumBackground, AlbumPage, CoverDesign, TextStyle } from './types';
 import type { CoverWrapGeometry, Rect, CoverPanel } from './coverGeometry';
 import { insetRect } from './coverGeometry';
-import { contrastOutline } from './wordArtRules';
+import { contrastOutline, WORDART_OUTLINE_WIDTH } from './wordArtRules';
 import { contrastRatio, parseRgb } from './colorContrast';
 
 // In colorContrast.ts (shared with the 2.0 app's page colours); still offered here.
@@ -316,7 +316,9 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry, measure: Spi
         underline: false,
         alignment: 'center',
         outlineColor: chosen.outlineColor,
-        outlineWidth: chosen.outlineWidth,
+        // The spine's words are small: never the front's thick outline, its
+        // second fill colour, its glow or its curve.
+        outlineWidth: chosen.outlineWidth === undefined ? undefined : Math.min(chosen.outlineWidth, WORDART_OUTLINE_WIDTH),
         shadow: chosen.shadow,
       }
     : {

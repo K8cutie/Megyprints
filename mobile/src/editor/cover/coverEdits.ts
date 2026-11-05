@@ -35,6 +35,7 @@ import type { AlbumBackground, AlbumPage, TextElement, UploadedPhoto } from '@we
 import type { BuilderActions } from '@web/pages/builder/useBuilderState';
 import { getTemplateById } from '@web/pages/builder/pageTemplates';
 import { DEFAULT_TITLE_FONT } from '@web/pages/builder/fontCatalog';
+import { contrastOutline, type WordArtCurve } from '@web/pages/builder/wordArtRules';
 
 export type Align = 'left' | 'center' | 'right';
 
@@ -51,8 +52,15 @@ export interface CoverTitle {
   fontSize: number;
   offsetX: number;
   offsetY: number;
-  /** The floating shadow (wordArt.wordArtShadow): on unless switched off. */
+  /** The floating shadow (wordArt.wordArtShadow): on unless switched off, or a glow takes its place. */
   shadow: boolean;
+  /** WordArt (the app's own: the website draws them and has no buttons for them). */
+  outlineColor?: string;
+  /** Design px; 0 = no outline. */
+  outlineWidth: number;
+  fillTo?: string;
+  glow?: string;
+  curve?: WordArtCurve;
 }
 
 export function coverTitleOf(cover: AlbumPage): CoverTitle {
@@ -68,7 +76,12 @@ export function coverTitleOf(cover: AlbumPage): CoverTitle {
     fontSize: el?.fontSize ?? 32,
     offsetX: el?.offsetX ?? 0,
     offsetY: el?.offsetY ?? 0,
-    shadow: el?.shadow !== false,
+    shadow: el?.shadow !== false && !el?.glow,
+    outlineColor: el?.outlineColor,
+    outlineWidth: el?.outlineWidth ?? 0,
+    fillTo: el?.fillTo,
+    glow: el?.glow,
+    curve: el?.curve,
   };
 }
 
@@ -167,7 +180,7 @@ export function removeCoverPhoto(b: CoverBuilder): boolean {
 
 /* ── Title ─────────────────────────────────────────────────────────────── */
 
-export type TitlePatch = Partial<Pick<TextElement, 'text' | 'fontFamily' | 'color' | 'bold' | 'italic' | 'alignment' | 'fontSize' | 'shadow'>>;
+export type TitlePatch = Partial<Pick<TextElement, 'text' | 'fontFamily' | 'color' | 'bold' | 'italic' | 'alignment' | 'fontSize' | 'shadow' | 'outlineColor' | 'outlineWidth' | 'fillTo' | 'glow' | 'curve'>>;
 
 /** CoverEditor updateTitle: setBoxText MERGES into the title, so only the
  *  patch goes, with the title's words (which it needs: empty words clear the
@@ -184,8 +197,34 @@ export const setTitleColour = (b: CoverBuilder, color: string) => updateTitle(b,
 export const setTitleAlignment = (b: CoverBuilder, alignment: Align) => updateTitle(b, { alignment });
 export const toggleTitleBold = (b: CoverBuilder) => updateTitle(b, { bold: !coverTitleOf(b.coverFront).bold });
 export const toggleTitleItalic = (b: CoverBuilder) => updateTitle(b, { italic: !coverTitleOf(b.coverFront).italic });
-/** Shadow on is no setting (every cover floats until switched off), off is false. */
-export const toggleTitleShadow = (b: CoverBuilder) => updateTitle(b, { shadow: coverTitleOf(b.coverFront).shadow ? false : undefined });
+/** Shadow on is no setting (every cover floats until switched off), off is
+ *  false. A glow is in the shadow's place: Shadow takes it off and turns the shadow on. */
+export function toggleTitleShadow(b: CoverBuilder): boolean {
+  const t = coverTitleOf(b.coverFront);
+  return updateTitle(b, t.glow ? { glow: undefined, shadow: undefined } : { shadow: t.shadow ? false : undefined });
+}
+
+/* ── WordArt: the app's own controls, on the fields every renderer draws ── */
+
+/** The outline's thicknesses, design px (half of it shows outside the letters). */
+export const OUTLINE_WIDTHS = { thin: 2, medium: 4, thick: 8 } as const;
+
+/** No outline (0), or this thick. The first time, in the colour that stands out from the words. */
+export function setTitleOutline(b: CoverBuilder, width: number): boolean {
+  const t = coverTitleOf(b.coverFront);
+  return updateTitle(b, width > 0
+    ? { outlineWidth: width, outlineColor: t.outlineColor ?? contrastOutline(t.color) }
+    : { outlineWidth: undefined, outlineColor: undefined });
+}
+export function setTitleOutlineColour(b: CoverBuilder, outlineColor: string): boolean {
+  return updateTitle(b, { outlineColor, outlineWidth: coverTitleOf(b.coverFront).outlineWidth || OUTLINE_WIDTHS.medium });
+}
+/** The second colour of the fill, or none. */
+export const setTitleFillTo = (b: CoverBuilder, fillTo: string | undefined) => updateTitle(b, { fillTo });
+/** The glow's colour, or none. */
+export const setTitleGlow = (b: CoverBuilder, glow: string | undefined) => updateTitle(b, { glow });
+/** The words on a curve, or straight. */
+export const setTitleCurve = (b: CoverBuilder, curve: WordArtCurve | undefined) => updateTitle(b, { curve });
 
 /** The size slider (16 to 96, whole px). */
 export function setTitleSize(b: CoverBuilder, px: number): boolean {

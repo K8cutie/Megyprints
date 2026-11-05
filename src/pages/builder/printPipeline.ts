@@ -16,7 +16,7 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
+import { drawCurvedWordArtText, drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType, MaterialType } from './types';
@@ -880,6 +880,12 @@ function renderTextElement(
     const pad = slot.w * CAPTION_PAD_X;
     const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
     const cy = slot.y + slot.h / 2;
+    if (text.curve) {
+      // On a curve: one line, not clipped to the box (a curve is taller than a line).
+      drawCurvedWordArtText(ctx, text.text, cx, cy, fontSize, align as 'left' | 'center' | 'right', text.curve, text, W / uiW, coverMode);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.beginPath();
     ctx.rect(slot.x, slot.y, slot.w, slot.h);
