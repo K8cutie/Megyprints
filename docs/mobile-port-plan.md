@@ -4077,6 +4077,30 @@ title's font list, quotes, and a tap on the page closing Mask and Filter.
 
 285 characters.
 
+### After 2.0.7: Edit text's bottom row cut off on its side (2026-11-06)
+
+The owner, on 2.0.7 on his S25, on its side with a three-line caption and the colour
+list open: "The test editor is cut at the bottom." The list's height was worked out
+from the screen less a one-line typing box (`SIDE_ROWS`), so each extra line of words
+pushed the format bar down off the screen. Reproduced on the 2.0.7 Play APK on the
+emulator at 1080×2340, density 450.
+
+- **Fix, on its side only:** the list takes what is left under the box, however tall
+  the box is (`flexShrink`), and the bar keeps its size. The typing box gets shorter
+  when room is short, down to two whole lines, and scrolls. Upright is unchanged: the
+  page gives way there.
+- **Measured on the same screen with the same words:** the bar sits at the same place
+  (832 to 1012 of 1080) with no list, the colour list, Any color and the font list.
+  Also at 720×1280, density 320. Upright, the bar stays on screen with both lists.
+- **Seen, not changed:**
+  - The emulator's keyboard is very tall on its side and leaves about 135 points, so
+    the bar is behind the keyboard while typing. A tap on the page hides the keyboard.
+  - With "too long" showing and a list open, the list has about one row. It scrolls,
+    and "Make it fit" gives the room back.
+- **Testing note:** a swipe that starts near the screen's edge is Android's back
+  gesture, which keeps the words and closes the editor. Start a swipe further in.
+- In no build yet: not in the 2.0.7 file uploaded on 2026-11-05.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

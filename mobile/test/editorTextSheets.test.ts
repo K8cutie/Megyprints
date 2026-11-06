@@ -14,7 +14,7 @@
    • the page colour sheet.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ReactElement } from 'react';
-import { Keyboard } from 'react-native';
+import { Dimensions, Keyboard, StyleSheet } from 'react-native';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 import { SCENARIOS } from '../../tools/parity/scenarios';
 import { curatedQuotesFor } from '@web/lib/themeQuotePool';
@@ -505,6 +505,45 @@ describe('the page above the words (the same format as Mask)', () => {
     expect(panel.queryAll((i) => i.props.testID === 'text-editor-done').length).toBeGreaterThan(0);
     expect(panel.queryAll((i) => i.props.testID === 'text-editor-page')).toHaveLength(0);
     expect(has('text-editor-page')).toBe(true);
+  });
+
+  it('on its side the format bar stays on screen, however many lines the words take (owner, 2026-11-06: "cut at the bottom")', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    sheetRoot = createRoot();
+    const props = { ctx: ctxOn(platform), params: { target: { kind: 'box', boxIndex: 0 } as WordsTarget, store: fakeFonts(true) }, close: () => {} };
+    await act(async () => { sheetRoot!.render(createElement(SheetPlacement.Provider, { value: 'side' }, createElement(TextEditorSheet, props))); });
+    const styleOf = (id: string) => StyleSheet.flatten(all((i) => i.props.testID === id)[0].props.style);
+    const screenH = Dimensions.get('window').height;
+
+    // The typing box gives way to the keyboard, and the bar keeps its size.
+    const box = styleOf('text-editor-input');
+    expect(box.flexShrink).toBe(1);
+    // ...never to a line and a half: two whole lines of words and the box's padding.
+    expect(box.minHeight).toBe(2 * (box.lineHeight as number) + 2 * (box.paddingVertical as number));
+    expect(styleOf('text-format-bar')).toMatchObject({ flexGrow: 0, flexShrink: 0 });
+    // With no list open nothing under the box can shrink: that would squash the bar.
+    expect(styleOf('text-bar-area').flexShrink).toBeUndefined();
+
+    // A list has what is left under the box, not a height worked out from one line of words.
+    await press('text-color-open');
+    expect(styleOf('text-bar-area').flexShrink).toBe(1);
+    expect(styleOf('text-bar-area').minHeight).toBeGreaterThanOrEqual(48);
+    expect(styleOf('text-color-panel').maxHeight).toBe(screenH);
+    await press('text-font-open');
+    expect(styleOf('text-font-panel').flexShrink).toBe(1);
+    expect(styleOf('font-list').maxHeight).toBe(screenH);
+  });
+
+  it('upright a list keeps its share of the screen: the page gives way, not the bar', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    const styleOf = (id: string) => StyleSheet.flatten(all((i) => i.props.testID === id)[0].props.style);
+    expect(styleOf('text-editor-input').flexShrink).toBeUndefined();
+    await press('text-color-open');
+    expect(styleOf('text-bar-area').flexShrink).toBeUndefined();
+    expect(styleOf('text-color-panel').maxHeight).toBeLessThan(Dimensions.get('window').height / 2);
   });
 });
 

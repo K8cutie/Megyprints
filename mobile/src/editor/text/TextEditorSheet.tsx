@@ -67,10 +67,10 @@ function PageAbove(props: ComponentProps<typeof import('./WordsOnPage').WordsOnP
 const BELOW_THE_PAGE = 0.42;
 /** The typing box and the format bar, which the list shares that with. */
 const BOX_AND_BAR = 128;
-/** On its side, the panel's title, typing box and format bar. */
-const SIDE_ROWS = 200;
-/** A list is never shorter than three rows. */
+/** A list is never shorter than three rows, upright. On its side it has what is left. */
 const LIST_MIN = 144;
+/** The format bar's height: its buttons, the space around them, the line above it. */
+const BAR_H = 48 + space.sm * 2 + 1;
 /** The colour list from its "Any color" button down, with "Any color" closed. */
 const ANY_COLOR_ROW = 80;
 
@@ -119,7 +119,11 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
 
   const sideways = useContext(SheetPlacement) === 'side';
   const { width: screenW, height: screenH } = useWindowDimensions();
-  const listH = Math.max(LIST_MIN, sideways ? screenH - SIDE_ROWS : Math.round(screenH * BELOW_THE_PAGE) - BOX_AND_BAR);
+  const listOpen = fontOpen || colorOpen;
+  // Upright the page gives way to the list. On its side there is no page above to
+  // give way: the list takes what is left under the typing box, however many lines
+  // that box has, so the format bar is never pushed off the screen (owner, 2026-11-06).
+  const listH = sideways ? screenH : Math.max(LIST_MIN, Math.round(screenH * BELOW_THE_PAGE) - BOX_AND_BAR);
 
   const head = (
     <View style={styles.head}>
@@ -140,7 +144,7 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
     <>
       <TextInput value={s.text} onChangeText={(text) => set({ text })} placeholder={TYPE_YOUR_TEXT} placeholderTextColor={colors.muted}
         // Sideways too the page stays in view: not Android's full-screen typing box.
-        multiline autoFocus disableFullscreenUI onFocus={closeLists} style={styles.input} testID="text-editor-input" accessibilityLabel={EDIT_TEXT} />
+        multiline autoFocus disableFullscreenUI onFocus={closeLists} style={[styles.input, sideways && styles.inputSide]} testID="text-editor-input" accessibilityLabel={EDIT_TEXT} />
 
       {fit && !fit.fits && (
         <View style={styles.warn} accessibilityRole="alert" testID="text-too-long">
@@ -159,9 +163,9 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
         </View>
       )}
 
-      <View style={[styles.barArea, sideways && styles.barAreaSide]}>
+      <View style={[styles.barArea, sideways && styles.barAreaSide, sideways && listOpen && styles.barAreaShrinks]} testID="text-bar-area">
         {fontOpen && (
-          <View style={styles.panel} testID="text-font-panel">
+          <View style={[styles.panel, sideways && styles.panelShrinks]} testID="text-font-panel">
             <FontPicker store={store} value={s.fontFamily} loading={fetching} onPick={onPickFont} maxHeight={listH} />
           </View>
         )}
@@ -170,7 +174,7 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
             <TextColourPicker value={s.color} onChange={(color) => set({ color })} />
           </ScrollView>
         )}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bar} keyboardShouldPersistTaps="handled" testID="text-format-bar">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.barKeepsSize} contentContainerStyle={styles.bar} keyboardShouldPersistTaps="handled" testID="text-format-bar">
           <ToolButton label={BOLD} active={s.bold} onPress={() => set({ bold: !s.bold })} testID="text-bold"><Text style={[styles.toolGlyph, styles.boldGlyph]}>B</Text></ToolButton>
           <ToolButton label={ITALIC} active={s.italic} onPress={() => set({ italic: !s.italic })} testID="text-italic"><Text style={[styles.toolGlyph, styles.italicGlyph]}>I</Text></ToolButton>
           <ToolButton label={UNDERLINE} active={s.underline} onPress={() => set({ underline: !s.underline })} testID="text-underline"><Text style={[styles.toolGlyph, styles.underlineGlyph]}>U</Text></ToolButton>
@@ -262,13 +266,19 @@ const styles = StyleSheet.create({
   sideRow: { flex: 1, flexDirection: 'row' },
   side: { backgroundColor: colors.card, borderLeftWidth: 1, borderLeftColor: colors.border },
   input: { marginHorizontal: 12, marginVertical: space.sm, minHeight: 48, maxHeight: 96, paddingHorizontal: 12, paddingVertical: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, fontSize: 16, lineHeight: 22, color: colors.text, backgroundColor: colors.card, textAlignVertical: 'top' },
+  // On its side, short of room (a list or the keyboard): the box gets shorter and scrolls,
+  // down to two whole lines (2 x its lineHeight + its padding), not one and a half.
+  inputSide: { flexShrink: 1, minHeight: 2 * 22 + space.sm * 2 },
   warn: { marginHorizontal: 12, marginBottom: space.sm, gap: space.sm, borderRadius: 10, borderWidth: 1, borderColor: '#F0D9A8', backgroundColor: '#FFF6E5', paddingHorizontal: 12, paddingVertical: space.sm },
   warnText: { fontSize: 13, lineHeight: 18, color: '#8A5A12' },
   fitButton: { alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: space.md, borderRadius: 10, borderWidth: 1, borderColor: '#E8C98A', backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   fitText: { fontSize: 14, fontWeight: '700', color: '#8A5A12' },
   barArea: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card },
   barAreaSide: { marginTop: 'auto' },
+  barAreaShrinks: { flexShrink: 1, minHeight: BAR_H },
+  barKeepsSize: { flexGrow: 0, flexShrink: 0 },
   panel: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card },
+  panelShrinks: { flexShrink: 1 },
   colorPanel: { paddingHorizontal: 12, paddingTop: space.sm },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: space.sm },
   tool: { width: 48, height: 48, borderRadius: 10, backgroundColor: '#F5F5F5', alignItems: 'center', justifyContent: 'center' },
