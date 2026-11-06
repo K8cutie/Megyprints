@@ -7,7 +7,7 @@
    (tools/parity/scenarios.ts), each through that side's own editor. Here,
    the app editor's own code: a tap and the photos part's "Remove photo",
    its "Add a photo" pick (placePicked), its move and zoom (storeFraming,
-   what the finger stores), its Change layout (chooseLayout), the text
+   what the finger stores), its Change layout (tryLayout), the text
    editor's Done (wordsFlow saveWords with contentOf, from the editor's own
    opening state), the Page colour sheet (pickPageColour), the cover editor's
    calls (coverEdits) and "Add a page" (addPageAfter). Every page and the
@@ -20,7 +20,7 @@ import { getTemplateById } from '@web/pages/builder/pageTemplates';
 import { EDIT_PLAN, editedAlbum, SCENARIOS } from '../../tools/parity/scenarios';
 import { selectedActionsFor } from '../src/editor/registry';
 import { editThePages } from '../src/editor/scope';
-import { addPageAfter, chooseLayout, layoutChoices, placePicked, storeFraming } from '../src/editor/photos/actions';
+import { addPageAfter, layoutChoices, placePicked, storeFraming, tryLayout } from '../src/editor/photos/actions';
 import { contentOf, editorStateOf, initialContent, saveWords, type WordsTarget } from '../src/editor/text/wordsFlow';
 import { pickPageColour } from '../src/editor/text/PageColourSheet';
 import { moveCoverTitle, panCoverPhoto, setTitleColour, setTitleFont, toggleTitleBold, toggleTitleShadow } from '../src/editor/cover/coverEdits';
@@ -80,8 +80,8 @@ describe('the same edits on the website and in the app', () => {
       return l.photos === 0 && l.captions === 0;
     })!;
     let asked: unknown = 'not yet';
-    await step(() => { asked = chooseLayout(ctxOn(platform), layout); });
-    expect(asked).toBeNull(); // applied at once
+    await step(() => { asked = tryLayout(ctxOn(platform), ctxOn(platform).page, layout, true); });
+    expect(asked).toBeNull(); // applied at once, the page the website's applyPageLayout makes
 
     // The text editor's Done.
     const C = EDIT_PLAN.caption;

@@ -16,6 +16,7 @@
 import { useMemo, useRef } from 'react';
 import { ActivityIndicator, PanResponder, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { Image } from 'expo-image';
+import { CAPTION_PAD_X, curveCentreX, type CurveGlyph } from '@web/pages/builder/wordArtRules';
 import { colors } from '../../lib/theme';
 
 export type DragWhat = 'title' | 'photo';
@@ -27,7 +28,7 @@ type Rect = { x: number; y: number; w: number; h: number };
 export interface LiveCover {
   photo: { uri: string; x: number; y: number; w: number; h: number } | null;
   /** The title's words in their box, styled for the screen. */
-  title: { rect: Rect; text: string; style: TextStyle; ghost: boolean } | null;
+  title: { rect: Rect; text: string; style: TextStyle; ghost: boolean; letters: { size: number; width: number; glyphs: CurveGlyph[] } | null } | null;
 }
 
 /** What a finger coming down at (x, y) (fractions of the cover) drags: the
@@ -102,7 +103,20 @@ export function CoverStage({ uri, busy, failed, width, height, titleRect, hasPho
             left: live.title.rect.x * width, top: live.title.rect.y * height, width: live.title.rect.w * width, height: live.title.rect.h * height,
             opacity: live.title.ghost ? 0.9 : 1,
           }]}>
-            <Text style={live.title.style}>{live.title.text}</Text>
+            {live.title.letters ? (() => {
+              const { letters, rect, style } = live.title;
+              const boxW = rect.w * width;
+              const align = style.textAlign === 'left' || style.textAlign === 'right' ? style.textAlign : 'center';
+              const cx = curveCentreX(align === 'left' ? boxW * CAPTION_PAD_X : align === 'right' ? boxW * (1 - CAPTION_PAD_X) : boxW / 2, align, letters.width);
+              const cy = (rect.h * height) / 2;
+              const cell = letters.size * 2;
+              return letters.glyphs.map((g, i) => (
+                <Text key={i} style={[style, styles.letter, {
+                  width: cell, height: cell, lineHeight: cell, left: cx + g.x - cell / 2, top: cy + g.y - cell / 2,
+                  transform: [{ rotate: `${g.angle}rad` }],
+                }]}>{g.text}</Text>
+              ));
+            })() : <Text style={live.title.style}>{live.title.text}</Text>}
           </View>
         )}
         {busy && uri && <ActivityIndicator style={styles.busy} color={colors.accent} />}
@@ -123,5 +137,6 @@ const styles = StyleSheet.create({
   failed: { fontSize: 13, color: colors.muted, textAlign: 'center', padding: 8 },
   busy: { position: 'absolute', top: 8, right: 8 },
   liveTitle: { position: 'absolute', justifyContent: 'center', overflow: 'visible' },
+  letter: { position: 'absolute', textAlign: 'center', textAlignVertical: 'center' },
   handle: { position: 'absolute', borderWidth: 1.5, borderStyle: 'dashed', borderColor: 'rgba(232,165,152,0.95)', borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.06)' },
 });

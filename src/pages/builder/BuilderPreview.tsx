@@ -47,6 +47,7 @@ import { chooserListSizes, CHOOSER_TITLE } from './chooserFit';
 import { trashSpot, TRASH_SIZE, type Box } from './trashSpot';
 import { ornamentFit } from './ornaments';
 import { wordArtDomStyle, resolveTextSlotAlign, freeTextBoxWidth, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
+import { needsWordArtCanvas, WordArtCanvas } from './WordArtCanvas';
 import { normalizeGradient, gradientToCss } from './gradient';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
@@ -622,11 +623,13 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <div key={`tslot-${i}`} className="absolute flex items-center"
               onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
               style={{
-                zIndex: 5, left: boxLeft + offL, top: boxTop + offT, width: boxW, height: boxH, overflow: 'hidden',
+                zIndex: 5, left: boxLeft + offL, top: boxTop + offT, width: boxW, height: boxH, overflow: boxed.curve ? 'visible' : 'hidden',
                 justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
                 cursor: onTextSlotTap ? 'pointer' : undefined,
               }}>
-              <span style={{
+              {needsWordArtCanvas(boxed) ? (
+                <WordArtCanvas text={boxed} boxW={boxW} boxH={boxH} scale={sx} align={align} onCover={!!coverMode} />
+              ) : <span style={{
                 // Wrapped inside print's margin (CAPTION_PAD_X), so it breaks where print does.
                 width: '100%', boxSizing: 'border-box', paddingLeft: boxW * CAPTION_PAD_X, paddingRight: boxW * CAPTION_PAD_X, textAlign: align as any,
                 fontFamily: boxed.fontFamily || 'serif', fontSize: (boxed.fontSize || 24) * sx,
@@ -634,7 +637,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(boxed, sx, coverMode),
-              }}>{boxed.text}</span>
+              }}>{boxed.text}</span>}
             </div>
           );
         }

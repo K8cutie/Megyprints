@@ -291,6 +291,11 @@ export interface TextStyle {
    *  0/undefined = no outline. */
   outlineWidth?: number;
   shadow?: boolean;
+  /** The cover title's WordArt (wordArtRules WordArtStyle): a second fill colour,
+   *  a glow, and the words on a curve. Absent = plain. */
+  fillTo?: string;
+  glow?: string;
+  curve?: 'arch' | 'smile' | 'wave';
   /** A line from the QUOTE POOL (dealt by Megy or picked in QuotePickerModal).
    *  Tapping it re-opens the pool (change / remove / edit the words) instead
    *  of the typing editor. Absent on lines the customer typed, and on albums

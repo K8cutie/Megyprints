@@ -145,12 +145,14 @@ async function compareWith(base, manifest, set) {
     await compare(c.name, 'page', { ...input, bakeWords: false });
     await compare(`${c.name} (words baked in)`, 'page', { ...input, bakeWords: true });
   }
-  for (const c of set.covers) {
+  // WordArt is new: print code from before it draws those covers plain, as it should.
+  const covers = set.covers.filter((c) => !c.name.startsWith('cover-wordart-'));
+  for (const c of covers) {
     await compare(c.name, 'cover', { albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign, photos: set.photos });
   }
   await browser.close();
 
-  const total = set.cases.length * 2 + set.covers.length;
+  const total = set.cases.length * 2 + covers.length;
   console.log(`\n${total - diffs.length} of ${total} print files byte-identical to the website's print code at ${ref} (${execFileSync('git', ['-C', REPO_ROOT, 'rev-parse', '--short', ref]).toString().trim()}).`);
   if (diffs.length) {
     fs.mkdirSync(path.join(HERE, 'out'), { recursive: true });

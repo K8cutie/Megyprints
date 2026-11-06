@@ -10,15 +10,20 @@
    height instead of stopping at a share of the screen.
    ══════════════════════════════════════════════════════════════════════════ */
 import { Dimensions } from 'react-native';
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
+import type { PageTemplate } from '@web/pages/builder/types';
+import { layoutChangeLeftovers, relayPageOnTemplate } from '@web/pages/builder/useBuilderState';
 import { SCENARIOS } from '../../tools/parity/scenarios';
+import type { AppPlatform } from '../src/builder/appPlatform';
 import { SheetPlacement, sidePanelWidth, type Placement } from '../src/editor/core/EditorSheet';
+import { layoutChoices } from '../src/editor/photos/actions';
 import { LayoutSheet } from '../src/editor/photos/LayoutSheet';
 import { PickPhotoSheet } from '../src/editor/photos/sheets';
 import '../src/editor/parts';
+import { editThePages } from '../src/editor/scope';
 import { space } from '../src/lib/theme';
-import { builder, ctxOn, madeAlbum, useEditorBench } from './editorHarness';
+import { act, builder, ctxOn, madeAlbum, useEditorBench } from './editorHarness';
 
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('../src/builder/usePagePicture', () => ({
@@ -72,12 +77,111 @@ describe('"Choose a layout"', () => {
     expect(grid.maxHeight).toBeUndefined();
   });
 
-  it('upright: as before, two across the screen, the list at most 62% of it', async () => {
+  it('upright: three across the screen, in a sheet short enough to leave the page in view, like Mask', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     await render(inPlace('bottom', NO_INSETS, <LayoutSheet ctx={ctxOn(platform)} params={undefined} close={() => {}} />));
     const w = Number(flat(tiles()[0].props.style).width);
-    expect(w).toBe(Math.floor((UPRIGHT.width - space.md * 2 - 12) / 2));
-    expect(flat(screen.getByTestId('photos-layout-grid').props.style).maxHeight).toBe(Math.round(UPRIGHT.height * 0.62));
+    expect(w).toBe(Math.floor((UPRIGHT.width - space.md * 2 - 12 * 2) / 3));
+    expect(flat(screen.getByTestId('photos-layout-sheet').props.style).maxHeight).toBe('42%');
+  });
+});
+
+describe('"Choose a layout" stays open to try another (owner, 2026-11-05)', () => {
+  /** The sheet on the page on screen, drawn again after a change as the editor does. */
+  async function open(platform: AppPlatform) {
+    const close = jest.fn();
+    const sheet = () => inPlace('bottom', NO_INSETS, <LayoutSheet ctx={ctxOn(platform)} params={undefined} close={close} />);
+    await render(sheet());
+    const pick = async (id: string) => {
+      await fireEvent.press(screen.getByTestId(`photos-layout-${id}`));
+      await screen.rerender(sheet());
+    };
+    return { close, pick };
+  }
+  const ids = () => screen.getAllByTestId(/^photos-layout-t/).map((t) => String(t.props.testID));
+  /** A page with photos, and layouts that hold them all (fewer frames would ask first). */
+  async function onPageWithChoices() {
+    const platform = await madeAlbum(SCENARIOS[2]);
+    await act(async () => { editThePages(builder()); });
+    for (let i = 0; i < builder().albumPages.length; i++) {
+      await act(async () => { builder().goToPage(i); });
+      const ctx = ctxOn(platform);
+      const others = layoutChoices(ctx).filter((t) => {
+        const left = layoutChangeLeftovers(ctx.page, t);
+        return t.id !== ctx.page.templateId && left.photos.length === 0 && left.captions === 0;
+      });
+      if (others.length >= 2) return { platform, index: i, start: ctx.page, a: others[0], b: others[1] };
+    }
+    throw new Error('no page with two other layouts');
+  }
+
+  it('a pick changes the page and the sheet stays; "Current" moves; the tiles stay where they were', async () => {
+    const { platform, index, a, b } = await onPageWithChoices();
+    const { close, pick } = await open(platform);
+    const order = ids();
+    await pick(a.id);
+    expect(builder().albumPages[index].templateId).toBe(a.id);
+    expect(screen.getByTestId(`photos-layout-${a.id}`).props.accessibilityState.selected).toBe(true);
+    await pick(b.id);
+    expect(builder().albumPages[index].templateId).toBe(b.id);
+    expect(screen.getByTestId(`photos-layout-${a.id}`).props.accessibilityState.selected).toBe(false);
+    expect(screen.getByTestId(`photos-layout-${b.id}`).props.accessibilityState.selected).toBe(true);
+    expect(ids()).toEqual(order);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('each try starts from the page as it opened; its first layout brings it back as it was, zoom too; all the tries are one Undo', async () => {
+    const found = await onPageWithChoices();
+    const { platform, index, a, b } = found;
+    const framed = builder().albumPages[index].slotFills?.findIndex((f) => f != null) ?? 0;
+    await act(async () => { builder().setSlotScale(framed, 1.5); });
+    const start = builder().albumPages[index];
+    const { pick } = await open(platform);
+    await pick(a.id);
+    expect(builder().albumPages[index].slotScales?.[framed]).toBe(1); // a new layout, framing as on the website
+    await pick(b.id);
+    expect(builder().albumPages[index]).toEqual(relayPageOnTemplate(start, b));
+    await pick(String(start.templateId));
+    expect(builder().albumPages[index]).toBe(start);
+    await pick(a.id);
+    await pick(b.id);
+    await act(async () => { builder().undo(); });
+    expect(builder().albumPages[index]).toBe(start);
+  });
+
+  it('a tap on the layout it already has does nothing: no change, no Undo step', async () => {
+    const { platform, index, start } = await onPageWithChoices();
+    const { close, pick } = await open(platform);
+    const before = builder().canUndo;
+    await pick(String(start.templateId));
+    expect(builder().albumPages[index]).toBe(start);
+    expect(builder().canUndo).toBe(before);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it('a layout that can\'t hold every photo asks where they go, and closes after the answer', async () => {
+    const platform = await madeAlbum(SCENARIOS[2]);
+    await act(async () => { editThePages(builder()); });
+    let fewer: PageTemplate | undefined;
+    for (let i = 0; i < builder().albumPages.length && !fewer; i++) {
+      await act(async () => { builder().goToPage(i); });
+      const ctx = ctxOn(platform);
+      fewer = layoutChoices(ctx).find((t) => layoutChangeLeftovers(ctx.page, t).photos.length > 0);
+    }
+    expect(fewer).toBeDefined();
+    const pages = builder().albumPages.length;
+    const { close, pick } = await open(platform);
+    await fireEvent.scroll(screen.getByTestId('photos-layout-grid'), { nativeEvent: { contentOffset: { x: 0, y: 300 }, contentSize: { width: 300, height: 900 }, layoutMeasurement: { width: 300, height: 300 } } });
+    await pick(fewer!.id);
+    expect(screen.getByTestId('photos-layout-leftover')).toBeTruthy();
+    expect(close).not.toHaveBeenCalled();
+    expect(builder().albumPages.length).toBe(pages); // nothing yet: it asks
+    await fireEvent.press(screen.getByTestId('photos-layout-back'));
+    expect(screen.getByTestId('photos-layout-grid').props.contentOffset.y).toBe(300); // the same place in the list
+    await pick(fewer!.id);
+    await fireEvent.press(screen.getByTestId('photos-layout-new-page'));
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(builder().albumPages.length).toBeGreaterThan(pages);
   });
 });
 

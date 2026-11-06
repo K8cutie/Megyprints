@@ -39,7 +39,7 @@
 import { router, Stack, useFocusEffect, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALBUM_SIZES, dealtBoxRoll } from '@web/pages/builder/types';
 import { useSettleGuard } from '@web/lib/settleGuard';
@@ -59,6 +59,7 @@ import { pageHint, pickedHint } from './editorHint';
 import { EMPTY_KINDS, hitTest, pageTargets, type Target } from './hitTest';
 import { usePageTapGuard } from './pageTapGuard';
 import { PagePicker } from './PagePicker';
+import { editorPictureWidth } from './pagePictureWidth';
 import { PageStage, type EmptyHintInfo, type ReachInfo } from './PageStage';
 import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registryVersion, runTap, selectedActionsFor, sheetById, toolsFor, type EditorContext } from './registry';
 import { editThePages } from './scope';
@@ -180,11 +181,8 @@ export default function EditPagesScreen() {
   const shownW = Math.max(1, Math.floor(Math.min(area.w - space.md * 2, (area.h - space.sm) * aspect)));
   const shownH = Math.max(1, Math.round(shownW / aspect));
 
-  // The picture is drawn for the widest the page can be on this phone (the
-  // short side: the same either way up), so a bar coming or going or the
-  // phone turning never draws it again; while a changed page is being
-  // drawn, the last picture of it stays on show.
-  const px = Math.min(1400, Math.round((Math.min(screenW, screenH) - space.md * 2) * PixelRatio.get()));
+  // While a changed page is being drawn, the last picture of it stays on show.
+  const px = editorPictureWidth(screenW, screenH);
   const req = page ? { page, pageIndex: index, albumSize: builder.albumSize, photos: builder.uploadedPhotos, width: px } : null;
   const picture = usePagePicture(text, req, PRIORITY.editing);
   const lastShown = useRef<{ index: number; uri: string } | null>(null);

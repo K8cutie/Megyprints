@@ -19,6 +19,7 @@ import { SCENARIOS } from '../../tools/parity/scenarios';
 import { dangerLast } from '../src/editor/actionRows';
 import { EditorSheet, SheetPlacement, SIDE_PANEL_W, sidePanelWidth } from '../src/editor/core/EditorSheet';
 import { GO_TO_PAGE, pageCount } from '../src/editor/editorWords';
+import { editorPictureWidth } from '../src/editor/pagePictureWidth';
 import { PagePicker } from '../src/editor/PagePicker';
 import { pageTargets } from '../src/editor/hitTest';
 import { selectedActionsFor, type EditorContext } from '../src/editor/registry';
@@ -119,7 +120,8 @@ describe('on its side', () => {
   });
 
   it('the page picture is drawn for the short side: turning the phone draws nothing again', () => {
-    expect(SCREEN).toContain('Math.min(screenW, screenH) - space.md * 2');
+    expect(SCREEN).toContain('const px = editorPictureWidth(screenW, screenH);');
+    expect(editorPictureWidth(412, 915)).toBe(editorPictureWidth(915, 412));
   });
 
   it('a sheet opens as a panel down the right, the page left in view; upright, from the bottom as before', async () => {

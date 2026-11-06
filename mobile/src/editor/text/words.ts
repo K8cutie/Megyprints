@@ -10,6 +10,8 @@
 export const EDIT_TEXT = 'Edit text';
 export const DONE = 'Done';
 export const TYPE_YOUR_TEXT = 'Type your text…';
+/** Only the app: the page above the words, for TalkBack. */
+export const WORDS_ON_PAGE = 'The page, with your words on it';
 export const COLOR = 'Color';
 export const OUTLINE = 'Outline';
 export const SHADOW = 'Shadow';

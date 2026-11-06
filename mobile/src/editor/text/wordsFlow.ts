@@ -15,7 +15,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import type { AlbumPage, AlbumSizePreset, SlotText, TextElement } from '@web/pages/builder/types';
 import { dealtBoxRoll, isPoolQuote } from '@web/pages/builder/types';
-import type { BuilderActions } from '@web/pages/builder/useBuilderState';
+import { pageWithBoxText, pageWithSlotText, pageWithTextUpdate, type BuilderActions } from '@web/pages/builder/useBuilderState';
 import { getTemplateById } from '@web/pages/builder/pageTemplates';
 import { captionBoxSize, captionFits, type Box, type CaptionStyle, type Fit, type Measurer } from '@web/pages/builder/textFit';
 import { contrastOutline, WORDART_OUTLINE_WIDTH } from '@web/pages/builder/wordArtRules';
@@ -146,16 +146,42 @@ export const bigger = (size: number) => Math.min(SIZE_MAX, size + SIZE_STEP);
 
 type SaveActions = Pick<BuilderActions, 'setBoxText' | 'setSlotText' | 'updateTextElement'>;
 
+/** What a frame's words are saved as. Cleared words take the slot text off,
+ *  so the frame is a "+" again. */
+function slotWords(page: AlbumPage, slotIndex: number, content: BoxTextContent): SlotText | null {
+  return content.text.trim() ? { ...content, quote: page.slotTexts?.[slotIndex]?.quote } as SlotText : null;
+}
+
 /** MobileReview's three editors' onSave: the website's action, its arguments. */
 export function saveWords(b: SaveActions, page: AlbumPage, pageIndex: number, target: WordsTarget, content: BoxTextContent): void {
   if (target.kind === 'box') {
     b.setBoxText(target.boxIndex, content);
   } else if (target.kind === 'slot') {
-    // Cleared words take the slot text off, so the frame is a "+" again.
-    b.setSlotText(target.slotIndex, content.text.trim() ? { ...content, quote: page.slotTexts?.[target.slotIndex]?.quote } as SlotText : null, pageIndex);
+    b.setSlotText(target.slotIndex, slotWords(page, target.slotIndex, content), pageIndex);
   } else {
     b.updateTextElement(target.textId, content);
   }
+}
+
+/** The page as saveWords would leave it, to draw above the editor: nothing is
+ *  saved. The same words give the same page, so a picture is drawn only once. */
+export function pageWithWords(page: AlbumPage, target: WordsTarget, content: BoxTextContent): AlbumPage {
+  if (target.kind === 'box') {
+    return pageWithBoxText(page, target.boxIndex, content, { fontFamily: content.fontFamily, textColor: content.color }, () => `box-${target.boxIndex}-being-typed`);
+  }
+  if (target.kind === 'slot') return pageWithSlotText(page, target.slotIndex, slotWords(page, target.slotIndex, content));
+  return pageWithTextUpdate(page, target.textId, content);
+}
+
+/** The thing on the page these words are, to outline while they are edited. */
+export function targetOfWords(targets: readonly Target[], words: WordsTarget): Target | null {
+  return targets.find((t) => {
+    const w = wordsTargetOf(t);
+    if (!w || w.kind !== words.kind) return false;
+    if (w.kind === 'box') return w.boxIndex === (words as { boxIndex: number }).boxIndex;
+    if (w.kind === 'slot') return w.slotIndex === (words as { slotIndex: number }).slotIndex;
+    return w.textId === (words as { textId: string }).textId;
+  }) ?? null;
 }
 
 /** The caption box a caption must fit (design px), or null: only a caption

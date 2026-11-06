@@ -15,7 +15,7 @@
    Every swatch is a 48 dp target.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TEXT_COLORS, sameColor, textColorName } from '@web/pages/builder/textColors';
 import { inkOn, PAGE_COLORS, pageColorOf } from '@web/pages/builder/pageColors';
 import type { AlbumBackground } from '@web/pages/builder/types';
@@ -43,10 +43,9 @@ function Swatch({ hex, name, on, onPress, testID, size = 36 }: { hex: string; na
 }
 
 /** TextColorPicker: the 28 swatches, "Any color", and the chosen colour's name. */
-export function TextColourPicker({ value, onChange, onPicked, testID = 'text-color' }: {
+export function TextColourPicker({ value, onChange, testID = 'text-color' }: {
   value: string;
   onChange: (hex: string) => void;
-  onPicked?: () => void;
   /** Its controls' test ids start with this (the cover title's: 'cover-title-color'). */
   testID?: string;
 }) {
@@ -58,7 +57,7 @@ export function TextColourPicker({ value, onChange, onPicked, testID = 'text-col
       <View accessibilityRole="radiogroup" accessibilityLabel={TEXT_COLOR_LABEL} style={styles.grid}>
         {TEXT_COLORS.map((c) => (
           <Swatch key={c.hex} hex={c.hex} name={c.name} on={sameColor(c.hex, value)} testID={`${testID}-${c.name}`}
-            onPress={() => { onChange(c.hex); onPicked?.(); }} />
+            onPress={() => onChange(c.hex)} />
         ))}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel={ANY_COLOR} onPress={() => setAny((v) => !v)} testID={`${testID}-any`}
@@ -68,19 +67,26 @@ export function TextColourPicker({ value, onChange, onPicked, testID = 'text-col
         </View>
         <Text style={styles.anyText}>{ANY_COLOR}</Text>
       </Pressable>
-      {any && <AnyColour value={value} onPick={(hex) => { onChange(hex); setAny(false); onPicked?.(); }} />}
+      {any && <AnyColour value={value} onPick={onChange} />}
       <Text style={styles.name} testID={`${testID}-name`} accessibilityLiveRegion="polite">{name ?? (own ? YOUR_OWN_COLOR : '')}</Text>
     </View>
   );
 }
 
-/** The app's "Any color": shades, and a colour code. */
+/** The app's "Any color": shades, and a colour code. It stays open after a
+ *  pick to try another, so the keyboard goes away to show the colour. */
 function AnyColour({ value, onPick }: { value: string; onPick: (hex: string) => void }) {
   const [code, setCode] = useState(value);
   const [bad, setBad] = useState(false);
   const use = () => {
     const hex = parseColourCode(code);
     if (!hex) { setBad(true); return; }
+    Keyboard.dismiss();
+    onPick(hex);
+  };
+  const useShade = (hex: string) => {
+    setCode(hex);
+    setBad(false);
     onPick(hex);
   };
   return (
@@ -88,7 +94,7 @@ function AnyColour({ value, onPick }: { value: string; onPick: (hex: string) => 
       <Text style={styles.hint}>{ANY_COLOR_HINT}</Text>
       <View style={styles.shades}>
         {ANY_COLORS.map((hex) => (
-          <Pressable key={hex} accessibilityRole="button" accessibilityLabel={hex} onPress={() => onPick(hex)} testID={`any-color-${hex}`}
+          <Pressable key={hex} accessibilityRole="button" accessibilityLabel={hex} onPress={() => useShade(hex)} testID={`any-color-${hex}`}
             style={({ pressed }) => [styles.hit, pressed && styles.pressed]}>
             <View style={[styles.shade, { backgroundColor: hex }, sameColor(hex, value) && styles.shadeOn]} />
           </Pressable>

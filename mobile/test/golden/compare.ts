@@ -92,6 +92,11 @@ export const MAX_WORD_SHIFT_PX = 0.5;
 export const MAX_LINE_WIDTH_DIFF_PX = 1;
 /** Where a line is drawn, app vs print, px. */
 export const MAX_LINE_POSITION_DIFF_PX = 0.01;
+/** Where a letter on a curve is drawn, app vs print, px. A straight line's spot
+ *  is its anchor and needs no measuring; a curved letter's spot comes from the
+ *  widths of the words before it, and each renderer measures those in its own
+ *  fractions of a pixel (widths are held to 1 px, above). This is a tenth of that. */
+export const MAX_CURVE_LETTER_DIFF_PX = 0.1;
 /** The ink left out of the pixel bar is widened by this, px. */
 export const INK_MARGIN_PX = 2;
 

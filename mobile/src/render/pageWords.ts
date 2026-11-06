@@ -13,7 +13,7 @@
    the phone too (src/dev/goldenRun.ts): there the measuring is the phone's
    own Skia, which is exactly what the on-phone golden run has to prove.
    ══════════════════════════════════════════════════════════════════════════ */
-import { wrapTextLines, firstLineCenter, wordArtShadow, TEXT_LINE_HEIGHT } from '@web/pages/builder/wordArtRules';
+import { curveCentreX, curveGlyphs, wrapTextLines, firstLineCenter, wordArtShadow, TEXT_LINE_HEIGHT, WORDART_GLOW_PASSES } from '@web/pages/builder/wordArtRules';
 import type { PagePlan } from './pagePlan';
 import type { PageText } from './pageText';
 
@@ -32,6 +32,8 @@ export interface AppLine {
   alpha: number;
   outlined: boolean;
   shadow: boolean;
+  /** A letter on a curve: where it sits comes from measured widths. */
+  onCurve?: boolean;
 }
 
 export type Matrix = [number, number, number, number, number, number];
@@ -56,8 +58,9 @@ export function appWords(plan: PagePlan, text: PageText): TextItemLines[] {
     const look = { family: it.style.fontFamily, size: it.fontSize, bold: it.style.bold, italic: it.style.italic };
     const words = wrapTextLines(text.measurer(look), it.style.text, it.kind === 'boxText' ? it.maxWidth : it.boxWidth);
     const step = it.fontSize * TEXT_LINE_HEIGHT;
+    const plainColor = it.style.color || '#2D2D2D';
     const base = {
-      item: k, align: it.align, color: it.style.color || '#2D2D2D',
+      item: k, align: it.align, color: it.style.fillTo ? 'gradient' : plainColor,
       alpha: it.kind === 'freeText' ? it.opacity / 100 : 1,
       outlined: !!(it.style.outlineWidth && it.style.outlineColor),
       shadow: !!wordArtShadow(it.style, plan.onCover),
@@ -65,9 +68,27 @@ export function appWords(plan: PagePlan, text: PageText): TextItemLines[] {
     let lines: AppLine[];
     let zone: Area;
     const b = plan.bleed;
-    if (it.kind === 'boxText') {
+    if (it.kind === 'boxText' && it.source === 'caption' && it.style.curve) {
+      // Each letter, as drawPage draws them: with no outline the shadow is cast
+      // by a pass of its own, under the fills.
+      const curve = curveGlyphs(it.style.text, text.measurer(look), it.fontSize, it.style.curve);
+      const cx = curveCentreX(it.anchorX, it.align, curve.width);
+      const letters = (over: Partial<AppLine>): AppLine[] => curve.glyphs.map((g) => ({
+        ...base, align: 'center', onCurve: true, text: g.text, pageX: cx + g.x, pageY: it.centerY + g.y, width: text.measure(g.text, look), ...over,
+      }));
+      const casts = it.style.glow ? WORDART_GLOW_PASSES : 1;
+      lines = base.shadow && !base.outlined
+        ? [...Array.from({ length: casts }, () => letters({ color: plainColor, shadow: true })).flat(), ...letters({ shadow: false })]
+        : letters({});
+      const pad = it.fontSize;
+      const W = plan.width + 2 * b, H = plan.height + 2 * b;
+      const left = Math.max(0, cx - curve.width / 2 - pad + b), top = Math.max(0, it.centerY - curve.height / 2 - pad + b);
+      zone = { x: left, y: top, w: Math.min(W, cx + curve.width / 2 + pad + b) - left, h: Math.min(H, it.centerY + curve.height / 2 + pad + b) - top };
+    } else if (it.kind === 'boxText') {
       const top = firstLineCenter(words.length, it.centerY, it.fontSize);
-      lines = words.map((w, i) => ({ ...base, text: w, pageX: it.anchorX, pageY: top + i * step, width: text.measure(w, look) }));
+      // A glow with no outline: each line is drawn once for each time it is cast.
+      const casts = it.style.glow && !base.outlined ? WORDART_GLOW_PASSES : 1;
+      lines = words.flatMap((w, i) => Array.from({ length: casts }, () => ({ ...base, text: w, pageX: it.anchorX, pageY: top + i * step, width: text.measure(w, look) })));
       zone = { x: it.box.x + b, y: it.box.y + b, w: it.box.w, h: it.box.h };
     } else {
       const m = freeMatrix(it.x, it.y, it.rotation, it.scaleX, it.scaleY);

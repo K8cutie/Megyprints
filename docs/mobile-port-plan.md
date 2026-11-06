@@ -3982,6 +3982,125 @@ test that failed first. Each was walked on the emulator with a real album:
 
 418 characters.
 
+## 2.0.7: try each change without the list closing, and WordArt (2026-11-05, `fix/port-stay-open-words`)
+
+Owner, testing 2.0.6 on his phone: "its a hassle to try on changes then it closes
+automatically", and "id like to see the text box on one half of the screen and
+the input box on the other half... Its basically the same format as the mask."
+He is still going through the list of similar places; "prep 2.0.7 aab" came with
+Edit text, Change layout and WordArt done. Not in it: Replace photo, the cover
+title's font list, quotes, and a tap on the page closing Mask and Filter.
+
+- **The page stays in view (`text/WordsOnPage`).** The page is above, the box being
+  edited outlined, with the words on it as they change; the box to type in and
+  the format bar are below. Sideways the page is on the left and the rest in a
+  panel down the right. Android's full-screen typing box is off
+  (`disableFullscreenUI`), so typing sideways keeps the page in view too.
+- **It is the page renderer's own picture, of the page as Done would leave it**
+  (`pageWithWords`). The website's three saves are plain functions now
+  (`pageWithBoxText`, `pageWithSlotText`, `pageWithTextUpdate` in
+  `useBuilderState`), so the rules aren't copied, and a test holds the page shown
+  to the page saved. Website behaviour is unchanged. Nothing is saved until Done,
+  and ✕ leaves the album as it was. A button draws at once; typing waits for a
+  180 ms pause (`TYPING_PAUSE_MS`). No change draws nothing new: it opens on the
+  picture the editor already has (`editorPictureWidth`).
+- **Font and colour stay open after a pick**, and so do Any color's shades (the
+  cover title's too: same picker). A list takes the keyboard's place; a tap on the
+  typing box brings the keyboard back and puts the list away; a tap on the page
+  puts either away. Upright, the box, a list and the bar take Mask's 42% of the
+  height (three rows of a list at least).
+- **Walked on the emulator (1080×2400), real photos:** typing with the keyboard up;
+  a bundled font, a font fetched from the internet and a colour, each with the list
+  open; size and bold; Any color's shades brought into view; "Too long" with "Make
+  it fit"; Back closes a list first; ✕ leaves the words; Done saves what was shown;
+  sideways with a list and with the keyboard; a small phone (720×1280, density 320).
+  Not walked: words in a frame and a free text (covered by the tests).
+- **Change layout stays open too (`LayoutSheet`, the builder's `tryPageLayout`).**
+  Owner: "Go work on change layout". A pick shows on the page and the sheet stays,
+  short and undimmed like Mask (`live`), three layouts across upright, two in the
+  side panel. The list and its pictures stay as the sheet opened, so tiles don't
+  jump and nothing is drawn again. Each try starts from that same page, so a tile
+  is what a tap gives; the first layout brings the page back as it was, zoom too;
+  all the tries are one Undo, so trying many can't push the rest out of the
+  20-step history. A layout that can't hold every photo or caption still asks and
+  closes after the answer ("Choose another layout" keeps the place in the list).
+  On the emulator: try, back to the first, one Undo; the question, Back, a new
+  page; a tap on the page closes it; sideways.
+- **WordArt on the cover title.** Owner: "I want the text editing in the coverpage
+  to have that wordart capability"; he took the recommendation, looks then shapes.
+  - **In the rules (`wordArtRules`, shared):** `fillTo` (two-colour fill, top of
+    the line to its bottom), `glow` (a shadow with no offset in its own colour,
+    cast `WORDART_GLOW_PASSES` times, since one hardly shows on thin letters),
+    `curve` ('arch', 'smile', 'wave': `curveGlyphs`, one line, each letter from
+    the width of the words before it). A curve isn't clipped to the box, and only
+    its width counts for "Too long" (`captionFits`). Outline was already drawn
+    everywhere; only the cover had no button for it.
+  - **Drawn in three places:** `wordArt.ts` (website print), `PageText` drawCurve and
+    fillOf (the app's screen and print), and the website's preview: glow and outline
+    as CSS, a two-colour fill or a curve on a canvas with print's own code
+    (`WordArtCanvas`). A curve draws all the shadows, then all the outlines, then all
+    the fills, so no letter lies over its neighbour's fill.
+  - **The buttons are the app's** (`WordArtControls`, under Font): Outline (none,
+    thin, medium, thick, any colour), Two colours, Glow, Shape. One panel at a time,
+    it stays open, and it scrolls into view. The Shadow button takes a glow off. No
+    words, no effects. While a finger moves a curved title it follows on its curve
+    (plain letters, until the finger lets go and the cover is drawn).
+  - **The spine stays plain:** no second colour, glow or curve, and a thick outline
+    is thin there.
+  - **Print:** seven new golden covers (`cover-wordart-*`) hold the app to the
+    website's print; all pass with the bars unchanged. A curved letter has its own
+    position bar (`MAX_CURVE_LETTER_DIFF_PX`, 0.1 px): its spot comes from measured
+    widths, where a straight line's needs no measuring. Every existing page and cover
+    still prints byte for byte as before (`websiteSame.mjs`, which skips the new
+    covers).
+  - **Seen, not changed:** plain small text on a cream spine or back panel can be a
+    little over the ink bar in the headless check: "megyprints.com" on a 6x4 photo
+    cover at 8.4% and Cinzel on a cream spine at 6.2% (bar 6%). Neither is WordArt.
+    The covers were moved off those cases, so nothing holds them yet.
+  - **On the emulator's native Skia (`npm run golden:phone`, build of this code):**
+    184 of 185 pass, the seven WordArt covers among them. The one failure is
+    `cover-86-old-form` text 1 at 17.8%, the known one, same number.
+  - **Walked on the emulator:** each effect on the cover screen, mixed, with the panel
+    open; a curved title dragged and saved in the album (`cover_front`); shown in the
+    Preview; "Too long" on a curve with "Make it fit". The website's real `PageView`
+    in Chromium draws each effect. The Text tab gives up "Pick 1 photo" and the back
+    cover's line: on a 720×1280 phone the controls had almost no room.
+- **Version 2.0.7, code 107.**
+
+### Release notes 2.0.7 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Edit text keeps your page in view, so you see the words change
+    • Font and colour lists stay open, so you can try each one
+    • Change layout stays open while you try each layout
+    • New cover title effects: outline, two colours, glow, and arch, smile or wave
+
+285 characters.
+
+### After 2.0.7: Edit text's bottom row cut off on its side (2026-11-06)
+
+The owner, on 2.0.7 on his S25, on its side with a three-line caption and the colour
+list open: "The test editor is cut at the bottom." The list's height was worked out
+from the screen less a one-line typing box (`SIDE_ROWS`), so each extra line of words
+pushed the format bar down off the screen. Reproduced on the 2.0.7 Play APK on the
+emulator at 1080×2340, density 450.
+
+- **Fix, on its side only:** the list takes what is left under the box, however tall
+  the box is (`flexShrink`), and the bar keeps its size. The typing box gets shorter
+  when room is short, down to two whole lines, and scrolls. Upright is unchanged: the
+  page gives way there.
+- **Measured on the same screen with the same words:** the bar sits at the same place
+  (832 to 1012 of 1080) with no list, the colour list, Any color and the font list.
+  Also at 720×1280, density 320. Upright, the bar stays on screen with both lists.
+- **Seen, not changed:**
+  - The emulator's keyboard is very tall on its side and leaves about 135 points, so
+    the bar is behind the keyboard while typing. A tap on the page hides the keyboard.
+  - With "too long" showing and a list open, the list has about one row. It scrolls,
+    and "Make it fit" gives the room back.
+- **Testing note:** a swipe that starts near the screen's edge is Android's back
+  gesture, which keeps the words and closes the editor. Start a swipe further in.
+- In no build yet: not in the 2.0.7 file uploaded on 2026-11-05.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

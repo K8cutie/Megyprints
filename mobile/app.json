@@ -2,14 +2,14 @@
   "expo": {
     "name": "Megy Prints 2.0 (dev)",
     "slug": "megyprints-2",
-    "version": "2.0.6",
+    "version": "2.0.7",
     "scheme": "megyprints-dev",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.megyprints.app.dev",
-      "versionCode": 106,
+      "versionCode": 107,
       "adaptiveIcon": {
         "backgroundColor": "#B85C38",
         "foregroundImage": "./assets/android-icon-foreground.png"

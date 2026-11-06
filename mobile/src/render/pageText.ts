@@ -44,8 +44,8 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { SkCanvas, SkPaint, SkParagraph, SkTypefaceFontProvider, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
-import { BlurStyle, FontSlant, FontWeight, PaintStyle, StrokeCap, StrokeJoin, TextAlign } from '@shopify/react-native-skia/lib/commonjs/skia/types';
-import { wordArtShadow, TEXT_LINE_HEIGHT, type TextMeasurer, type WordArtStyle } from '@web/pages/builder/wordArtRules';
+import { BlurStyle, FontSlant, FontWeight, PaintStyle, StrokeCap, StrokeJoin, TextAlign, TileMode } from '@shopify/react-native-skia/lib/commonjs/skia/types';
+import { curveCentreX, curveGlyphs, wordArtShadow, TEXT_LINE_HEIGHT, WORDART_GLOW_PASSES, type TextMeasurer, type WordArtCurve, type WordArtStyle } from '@web/pages/builder/wordArtRules';
 import { BUNDLED_FONTS, fontFileFor, paragraphFamilies, type BundledFont } from './fontTable';
 import { middleToBaseline, readFontMetrics, type FontFileMetrics } from './fontMetrics';
 import { isCanvasKit } from './surfaces';
@@ -317,17 +317,77 @@ export class PageText {
       p.setStrokeJoin(StrokeJoin.Round);
       p.setStrokeWidth(strokeW);
     };
-    if (sh) {
-      // The shadow is cast once: by the outline when there is one.
-      const blur = sh.blur * scale;
-      const o = PageText.pageOffset(canvas, sh.offsetX * scale, sh.offsetY * scale);
-      canvas.save();
-      canvas.translate(o.x, o.y);
-      this.inked(canvas, text, x, middleY, look, align, sh.color, alpha, (p) => { if (outline) stroke(p); this.blurred(p, blur); }, 'shadow');
-      canvas.restore();
+    const fill = this.fillOf(color, s, middleY, look.size);
+    // A glow is cast WORDART_GLOW_PASSES times, each with its letters over it,
+    // as a canvas draws a shadow and its letters together (wordArt.ts).
+    for (let i = 0; i < (s.glow ? WORDART_GLOW_PASSES : 1); i++) {
+      if (i > 0) {
+        if (outline) this.inked(canvas, text, x, middleY, look, align, s.outlineColor as string, alpha, stroke, 'outline');
+        else this.inked(canvas, text, x, middleY, look, align, color, alpha, fill, 'fill');
+      }
+      if (sh) {
+        // The shadow is cast once: by the outline when there is one.
+        const blur = sh.blur * scale;
+        const o = PageText.pageOffset(canvas, sh.offsetX * scale, sh.offsetY * scale);
+        canvas.save();
+        canvas.translate(o.x, o.y);
+        this.inked(canvas, text, x, middleY, look, align, sh.color, alpha, (p) => { if (outline) stroke(p); this.blurred(p, blur); }, 'shadow');
+        canvas.restore();
+      }
     }
     if (outline) this.inked(canvas, text, x, middleY, look, align, s.outlineColor as string, alpha, stroke, 'outline');
-    this.inked(canvas, text, x, middleY, look, align, color, alpha, null, 'fill');
+    this.inked(canvas, text, x, middleY, look, align, color, alpha, fill, 'fill');
+  }
+
+  /** The two-colour fill for a line whose middle is at `y` (wordArt.ts
+   *  fillGradient: top of the line to its bottom), or null for one colour. */
+  private fillOf(color: string, s: LineStyle, y: number, size: number): ((p: SkPaint) => void) | null {
+    if (!s.fillTo) return null;
+    const shader = this.Skia.Shader.MakeLinearGradient(
+      { x: 0, y: y - size / 2 }, { x: 0, y: y + size / 2 },
+      [this.Skia.Color(color), this.Skia.Color(s.fillTo)], null, TileMode.Clamp,
+    );
+    return (p) => { p.setShader(shader); };
+  }
+
+  /** The words on a curve (wordArt.ts drawCurvedWordArtText, in Skia): all the
+   *  letters' shadows, then their outlines, then their fills. */
+  drawCurve(canvas: SkCanvas, text: string, anchorX: number, middleY: number, look: TextLook, align: Align, curve: WordArtCurve, s: LineStyle, scale: number, onCover = false): void {
+    const { glyphs, width } = curveGlyphs(text, this.measurer(look), look.size, curve);
+    const cx = curveCentreX(anchorX, align, width);
+    const color = s.color || '#2D2D2D';
+    const outline = !!(s.outlineWidth && s.outlineColor);
+    const sh = wordArtShadow(s, onCover);
+    const stroke = (p: SkPaint) => {
+      p.setStyle(PaintStyle.Stroke);
+      p.setStrokeJoin(StrokeJoin.Round);
+      p.setStrokeWidth((s.outlineWidth as number) * scale);
+    };
+    const letters = (draw: (ch: string) => void) => glyphs.forEach((g) => {
+      canvas.save();
+      canvas.translate(cx + g.x, middleY + g.y);
+      canvas.rotate((g.angle * 180) / Math.PI, 0, 0);
+      draw(g.text);
+      canvas.restore();
+    });
+    if (sh) {
+      const blur = sh.blur * scale;
+      for (let i = 0; i < (s.glow ? WORDART_GLOW_PASSES : 1); i++) {
+        letters((ch) => {
+          const o = PageText.pageOffset(canvas, sh.offsetX * scale, sh.offsetY * scale);
+          canvas.save();
+          canvas.translate(o.x, o.y);
+          this.inked(canvas, ch, 0, 0, look, 'center', sh.color, 1, (p) => { if (outline) stroke(p); this.blurred(p, blur); }, 'shadow');
+          canvas.restore();
+          // A canvas draws a letter with its shadow (wordArt.ts).
+          if (outline) this.inked(canvas, ch, 0, 0, look, 'center', s.outlineColor as string, 1, stroke, 'outline');
+          else this.inked(canvas, ch, 0, 0, look, 'center', color, 1, null, 'fill');
+        });
+      }
+    }
+    if (outline) letters((ch) => this.inked(canvas, ch, 0, 0, look, 'center', s.outlineColor as string, 1, stroke, 'outline'));
+    const fill = this.fillOf(color, s, 0, look.size);
+    letters((ch) => this.inked(canvas, ch, 0, 0, look, 'center', color, 1, fill, 'fill'));
   }
 
   /** Underline drawn lines (wordArt.ts underlineTextLines): `firstY` is the

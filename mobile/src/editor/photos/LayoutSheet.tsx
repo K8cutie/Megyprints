@@ -6,17 +6,25 @@
    first. Each is a picture of THIS page on that layout, with these photos,
    drawn by the app's page renderer (the page a tap would make:
    relayPageOnTemplate, shared). A layout that can't hold every photo or
-   caption asks first where they go (LeftoverQuestion).
+   caption asks first where they go (LeftoverQuestion), and closes after the
+   answer.
+
+   Any other pick shows on the page and the sheet stays open to try another
+   (owner, 2026-11-05), short and undimmed like Mask (EditorSheet `live`). The
+   list and its pictures stay as the sheet opened: the tiles don't jump, nothing
+   is drawn again, and each tile is what a tap gives, because each try starts from
+   that same page (actions.ts tryLayout). The page's first layout brings it back
+   as it was, and all the tries are one step of Undo.
 
    An album size can have 50+ layouts: the grid is a list that draws only the
    pictures near the screen (FlatList), after the page being edited
    (PRIORITY.thumbnail), and a picture not drawn yet when it scrolls away or
    the sheet closes is never drawn (usePagePicture drops it).
    ══════════════════════════════════════════════════════════════════════════ */
-import { useContext, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useContext, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { ALBUM_SIZES, type PageTemplate } from '@web/pages/builder/types';
+import { ALBUM_SIZES, type AlbumPage, type PageTemplate } from '@web/pages/builder/types';
 import { relayPageOnTemplate } from '@web/pages/builder/useBuilderState';
 import { memoriesOn } from '@web/pages/builder/generateAlbum';
 import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
@@ -24,18 +32,20 @@ import { Button } from '../../components/Button';
 import { colors, space } from '../../lib/theme';
 import { EditorSheet, SheetPlacement, useSheetBodyWidth } from '../core/EditorSheet';
 import type { EditorContext, SheetProps } from '../registry';
-import { applyLayout, chooseLayout, layoutChoices, photosHeld, type LayoutAsk } from './actions';
+import { applyLayout, layoutChoices, photosHeld, tryLayout, type LayoutAsk } from './actions';
 import { LAYOUT_CURRENT, LAYOUT_MEMORY_NOTE, LAYOUT_NONE, LAYOUT_TITLE, leftoverWords } from './words';
 
-const COLUMNS = 2;
+/** Across the short sheet upright, so more layouts show at once; two in the side panel. */
+const COLUMNS_UPRIGHT = 3;
+const COLUMNS_SIDE = 2;
 const GAP = 12;
 /** A tile's padding and border, both sides: every tile is as wide as its
  *  picture plus this, so a long layout name is cut short, never widening it. */
 const TILE_EDGE = 12;
 
-/** One layout, as this page would look on it. */
-function LayoutThumb({ ctx, t, width, height }: { ctx: EditorContext; t: PageTemplate; width: number; height: number }) {
-  const page = useMemo(() => relayPageOnTemplate(ctx.page, t), [ctx.page, t]);
+/** One layout, as the page the sheet opened on would look on it. */
+function LayoutThumb({ ctx, start, t, width, height }: { ctx: EditorContext; start: AlbumPage; t: PageTemplate; width: number; height: number }) {
+  const page = useMemo(() => (t.id === start.templateId ? start : relayPageOnTemplate(start, t)), [start, t]);
   const px = Math.min(600, Math.round(width * PixelRatio.get()));
   const picture = usePagePicture(ctx.text, { page, pageIndex: ctx.pageIndex, albumSize: ctx.builder.albumSize, photos: ctx.builder.uploadedPhotos, width: px }, PRIORITY.thumbnail);
   return (
@@ -49,20 +59,27 @@ function LayoutThumb({ ctx, t, width, height }: { ctx: EditorContext; t: PageTem
 
 export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
   const [asking, setAsking] = useState<LayoutAsk | null>(null);
-  const { height: screenH } = useWindowDimensions();
   const room = useSheetBodyWidth();
   const onItsSide = useContext(SheetPlacement) === 'side';
-  const layouts = layoutChoices(ctx);
+  const columns = onItsSide ? COLUMNS_SIDE : COLUMNS_UPRIGHT;
+  // As the sheet opened (see the top of this file).
+  const [start] = useState(ctx.page);
+  const [layouts] = useState(() => layoutChoices(ctx));
+  const tried = useRef(false);
+  // "Choose another layout" comes back to the same place in the list, not its top.
+  const listY = useRef(0);
+  const openAtY = useMemo(() => listY.current, [asking]); // eslint-disable-line react-hooks/exhaustive-deps
   const current = ctx.page.templateId;
   // A video memory only ever sits on a full-page photo: say why there are no more.
-  const hasMemory = memoriesOn(ctx.page).length > 0;
+  const hasMemory = memoriesOn(start).length > 0;
   const size = ALBUM_SIZES.find((s) => s.preset === ctx.builder.albumSize) ?? ALBUM_SIZES[1];
-  const tileW = Math.floor((room - GAP * (COLUMNS - 1)) / COLUMNS) - TILE_EDGE;
+  const tileW = Math.floor((room - GAP * (columns - 1)) / columns) - TILE_EDGE;
   const tileH = Math.round(tileW * (size.height / size.width));
 
   const choose = (t: PageTemplate) => {
-    const ask = chooseLayout(ctx, t);
-    if (ask) setAsking(ask); else close();
+    if (t.id === current) return; // Already on it.
+    const ask = tryLayout(ctx, start, t, !tried.current);
+    if (ask) setAsking(ask); else tried.current = true;
   };
   const apply = (leftover: 'new-page' | 'leave-out') => {
     if (!asking) return;
@@ -73,7 +90,7 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
   const memoryNote = hasMemory ? <Text style={styles.note} testID="photos-layout-memory">{LAYOUT_MEMORY_NOTE}</Text> : null;
   const onlyCurrent = layouts.length === 1 && layouts[0].id === current && !hasMemory;
   return (
-    <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll={!!asking || layouts.length === 0} list={!asking && layouts.length > 0} testID="photos-layout-sheet">
+    <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll={!!asking || layouts.length === 0} list={!asking && layouts.length > 0} live={!asking} testID="photos-layout-sheet">
       {asking ? (
         <Leftover ask={asking} onNewPage={() => apply('new-page')} onLeaveOut={() => apply('leave-out')} onBack={() => setAsking(null)} />
       ) : layouts.length === 0 ? (
@@ -83,10 +100,15 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
         </>
       ) : (
         <FlatList
+          key={columns}
           data={layouts}
+          extraData={current}
           keyExtractor={(t) => t.id}
-          numColumns={COLUMNS}
-          style={onItsSide ? styles.fill : { maxHeight: Math.round(screenH * 0.62) }}
+          numColumns={columns}
+          style={onItsSide ? styles.fill : undefined}
+          contentOffset={{ x: 0, y: openAtY }}
+          onScroll={(e) => { listY.current = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={64}
           columnWrapperStyle={styles.row}
           contentContainerStyle={styles.list}
           initialNumToRender={6}
@@ -101,7 +123,7 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
               <Pressable accessibilityRole="button" accessibilityLabel={isCurrent ? `${t.name}, current layout` : t.name}
                 accessibilityState={{ selected: isCurrent }} onPress={() => choose(t)} testID={`photos-layout-${t.id}`}
                 style={({ pressed }) => [styles.tile, { width: tileW + TILE_EDGE }, isCurrent && styles.tileNow, pressed && styles.pressed]}>
-                <LayoutThumb ctx={ctx} t={t} width={tileW} height={tileH} />
+                <LayoutThumb ctx={ctx} start={start} t={t} width={tileW} height={tileH} />
                 <Text numberOfLines={1} style={[styles.name, isCurrent && styles.nameNow]}>{isCurrent ? LAYOUT_CURRENT : t.name}</Text>
               </Pressable>
             );

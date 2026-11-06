@@ -41,13 +41,13 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fontName } from '@web/pages/builder/fontCatalog';
 import { textColorName } from '@web/pages/builder/textColors';
 import { ALBUM_SIZES, bgCoverFit, type AlbumPage } from '@web/pages/builder/types';
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
-import { WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
+import { curveGlyphs, WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
 import { Button } from '../../components/Button';
 import { CoverPhotoGrid } from '../../components/CoverPhotoGrid';
 import { useBuilder } from '../../builder/BuilderProvider';
@@ -69,6 +69,7 @@ import { FontListSheet } from '../text/FontPicker';
 import { fontStore } from '../text/fonts/appFonts';
 import { catalogFace } from '../text/fonts/fontSources';
 import { Slider } from './Slider';
+import { WordArtControls } from './WordArtControls';
 import * as W from './words';
 
 type Tab = 'background' | 'text';
@@ -147,6 +148,9 @@ function Toggle({ label, on, onPress, a11y, testID }: { label: string; on: boole
 export default function CoverScreen() {
   const { builder, platform, text } = useBuilder();
   const { width: screenW, height: screenH } = useWindowDimensions();
+  // An effect's panel opens under the fold of the controls: it is brought into view.
+  const controls = useRef<ScrollViewInstance>(null);
+  const effectsY = useRef(0);
   const latest = useRef(builder);
   latest.current = builder;
 
@@ -288,8 +292,14 @@ export default function CoverScreen() {
     const rect = titleRect ?? (box ? { x: box.baseX + title.offsetX, y: box.baseY + title.offsetY, w: box.w, h: box.h } : null);
     const k = coverW / getCanvasDimensions(builder.albumSize).width;
     const ui = fontStore.uiFont(title.fontFamily, title.bold, title.italic);
+    const shownSize = Math.max(6, title.fontSize * k);
+    // Words on a curve follow the finger on their curve, letter by letter.
+    const curved = title.curve && text
+      ? curveGlyphs(title.text, text.measurer({ family: title.fontFamily, size: shownSize, bold: title.bold, italic: title.italic }), shownSize, title.curve)
+      : null;
     const titleView = rect && title.text.trim() && (photo || movingTitle) ? {
       rect, text: title.text, ghost: movingTitle,
+      letters: curved ? { size: shownSize, width: curved.width, glyphs: curved.glyphs } : null,
       style: {
         fontFamily: ui.fontFamily, fontWeight: ui.fontWeight, fontStyle: ui.fontStyle, color: title.color,
         fontSize: Math.max(6, title.fontSize * k), lineHeight: Math.max(8, title.fontSize * k * 1.2), textAlign: title.alignment,
@@ -310,7 +320,8 @@ export default function CoverScreen() {
   return (
     <View style={styles.page}>
       <Stack.Screen options={HEADER} />
-      <Text style={styles.sub} testID="cover-one-photo">{W.ONE_PHOTO}</Text>
+      {/* The Text tab gives this line's room, and the back cover's, to the controls. */}
+      {tab === 'background' && <Text style={styles.sub} testID="cover-one-photo">{W.ONE_PHOTO}</Text>}
       {/* The website's order since #235: the tabs, the photos, then the cover. */}
       <View style={styles.tabs} accessibilityRole="tablist">
         {(['background', 'text'] as const).map((t) => (
@@ -334,10 +345,10 @@ export default function CoverScreen() {
         <Text style={styles.caption}>{W.FRONT_COVER}</Text>
         {picture.notDrawn.length > 0 && <Text style={styles.small} testID="cover-not-drawn">{NOT_DRAWN_LINE}</Text>}
         {blank && <Text style={styles.warnLine} accessibilityLiveRegion="polite" testID="cover-blank">{BLANK_COVER_MESSAGE}</Text>}
-        <Text style={styles.small}>{W.BACK_NOTE}</Text>
+        {tab === 'background' && <Text style={styles.small}>{W.BACK_NOTE}</Text>}
       </View>
 
-      <ScrollView style={styles.controls} contentContainerStyle={styles.controlsBody} keyboardShouldPersistTaps="handled" scrollEnabled={!sliding}>
+      <ScrollView ref={controls} style={styles.controls} contentContainerStyle={styles.controlsBody} keyboardShouldPersistTaps="handled" scrollEnabled={!sliding}>
         {tab === 'background' ? (
           <>
             <Text style={styles.label}>{W.COLOUR}</Text>
@@ -387,6 +398,12 @@ export default function CoverScreen() {
               <Text style={styles.fontBoxText} numberOfLines={1}>{fontName(title.fontFamily)}</Text>
               <Text style={styles.chevron}>▾</Text>
             </Pressable>
+
+            {title.text.trim() ? (
+              <View onLayout={(e) => { effectsY.current = e.nativeEvent.layout.y; }}>
+                <WordArtControls builder={builder} title={title} onOpen={() => controls.current?.scrollTo({ y: effectsY.current, animated: true })} />
+              </View>
+            ) : null}
 
             <Text style={styles.label}>{W.COLOUR}</Text>
             <TextColourPicker value={title.color} onChange={(hex) => setTitleColour(builder, hex)} testID="cover-title-color" />

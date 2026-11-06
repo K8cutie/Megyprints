@@ -50,6 +50,18 @@ export const ITALIC = 'Italic';
 export const SHADOW = 'Shadow';
 /** CoverEditor.tsx: the Shadow button's title. */
 export const SHADOW_HINT = 'Shadow under the words';
+/** APP: WordArt on the title (owner, 2026-11-05); the website draws it and has no buttons for it. */
+export const EFFECTS = 'Effects';
+export const OUTLINE = 'Outline';
+export const TWO_COLOURS = 'Two colours';
+export const GLOW = 'Glow';
+export const SHAPE = 'Shape';
+export const NONE = 'None';
+export const OUTLINE_SIZES = { thin: 'Thin', medium: 'Medium', thick: 'Thick' } as const;
+export const OUTLINE_COLOUR = 'Outline colour';
+export const TWO_COLOURS_HINT = 'The words fade from your colour to this one.';
+export const GLOW_HINT = 'A soft light around the words, in place of the shadow.';
+export const SHAPES = { straight: 'Straight', arch: 'Arch', smile: 'Smile', wave: 'Wave' } as const;
 export const SIZE = 'Size';
 export const sizeLine = (px: number) => `${px}px`;
 /** CoverEditor.tsx (as a dialog): the one way out. */

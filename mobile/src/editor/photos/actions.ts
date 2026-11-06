@@ -6,7 +6,8 @@
    on the website. The sheets and buttons (index.ts and its .tsx files) only
    call these, and the tests call them the same way.
    ══════════════════════════════════════════════════════════════════════════ */
-import type { PageTemplate } from '@web/pages/builder/types';
+import type { AlbumPage, PageTemplate } from '@web/pages/builder/types';
+import { layoutChangeLeftovers } from '@web/pages/builder/useBuilderState';
 import { findPhotoSlot, placedPhotoPages, swapNotice } from '@web/pages/builder/slotSwap';
 import { blankPagePlan, deletedBlankNote } from '@web/pages/builder/blankPages';
 import { MIN_ALBUM_PAGES } from '@web/pages/builder/densities';
@@ -147,16 +148,18 @@ export function layoutChoices(ctx: EditorContext): PageTemplate[] {
 
 export interface LayoutAsk { t: PageTemplate; photos: number; captions: number }
 
-/** LayoutPicker choose: a layout that takes nothing off the page is applied
- *  at once; one that would asks first (returned). */
-export function chooseLayout(ctx: EditorContext, t: PageTemplate): LayoutAsk | null {
-  const loses = ctx.builder.layoutChangeLoses(t.id);
-  if (loses.photos === 0 && loses.captions === 0) {
-    ctx.builder.applyPageLayout(t.id);
+/** LayoutPicker choose, in a sheet that stays open to try another (owner,
+ *  2026-11-05): a layout that takes nothing off the page is tried at once, from
+ *  the page as the sheet opened (`start`; the builder's tryPageLayout); one that
+ *  would asks first (returned). */
+export function tryLayout(ctx: EditorContext, start: AlbumPage, t: PageTemplate, firstTry: boolean): LayoutAsk | null {
+  const { photos, captions } = layoutChangeLeftovers(start, t);
+  if (photos.length === 0 && captions === 0) {
+    ctx.builder.tryPageLayout(start, t.id, firstTry);
     ctx.select(null);
     return null;
   }
-  return { t, ...loses };
+  return { t, photos: photos.length, captions };
 }
 
 /** LayoutPicker apply: after the question, photos the layout can't hold go
