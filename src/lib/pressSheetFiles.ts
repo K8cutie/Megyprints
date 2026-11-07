@@ -110,7 +110,9 @@ export function stackHowTo(piles: number): string {
 }
 
 /** What to tell the operator about the album sheets (sheet count, blank
- *  sides, and a warning if the file and the order disagree). */
+ *  sides, and a warning if the file and the order disagree). A file with MORE
+ *  pages than the order was priced for never gets here: imposeAlbumSheets
+ *  refuses it (unpaidPagesMessage). */
 function sheetsNote(o: PrintOrder, plan: { sheets: number; pageCount: number; layout: { leavesPerSheet: number } }, pageOne: PageOneSide): string {
   const note = `${plan.sheets} sheets, both sides · ${stackHowTo(plan.layout.leavesPerSheet)} · ${blankSidesNote(plan.pageCount, pageOne)}`;
   return plan.pageCount === o.page_count
@@ -123,7 +125,7 @@ export async function downloadAlbumSheets(o: PrintOrder): Promise<string> {
   const size = sizeOf(o);
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { imposeAlbumSheets } = await pressTools();
-  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, canvasTextPainter());
+  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, canvasTextPainter(), o.page_count);
   saveFile(bytes, `megyprints-${o.order_number}-sheets.pdf`);
   return sheetsNote(o, plan, pageOne);
 }
@@ -188,7 +190,7 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { imposeAlbumSheets, imposeCoverSheet } = await pressTools();
   const { pdfToJpegs } = await jpegTools();
-  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, text);
+  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, text, o.page_count);
   const total = plan.sides.length + 1;
   const say = (done: number) => progress(`Making the JPEG pictures: ${done} of ${total}…`);
   say(0);
@@ -218,7 +220,7 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
 export async function downloadPrintFile(o: PrintOrder): Promise<string> {
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { cleanPrintFile } = await pressTools();
-  saveFile(await cleanPrintFile(src, 'print file'), `megyprints-${o.order_number}.pdf`);
+  saveFile(await cleanPrintFile(src, 'print file', { pages: o.page_count, order: o.order_number }), `megyprints-${o.order_number}.pdf`);
   return 'Print PDF: one page per album page';
 }
 
