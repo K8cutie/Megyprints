@@ -4182,6 +4182,23 @@ potential risks": words stop at the safe print area.
   an album with placed words there before 2.0 is merged doesn't move them into a caption
   box. The live website still prints a curve or a second colour on them plain.
 
+## 2.0.8 (code 108): 2026-11-07
+
+Owner: "Build .8 now ill upload it later". In it: Edit text's bottom row on its side
+(above, "After 2.0.7") and words on a photo with WordArt (above), PR #276 stacked on
+#273. Built from the branch `feat/port-words-on-photos`.
+
+### Release notes 2.0.8 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Edit text no longer cuts off its bottom row when your phone is sideways
+    New:
+    • Add text on any photo, on your pages and your cover
+    • Effects for all your words: outline, two colours, glow, shadow, and arch, smile or wave
+    • Words stop at a dotted line, so nothing is cut off when your album is trimmed
+
+324 characters.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
