@@ -47,6 +47,29 @@ const MARK_GAP = 1 / 16;
 /** No album gets near this; a file past it is refused. */
 export const MAX_PRINT_PAGES = 600;
 
+/** The pages an order was priced for, and its number for the message. */
+export type PaidPages = { pages: number | null | undefined; order: string };
+
+/**
+ * Why a print file can't be printed for its order: it has MORE pages than the
+ * order was priced for. The database prices the order from the album saved to
+ * the account (orders.page_count, 0055); the print file is made on the
+ * customer's phone. A phone that sent a longer file than the album it ordered
+ * would get pages nobody paid for. Fewer pages cost the shop nothing, so the
+ * console only notes them. Null when the file is fine, or the order has no
+ * page count to go by.
+ */
+export function unpaidPagesMessage(filePages: number, paid: PaidPages | null | undefined): string | null {
+  const n = paid?.pages;
+  if (!n || n < 1 || filePages <= n) return null;
+  return `Don't print ${paid.order} yet: its print file has ${filePages} pages, but the order was priced for ${n}. Ask the customer about the ${filePages - n} extra ${filePages - n === 1 ? 'page' : 'pages'} first.`;
+}
+
+function refuseUnpaidPages(filePages: number, paid: PaidPages | null | undefined): void {
+  const why = unpaidPagesMessage(filePages, paid);
+  if (why) throw new Error(why);
+}
+
 /** Sheet inches (origin top-left) → PDF points (origin bottom-left). */
 const px = (xIn: number) => xIn * PT;
 const py = (yIn: number) => SHEET_H - yIn * PT;
@@ -170,10 +193,12 @@ async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Pro
 
 /** The customer's print file as the shop gets it from "Print PDF": the same
  *  pages, with no font lists and nothing but the pictures (a fresh file, so
- *  the old font objects aren't carried along unused). */
-export async function cleanPrintFile(src: ArrayBuffer | Uint8Array, what: 'print file' | 'cover file'): Promise<Uint8Array> {
+ *  the old font objects aren't carried along unused). `paid`: the print
+ *  file's order, refused when the file has more pages than it paid for. */
+export async function cleanPrintFile(src: ArrayBuffer | Uint8Array, what: 'print file' | 'cover file', paid?: PaidPages): Promise<Uint8Array> {
   const { doc, pages } = await loadCustomerPdf(src, what);
   if (what === 'print file' && pages.length > MAX_PRINT_PAGES) throw new Error(`This print file has ${pages.length} pages — more than any album. Ask the customer to order again.`);
+  if (what === 'print file') refuseUnpaidPages(pages.length, paid);
   const out = await PDFDocument.create();
   // The page-1 mark stays: the console's sheets read it (printFilePageOne).
   let keywords = '';
@@ -211,14 +236,16 @@ function sourceBleed(wPt: number, hPt: number, size: AlbumSizePreset): number {
 /**
  * Lay the order's page PDF out on press sheets. `label` goes on every sheet
  * (the order number); `text` draws it (no fonts). Throws with a plain message
- * if the file doesn't match the album size.
+ * if the file doesn't match the album size, or (`paidPages`, the order's
+ * page count) has more pages than the order was priced for.
  */
-export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string, text: TextPainter): Promise<ImposeResult> {
+export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string, text: TextPainter, paidPages?: number | null): Promise<ImposeResult> {
   const { doc, pages } = await loadCustomerPdf(src, 'print file');
   const pageOne = printFilePageOne(doc);
   // A page count no album has is a bad file, not a job to lay out (and would
   // only lock up this tab).
   if (pages.length > MAX_PRINT_PAGES) throw new Error(`This print file has ${pages.length} pages — more than any album. Ask the customer to order again.`);
+  refuseUnpaidPages(pages.length, { pages: paidPages, order: orderLabel });
   const first = pages[0].getSize();
   const srcBleed = sourceBleed(first.width, first.height, size);
   const { trimW, trimH } = trimInches(size);
