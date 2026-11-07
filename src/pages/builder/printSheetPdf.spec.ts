@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import type { AlbumSizePreset, CoverType } from './types';
 import { trimInches, sheetPlan } from './printSheet';
 import { coverWrapGeometry } from './coverGeometry';
-import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, PIECE_NUMBER, SIDE_CUT_LINE_IN, type TextPainter } from './printSheetPdf';
+import { imposeAlbumSheets, imposeCoverSheet, pressTestSheet, printFilePageOne, cleanPrintFile, unpaidPagesMessage, MAX_PRINT_PAGES, MAX_PRINT_FILE_BYTES, PIECE_NUMBER, SIDE_CUT_LINE_IN, type TextPainter } from './printSheetPdf';
 import { PAGE_ONE_RIGHT_MARK } from './binding';
 
 /** Words as pictures, as the console draws them (canvasTextPainter needs a
@@ -153,6 +153,24 @@ describe('press sheet PDFs', () => {
 
   it('refuses a print file with more pages than any album (it comes from the customer\'s device)', async () => {
     await expect(imposeAlbumSheets(await albumPdf('6x6', MAX_PRINT_PAGES + 1), '6x6', 'MP-BIG', T)).rejects.toThrow(/more than any album/);
+  });
+
+  it('refuses a print file with more pages than the order was priced for (the file comes from the phone, the price from the database)', async () => {
+    await expect(imposeAlbumSheets(await albumPdf('8x8', 44), '8x8', 'MP-2026-MORE', T, 40))
+      .rejects.toThrow("Don't print MP-2026-MORE yet: its print file has 44 pages, but the order was priced for 40. Ask the customer about the 4 extra pages first.");
+    await expect(cleanPrintFile(jsPdfAlbum('8x8', 41), 'print file', { pages: 40, order: 'MP-2026-MORE' }))
+      .rejects.toThrow(/has 41 pages, but the order was priced for 40\. Ask the customer about the 1 extra page first/);
+  });
+
+  it('prints the pages paid for, or fewer; an order with no page count is not held up', async () => {
+    expect((await imposeAlbumSheets(await albumPdf('8x8', 40), '8x8', 'MP-SAME', T, 40)).plan.pageCount).toBe(40);
+    expect((await imposeAlbumSheets(await albumPdf('8x8', 38), '8x8', 'MP-FEWER', T, 40)).plan.pageCount).toBe(38);
+    expect((await imposeAlbumSheets(await albumPdf('8x8', 44), '8x8', 'MP-OLD', T, null)).plan.pageCount).toBe(44);
+    expect((await PDFDocument.load(await cleanPrintFile(jsPdfAlbum('8x8', 40), 'print file', { pages: 40, order: 'MP-SAME' }))).getPageCount()).toBe(40);
+    // The cover file is one flat page: the album's page count isn't its business.
+    expect(await cleanPrintFile(jsPdfCover('8x8', 'softcover', 44), 'cover file', { pages: 40, order: 'MP-COVER' })).toBeInstanceOf(Uint8Array);
+    expect(unpaidPagesMessage(44, { pages: 0, order: 'MP-ZERO' })).toBeNull();
+    expect(unpaidPagesMessage(44, undefined)).toBeNull();
   });
 
   it('refuses a file bigger than any album before reading it', async () => {
