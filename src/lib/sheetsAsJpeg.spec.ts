@@ -62,7 +62,7 @@ function cover(pages: number, paper: CoverPaper = {}): ArrayBuffer {
 }
 
 const order = { id: 'o-45', copy_of_order_id: null, order_number: 'MP-2026-0045', album_size: '8x8', cover: 'softcover', material: 'matte', page_count: 45 } as const;
-/** The spine of that order's cover: 23 leaves of C2S 140 matte. */
+/** The spine of that order's cover: 23 leaves of C2S 120 matte. */
 const SPINE = { spineIn: spineWidthInches(45, 'softcover', 'matte') };
 let saved: { name: string; type: string; bytes: Uint8Array }[];
 beforeEach(() => {
@@ -169,32 +169,42 @@ describe('Sheets as JPEG', () => {
 
 /* THE SPINE (owner, 2026-10-22: "masmaganda kung kaya nya macompute kung gano
    kalaki yung spine", the thickness of all the paper together; "the paper to
-   be used is C2S140"). The console says it on every order, on the cover sheet
-   and in the zip. A cover file made before the paper was set was drawn for a
-   0.15 mm guess: it still prints, its fold marks on ITS spine, and the note
-   says what the pages will really stack to. */
+   be used is C2S140"; 2026-10-24: "our standard paper would be c2s 120"). The
+   console says it on every order, on the cover sheet and in the zip. A cover
+   file made before the paper was set was drawn for a 0.15 mm guess, or for
+   C2S 140 from 2026-10-22 to 24: it still prints, its fold marks on ITS
+   spine, and the note says what the pages will really stack to. */
 describe('the spine, in the console', () => {
-  it('every order says its spine: 45 pages = 23 leaves of C2S 140, matte 3.1 mm, glossy 2.8 mm', () => {
-    expect(orderSpine(order)).toBe('spine 3.1 mm (0.12 in)');
-    expect(orderSpine({ ...order, material: 'glossy' })).toBe('spine 2.8 mm (0.11 in)');
+  it('every order says its spine: 45 pages = 23 leaves of C2S 120, matte 2.6 mm, glossy 2.4 mm', () => {
+    expect(orderSpine(order)).toBe('spine 2.6 mm (0.10 in)');
+    expect(orderSpine({ ...order, material: 'glossy' })).toBe('spine 2.4 mm (0.09 in)');
     // An order with no finish recorded counts as matte (the thicker sheet).
-    expect(orderSpine({ ...order, material: null })).toBe('spine 3.1 mm (0.12 in)');
+    expect(orderSpine({ ...order, material: null })).toBe('spine 2.6 mm (0.10 in)');
     // Hardbound: the two boards (2.5 mm each) on top.
-    expect(orderSpine({ ...order, cover: 'hardboundLeather' })).toBe('spine 8.1 mm (0.32 in)');
+    expect(orderSpine({ ...order, cover: 'hardboundLeather' })).toBe('spine 7.6 mm (0.30 in)');
   });
 
   it('Cover sheet: the note says the spine of the cover file', async () => {
     files.store.set('o-45-cover.pdf', cover(45, { material: 'matte' }));
-    expect(await downloadCoverSheet(order)).toBe('Cover sheet: print one side only · spine 3.1 mm (0.12 in)');
+    expect(await downloadCoverSheet(order)).toBe('Cover sheet: print one side only · spine 2.6 mm (0.10 in)');
     files.store.set('o-45-cover.pdf', cover(45, { material: 'glossy' }));
-    expect(await downloadCoverSheet({ ...order, material: 'glossy' })).toBe('Cover sheet: print one side only · spine 2.8 mm (0.11 in)');
+    expect(await downloadCoverSheet({ ...order, material: 'glossy' })).toBe('Cover sheet: print one side only · spine 2.4 mm (0.09 in)');
   });
 
-  it('a cover file from before C2S 140: it still prints, and the note says what the pages stack to', async () => {
+  it('a cover file from before C2S 140 (the 0.15 mm guess): it still prints, and the note says what the pages stack to', async () => {
     files.store.set('o-45-cover.pdf', cover(45, { spineIn: spineForLeaf(45, 'softcover', LEGACY_LEAF_IN) }));
     expect(await downloadCoverSheet(order)).toBe(
-      'Cover sheet: print one side only · spine 3.5 mm (0.14 in). This cover was made before the paper was set to C2S 140: the pages on C2S 140 matte stack to about 3.1 mm (0.12 in)');
-    expect(coverSheetNote(order, SPINE.spineIn)).toBe('Cover sheet: print one side only · spine 3.1 mm (0.12 in)');
+      'Cover sheet: print one side only · spine 3.5 mm (0.14 in). This cover was made before the paper was set to C2S 120: the pages on C2S 120 matte stack to about 2.6 mm (0.10 in)');
+    expect(coverSheetNote(order, SPINE.spineIn)).toBe('Cover sheet: print one side only · spine 2.6 mm (0.10 in)');
+  });
+
+  it('a cover file drawn for C2S 140 (2026-10-22 to 24): it still prints, and the note says C2S 120 stacks thinner', async () => {
+    files.store.set('o-45-cover.pdf', cover(45, { spineIn: spineForLeaf(45, 'softcover', 0.134 / 25.4) }));
+    expect(await downloadCoverSheet(order)).toBe(
+      'Cover sheet: print one side only · spine 3.1 mm (0.12 in). This cover was made before the paper was set to C2S 120: the pages on C2S 120 matte stack to about 2.6 mm (0.10 in)');
+    files.store.set('o-45-cover.pdf', cover(45, { spineIn: spineForLeaf(45, 'softcover', 0.12 / 25.4) }));
+    expect(await downloadCoverSheet({ ...order, material: 'glossy' })).toBe(
+      'Cover sheet: print one side only · spine 2.8 mm (0.11 in). This cover was made before the paper was set to C2S 120: the pages on C2S 120 glossy stack to about 2.4 mm (0.09 in)');
   });
 
   it('a cover file for another page count is still refused', async () => {
@@ -208,7 +218,7 @@ describe('the spine, in the console', () => {
     await downloadSheetsAsJpeg(order);
     await settle();
     const howTo = new TextDecoder().decode(readZip(saved.at(-1)!.bytes).at(-1)!.data);
-    expect(howTo).toContain('the dashed marks are the spine edges (spine 3.1 mm (0.12 in)).');
+    expect(howTo).toContain('the dashed marks are the spine edges (spine 2.6 mm (0.10 in)).');
   });
 
   it('the console shows it on every order', async () => {

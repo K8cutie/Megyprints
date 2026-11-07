@@ -46,7 +46,7 @@ const coverOf = (o: Pick<PrintOrder, 'cover'>) => (o.cover || 'softcover') as Co
 /** The paper finish picked at checkout; anything but glossy is matte. */
 const finishOf = (o: Pick<PrintOrder, 'material'>): MaterialType => (o.material === 'glossy' ? 'glossy' : 'matte');
 
-/** How thick this book's spine is: its leaves of C2S 140 in the picked
+/** How thick this book's spine is: its leaves of C2S 120 in the picked
  *  finish, stacked (plus the boards on a hardcover). */
 export function orderSpine(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>): string {
   return `spine ${spineLabel(spineWidthInches(o.page_count, coverOf(o), finishOf(o)))}`;
@@ -54,7 +54,8 @@ export function orderSpine(o: Pick<PrintOrder, 'cover' | 'material' | 'page_coun
 
 /** What to tell the operator after the cover sheet: its spine, and when the
  *  cover file was drawn for another spine than this paper makes (files from
- *  before C2S 140 was set), the spine the pages will really stack to. */
+ *  before C2S 120 was set: C2S 140 or the old 0.15 mm guess), the spine the
+ *  pages will really stack to. */
 export function coverSheetNote(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>, fileSpineIn: number): string {
   const note = `Cover sheet: print one side only · spine ${spineLabel(fileSpineIn)}`;
   const bookIn = spineWidthInches(o.page_count, coverOf(o), finishOf(o));

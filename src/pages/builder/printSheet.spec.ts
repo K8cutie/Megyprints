@@ -264,26 +264,26 @@ describe('covers on the sheet', () => {
     }
   });
 
-  it('runs out of printable length on a very thick 8.5x11 softcover (C2S 140 matte: 520 pages fit, 522 do not)', () => {
-    expect(coverFitsSheet('8.5x11', 'softcover', 520)).toBe(true);
-    expect(coverFitsSheet('8.5x11', 'softcover', 522)).toBe(false);
+  it('runs out of printable length on a very thick 8.5x11 softcover (C2S 120 matte: 606 pages fit, 608 do not)', () => {
+    expect(coverFitsSheet('8.5x11', 'softcover', 606)).toBe(true);
+    expect(coverFitsSheet('8.5x11', 'softcover', 608)).toBe(false);
   });
 
   it('tells checkout, in plain words, why a cover is missing', () => {
     expect(coverChoiceNote('8x8', 40, ['softcover', HARD])).toBeNull();
     expect(coverChoiceNote('8.5x11', 40, ['softcover'])).toBe('Hardbound is not available for 8.5×11 albums. The cover is too big for our printer.');
     expect(coverChoiceNote('8x8', 400, ['softcover'])).toBe('Hardbound is not available for an album with 400 pages. The cover is too big for our printer.');
-    expect(coverChoiceNote('8.5x11', 600, [])).toBe('This album has too many pages for our printer. Make it 520 pages or fewer.');
-    // Glossy C2S 140 is the thinner sheet: more pages fit under the same cover.
-    expect(coverChoiceNote('8.5x11', 600, [], { material: 'glossy' })).toBe('This album has too many pages for our printer. Make it 582 pages or fewer.');
+    expect(coverChoiceNote('8.5x11', 700, [])).toBe('This album has too many pages for our printer. Make it 606 pages or fewer.');
+    // Glossy C2S 120 is the thinner sheet: more pages fit under the same cover.
+    expect(coverChoiceNote('8.5x11', 700, [], { material: 'glossy' })).toBe('This album has too many pages for our printer. Make it 678 pages or fewer.');
     expect(coverChoiceNote('11.5x8', 40, [])).toBe('We can\'t print this album size right now.');
   });
 
   it('finds the most pages a cover can take', () => {
-    // The 8.5x11 flat softcover outgrows what prints at 260 leaves of C2S 140
-    // matte (0.134 mm), 291 of gloss (0.120 mm); its hardbound never fits.
-    expect(maxPagesForCover('8.5x11', 'softcover', MIN_PAGES)).toBe(520);
-    expect(maxPagesForCover('8.5x11', 'softcover', MIN_PAGES, { material: 'glossy' })).toBe(582);
+    // The 8.5x11 flat softcover outgrows what prints at 303 leaves of C2S 120
+    // matte (0.115 mm), 339 of gloss (0.103 mm); its hardbound never fits.
+    expect(maxPagesForCover('8.5x11', 'softcover', MIN_PAGES)).toBe(606);
+    expect(maxPagesForCover('8.5x11', 'softcover', MIN_PAGES, { material: 'glossy' })).toBe(678);
     expect(maxPagesForCover('8.5x11', HARD, MIN_PAGES)).toBeNull();
   });
 
