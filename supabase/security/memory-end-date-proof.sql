@@ -13,7 +13,7 @@
 --  Before applying 0060: one file = "begin;" + 0060 + this file without
 --  "begin;". Run as-is before 0060 to see the FAILs it fixes.
 --
---  Fixture: one customer, picked at run time (no ids in this public repo).
+--  Fixture: two customers, picked at run time (no ids in this public repo).
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
 
@@ -22,15 +22,21 @@ grant insert, select on proof_log to authenticated, anon;
 grant usage on sequence proof_log_n_seq to authenticated, anon;
 
 do $$
-declare v_a uuid;
+declare v_a uuid; v_b uuid;
 begin
   select u.id into v_a from auth.users u
    where not exists (select 1 from public.operator_roles r where lower(r.email) = lower(u.email))
      and not exists (select 1 from public.owner_accounts w where w.user_id = u.id)
    order by u.created_at limit 1;
-  if v_a is null then raise exception 'Need one fixture customer.'; end if;
+  select u.id into v_b from auth.users u
+   where u.id <> v_a
+     and not exists (select 1 from public.operator_roles r where lower(r.email) = lower(u.email))
+     and not exists (select 1 from public.owner_accounts w where w.user_id = u.id)
+   order by u.created_at limit 1;
+  if v_a is null or v_b is null then raise exception 'Need two fixture customers.'; end if;
   delete from public.qr_memories where code like 'zzend%';
   perform set_config('proof.a', v_a::text, true);
+  perform set_config('proof.b', v_b::text, true);
   perform set_config('proof.clip', 'https://example.supabase.co/storage/v1/object/public/memory-clips/zzendclip.mp4', true);
 end $$;
 
@@ -183,6 +189,63 @@ begin
   execute 'select count(*) from public.memory_terms where code like ''zzend%''' into n;
   insert into proof_log(line) values (case when n = 0 then 'PASS another account reads none of them' else 'FAIL another account reads ' || n end);
 end $$;
+-- ── 5. Another account takes the printed code (red team, 2026-11-07) ──
+set local role authenticated;
+do $$
+declare a uuid := current_setting('proof.a')::uuid; b uuid := current_setting('proof.b')::uuid;
+begin
+  perform pg_temp.as_user(a);
+  delete from public.qr_memories where code = 'zzendclip';
+  perform pg_temp.as_user(b);
+  begin
+    insert into public.qr_memories (code, user_id, destination) values ('zzendclip', b, current_setting('proof.clip'));
+    insert into proof_log(line) values ('FAIL another account took the code after it was deleted: ' || pg_temp.plays('zzendclip'));
+  exception when unique_violation then
+    insert into proof_log(line) values ('PASS another account can''t take the code (23505, the app makes a new one)');
+  end;
+  delete from public.qr_memories where code = 'zzendclip';  -- B's, if it got in
+  begin
+    insert into public.qr_memories (code, user_id, destination) values ('zzendclip', b, 'https://www.youtube.com/watch?v=zzproof2');
+    insert into proof_log(line) values ('FAIL another account took the code as a link');
+  exception when unique_violation then
+    insert into proof_log(line) values ('PASS ...not as a link either (23505)');
+  end;
+end $$;
+
+-- ── 6. The account is deleted: its kept dates stay, with no account on them ──
+reset role;
+do $$
+begin
+  -- what account deletion leaves: the memory row gone (delete_own_account),
+  -- the kept date with no account on it (on delete set null)
+  delete from public.qr_memories where code = 'zzendlink';
+  if to_regclass('public.memory_terms') is null then
+    insert into proof_log(line) values ('FAIL no kept end dates (memory_terms is missing)');
+    return;
+  end if;
+  insert into proof_log(line)
+  select case when c.confdeltype = 'n' then 'PASS deleting an account clears its id on its kept dates (on delete set null)'
+              else 'FAIL deleting an account: confdeltype ' || c.confdeltype::text end
+    from pg_constraint c
+   where c.conrelid = 'public.memory_terms'::regclass and c.contype = 'f';
+  execute 'update public.memory_terms set user_id = null where code = ''zzendlink''';
+end $$;
+set local role authenticated;
+do $$
+declare a uuid := current_setting('proof.a')::uuid; b uuid := current_setting('proof.b')::uuid;
+begin
+  foreach a in array array[a, b] loop
+    perform pg_temp.as_user(a);
+    begin
+      insert into public.qr_memories (code, user_id, destination) values ('zzendlink', a, current_setting('proof.clip'));
+      insert into proof_log(line) values ('FAIL a deleted account''s code was made again: ' || pg_temp.plays('zzendlink'));
+      delete from public.qr_memories where code = 'zzendlink';
+    exception when unique_violation then
+      insert into proof_log(line) values ('PASS a deleted account''s code can''t be made again (23505)');
+    end;
+  end loop;
+end $$;
+
 reset role;
 set local role anon;
 do $$

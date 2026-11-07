@@ -19,8 +19,9 @@
 --   1. memory_terms: the end date the database gave each memory code. Its
 --      first date when the row is made; then every date the database itself
 --      writes (apply_order_hosting_term, claim_tester_order, renew_memory).
---      It outlives the memory row; it goes with the account (on delete
---      cascade). Customers read their own; nobody but the database writes.
+--      It outlives the memory row and the account (the account's id is
+--      cleared). Customers read their own; nobody but the database writes.
+--      A code with a kept date can't be made again by another account.
 --   2. A customer's row for a code that has a kept date gets that date, on
 --      insert or when it turns into a video.
 --   3. A customer's row that is one of our hosted videos (its address names
@@ -38,9 +39,12 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. The kept end dates ══════
+-- user_id is cleared, not the row deleted, when the account goes: the row is
+-- then a code and a date (nothing about the person), and it keeps the code
+-- from being taken by another account for a fresh term (red team, 2026-11-07).
 create table if not exists public.memory_terms (
   code       text primary key,
-  user_id    uuid not null references auth.users(id) on delete cascade,
+  user_id    uuid null references auth.users(id) on delete set null,
   expires_at timestamptz not null,
   updated_at timestamptz not null default now()
 );
@@ -117,6 +121,17 @@ security definer
 set search_path = ''
 as $$
 begin
+  -- A code with a kept date belongs to the account that had it (or to nobody,
+  -- once that account is deleted). Another account making a row for it, after
+  -- the first deleted theirs, would start a fresh term on the same printed QR
+  -- (/m doesn't ask whose row it is). Refused as the duplicate it is: the app
+  -- already answers 23505 by making a new code. No database function inserts
+  -- memory rows, so this only ever stops a customer.
+  if tg_op = 'INSERT' and exists (
+       select 1 from public.memory_terms t
+        where t.code = new.code and t.user_id is distinct from new.user_id) then
+    raise exception 'This memory code is taken. Make a new one.' using errcode = 'unique_violation';
+  end if;
   if new.expires_at is null then
     return null;
   end if;
