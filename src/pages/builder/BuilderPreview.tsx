@@ -429,8 +429,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
               style={{
                 zIndex: 1, left: slotLeft, top: slotTop, width: slotW, height: slotH, overflow: 'hidden',
                 justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
+                // A curve isn't clipped to the frame (print's renderSlotText).
+                ...(st.curve ? { overflow: 'visible' } : {}),
               }}>
-              <span style={{
+              {needsWordArtCanvas(st) ? (
+                <WordArtCanvas text={st} boxW={slotW} boxH={slotH} scale={sx} align={align} onCover={!!coverMode} />
+              ) : <span style={{
                 // Wrapped inside print's margin (CAPTION_PAD_X), so it breaks where print does.
                 width: '100%', boxSizing: 'border-box', paddingLeft: slotW * CAPTION_PAD_X, paddingRight: slotW * CAPTION_PAD_X, textAlign: align as any,
                 fontFamily: st.fontFamily || 'serif', fontSize: (st.fontSize || 24) * sx,
@@ -438,7 +442,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(st, sx, coverMode),
-              }}>{st.text}</span>
+              }}>{st.text}</span>}
             </div>
           );
         }
@@ -562,7 +566,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           className={`absolute ${onTextTap ? 'cursor-pointer' : 'pointer-events-none'}`}
           onClick={onTextTap ? (e) => { e.stopPropagation(); onTextTap(t.id); } : undefined}
           style={{
-          zIndex: 3, left: t.x * sx, top: t.y * sy,
+          // Words placed by hand go on the page after its captions, so they print over them.
+          zIndex: t.placed ? 6 : 3, left: t.x * sx, top: t.y * sy,
           width: freeTextBoxWidth(t) * sx,
           transform: `rotate(${t.rotation || 0}deg) scale(${t.scaleX ?? 1}, ${t.scaleY ?? 1})`,
           transformOrigin: 'top left', fontFamily: t.fontFamily || 'serif',
@@ -571,10 +576,17 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           // Underline + 1.25 line rhythm, matching the Fabric editor and print —
           // free text was the one kind whose underline showed only in the editor.
           textDecoration: t.underline ? 'underline' : 'none', lineHeight: TEXT_LINE_HEIGHT,
+          // Lines typed apart stay apart, and a long word breaks, as print's wrap does.
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
           ...wordArtDomStyle(t, sx, coverMode),
-        }}>{t.text}</div>
+          // A two-colour fill or a curve is print's own drawing, on a canvas (words placed by hand).
+          ...(needsWordArtCanvas(t) ? { minHeight: (t.fontSize || 24) * sx * TEXT_LINE_HEIGHT } : {}),
+        }}>{needsWordArtCanvas(t) ? (
+          // A free text's canvas is as tall as its lines (WordArtCanvas measures them).
+          <WordArtCanvas text={t} boxW={freeTextBoxWidth(t) * sx} boxH={(t.fontSize || 24) * sx * TEXT_LINE_HEIGHT} scale={sx} align={t.alignment || 'center'} onCover={!!coverMode} free />
+        ) : t.text}</div>
       ))}
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
           faint tap hint. Tapping opens the text editor (onTextSlotTap). */}

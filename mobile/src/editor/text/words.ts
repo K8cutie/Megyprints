@@ -32,6 +32,41 @@ export const SIZE_MIN = 14;
 export const SIZE_MAX = 80;
 export const SIZE_STEP = 2;
 
+/* ── Only the app: WordArt (owner, 2026-11-05 on the cover title, 2026-11-07
+      on every word on a page). The website draws them and has no buttons. ── */
+export const EFFECTS = 'Effects';
+export const TWO_COLOURS = 'Two colours';
+export const GLOW = 'Glow';
+export const SHAPE = 'Shape';
+export const NONE = 'None';
+export const OUTLINE_SIZES = { thin: 'Thin', medium: 'Medium', thick: 'Thick' } as const;
+export const OUTLINE_COLOUR = 'Outline colour';
+export const TWO_COLOURS_HINT = 'The words fade from your colour to this one.';
+export const GLOW_HINT = 'A soft light around the words, in place of the shadow.';
+export const SHAPES = { straight: 'Straight', arch: 'Arch', smile: 'Smile', wave: 'Wave' } as const;
+
+/* ── Only the app: words placed by hand on a photo (owner, 2026-11-07:
+      "adding text on a photo is possible") ── */
+/** The button under a picked photo, on a page and on the cover. */
+export const ADD_TEXT = 'Add text';
+/** In Edit text, for words placed by hand: takes them off the page. */
+export const REMOVE = 'Remove';
+export const REMOVE_WORDS = 'Remove these words';
+/** Placed words too long for the page (they are never clipped to a box). */
+export const tooLongForPage = (canShrink: boolean) =>
+  `Too long for this page: part of it would be cut off in print. Shorten it${canShrink ? ', or make the text smaller' : ''}.`;
+/** Said after Done made them smaller so nothing is cut off. */
+export const madeSmaller = (size: number) => `The words are now size ${size}, so they fit the page.`;
+/** Done on words that fit at no size: the editor stays open with one of these. */
+export const CURVE_TOO_LONG = 'Too long to go on a curve here. Shorten the words, or pick Straight under Effects, Shape.';
+export const SHORTEN_FIRST = 'Shorten the words so they fit, then tap Done.';
+/** Said the first times placed words are tapped or added. */
+export const MOVE_WORDS_HINT = 'Drag the words to move them. Tap them to change them.';
+/** Said when a finger takes placed words to the safe print area's line. */
+export const SAFE_LINE = 'Words stop at the dotted line, so nothing is cut off when the album is trimmed.';
+/** The most a placed text holds. */
+export const PLACED_MAX_CHARS = 300;
+
 /* ── FontList.tsx ── */
 export const FONTS_LABEL = 'Fonts';
 

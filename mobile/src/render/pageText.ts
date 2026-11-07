@@ -352,7 +352,7 @@ export class PageText {
 
   /** The words on a curve (wordArt.ts drawCurvedWordArtText, in Skia): all the
    *  letters' shadows, then their outlines, then their fills. */
-  drawCurve(canvas: SkCanvas, text: string, anchorX: number, middleY: number, look: TextLook, align: Align, curve: WordArtCurve, s: LineStyle, scale: number, onCover = false): void {
+  drawCurve(canvas: SkCanvas, text: string, anchorX: number, middleY: number, look: TextLook, align: Align, curve: WordArtCurve, s: LineStyle, scale: number, onCover = false, alpha = 1): void {
     const { glyphs, width } = curveGlyphs(text, this.measurer(look), look.size, curve);
     const cx = curveCentreX(anchorX, align, width);
     const color = s.color || '#2D2D2D';
@@ -377,17 +377,17 @@ export class PageText {
           const o = PageText.pageOffset(canvas, sh.offsetX * scale, sh.offsetY * scale);
           canvas.save();
           canvas.translate(o.x, o.y);
-          this.inked(canvas, ch, 0, 0, look, 'center', sh.color, 1, (p) => { if (outline) stroke(p); this.blurred(p, blur); }, 'shadow');
+          this.inked(canvas, ch, 0, 0, look, 'center', sh.color, alpha, (p) => { if (outline) stroke(p); this.blurred(p, blur); }, 'shadow');
           canvas.restore();
           // A canvas draws a letter with its shadow (wordArt.ts).
-          if (outline) this.inked(canvas, ch, 0, 0, look, 'center', s.outlineColor as string, 1, stroke, 'outline');
-          else this.inked(canvas, ch, 0, 0, look, 'center', color, 1, null, 'fill');
+          if (outline) this.inked(canvas, ch, 0, 0, look, 'center', s.outlineColor as string, alpha, stroke, 'outline');
+          else this.inked(canvas, ch, 0, 0, look, 'center', color, alpha, null, 'fill');
         });
       }
     }
-    if (outline) letters((ch) => this.inked(canvas, ch, 0, 0, look, 'center', s.outlineColor as string, 1, stroke, 'outline'));
+    if (outline) letters((ch) => this.inked(canvas, ch, 0, 0, look, 'center', s.outlineColor as string, alpha, stroke, 'outline'));
     const fill = this.fillOf(color, s, 0, look.size);
-    letters((ch) => this.inked(canvas, ch, 0, 0, look, 'center', color, 1, fill, 'fill'));
+    letters((ch) => this.inked(canvas, ch, 0, 0, look, 'center', color, alpha, fill, 'fill'));
   }
 
   /** Underline drawn lines (wordArt.ts underlineTextLines): `firstY` is the

@@ -50,18 +50,15 @@ export const ITALIC = 'Italic';
 export const SHADOW = 'Shadow';
 /** CoverEditor.tsx: the Shadow button's title. */
 export const SHADOW_HINT = 'Shadow under the words';
-/** APP: WordArt on the title (owner, 2026-11-05); the website draws it and has no buttons for it. */
-export const EFFECTS = 'Effects';
-export const OUTLINE = 'Outline';
-export const TWO_COLOURS = 'Two colours';
-export const GLOW = 'Glow';
-export const SHAPE = 'Shape';
-export const NONE = 'None';
-export const OUTLINE_SIZES = { thin: 'Thin', medium: 'Medium', thick: 'Thick' } as const;
-export const OUTLINE_COLOUR = 'Outline colour';
-export const TWO_COLOURS_HINT = 'The words fade from your colour to this one.';
-export const GLOW_HINT = 'A soft light around the words, in place of the shadow.';
-export const SHAPES = { straight: 'Straight', arch: 'Arch', smile: 'Smile', wave: 'Wave' } as const;
+/** APP: WordArt on the title (owner, 2026-11-05); the website draws it and has no buttons for it.
+ *  The words part's own (text/WordArtControls, one source). */
+export { EFFECTS, OUTLINE, TWO_COLOURS, GLOW, SHAPE, NONE, OUTLINE_SIZES, OUTLINE_COLOUR, TWO_COLOURS_HINT, GLOW_HINT, SHAPES } from '../text/words';
+/** APP: words placed by hand on the cover (owner, 2026-11-07), and the list of them. */
+export { ADD_TEXT } from '../text/words';
+export const MORE_WORDS = 'More words';
+export const MORE_WORDS_HINT = 'Put more words anywhere on the cover. Drag them on the cover to move them.';
+/** The button for words already there (TalkBack reads it). */
+export const changeWords = (text: string) => `Change “${text}”`;
 export const SIZE = 'Size';
 export const sizeLine = (px: number) => `${px}px`;
 /** CoverEditor.tsx (as a dialog): the one way out. */

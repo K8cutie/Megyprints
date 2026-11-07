@@ -443,8 +443,9 @@ export class PageDrawer {
 
   private boxText(canvas: SkCanvas, item: BoxTextItem, onCover: boolean): void {
     const look = this.look(item.style, item.fontSize);
-    // On a curve: one line, not clipped to the box (print's renderTextElement).
-    if (item.source === 'caption' && item.style.curve) {
+    // On a curve: one line, not clipped to the box (print's renderTextElement,
+    // and renderSlotText for words in a photo frame).
+    if (item.style.curve) {
       this.text.drawCurve(canvas, item.style.text, item.anchorX, item.centerY, look, item.align, item.style.curve, item.style, item.scale, onCover);
       return;
     }
@@ -466,6 +467,13 @@ export class PageDrawer {
     if (item.rotation) canvas.rotate(item.rotation, 0, 0);
     canvas.scale(item.scaleX, item.scaleY);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
+    if (item.style.curve) {
+      // On a curve (words placed by hand): one line, its middle where a
+      // one-line straight text's middle is (print's free branch).
+      this.text.drawCurve(canvas, item.style.text, item.anchorX, step / 2, look, item.align, item.style.curve, item.style, item.scale, onCover, alpha);
+      canvas.restore();
+      return;
+    }
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.boxWidth);
     lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha, onCover));
     if (item.style.underline) {

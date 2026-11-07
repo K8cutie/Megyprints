@@ -18,7 +18,8 @@
                         the words, font, colour, size, alignment, Bold, Italic
                         and Shadow (on = no setting, off = false); "Make it
                         fit": { fontSize: fitsAt };
-     • move the title:  setBoxTextOffset(0, ox, oy), kept on the cover.
+     • move the title:  setBoxTextOffset(0, ox, oy), kept in the safe print
+                        area (0.25" in from the trim; owner, 2026-11-07).
    Nothing here edits a page object itself.
 
    ONLY THE COVER: the builder sends these to the cover only while its cover
@@ -31,11 +32,14 @@
    cover (test/editorUndo.test.ts pins it), so the cover screen shows no Undo
    or Redo, as the website's cover editor has none.
    ══════════════════════════════════════════════════════════════════════════ */
-import type { AlbumBackground, AlbumPage, TextElement, UploadedPhoto } from '@web/pages/builder/types';
+import type { AlbumBackground, AlbumPage, AlbumSizePreset, TextElement, UploadedPhoto } from '@web/pages/builder/types';
 import type { BuilderActions } from '@web/pages/builder/useBuilderState';
 import { getTemplateById } from '@web/pages/builder/pageTemplates';
 import { DEFAULT_TITLE_FONT } from '@web/pages/builder/fontCatalog';
-import { contrastOutline, type WordArtCurve } from '@web/pages/builder/wordArtRules';
+import { type WordArtCurve } from '@web/pages/builder/wordArtRules';
+import { wordsSafeArea } from '@web/pages/builder/freeWords';
+import { getCanvasDimensions } from '@web/pages/builder/layouts';
+import { outlineColourPatch, outlinePatch } from '../text/wordArtEdits';
 
 export type Align = 'left' | 'center' | 'right';
 
@@ -93,7 +97,7 @@ export const COVER_PAPER = '#FFFBF7';
 
 export type CoverBuilder = Pick<BuilderActions,
   'editScope' | 'coverFront' | 'setBoxText' | 'setBoxTextOffset' | 'setPageBackground' | 'setPageColor' |
-  'applyPageColorToAllPages' | 'setBackgroundCrop'>;
+  'applyPageColorToAllPages' | 'setBackgroundCrop'> & Partial<Pick<BuilderActions, 'albumSize'>>;
 
 /** The builder edits the cover now (its cover scope is on). */
 export function editsTheCover(b: Pick<BuilderActions, 'editScope'>): boolean {
@@ -206,18 +210,14 @@ export function toggleTitleShadow(b: CoverBuilder): boolean {
 
 /* ── WordArt: the app's own controls, on the fields every renderer draws ── */
 
-/** The outline's thicknesses, design px (half of it shows outside the letters). */
-export const OUTLINE_WIDTHS = { thin: 2, medium: 4, thick: 8 } as const;
+export { OUTLINE_WIDTHS } from '../text/wordArtEdits';
 
 /** No outline (0), or this thick. The first time, in the colour that stands out from the words. */
 export function setTitleOutline(b: CoverBuilder, width: number): boolean {
-  const t = coverTitleOf(b.coverFront);
-  return updateTitle(b, width > 0
-    ? { outlineWidth: width, outlineColor: t.outlineColor ?? contrastOutline(t.color) }
-    : { outlineWidth: undefined, outlineColor: undefined });
+  return updateTitle(b, outlinePatch(coverTitleOf(b.coverFront), width));
 }
 export function setTitleOutlineColour(b: CoverBuilder, outlineColor: string): boolean {
-  return updateTitle(b, { outlineColor, outlineWidth: coverTitleOf(b.coverFront).outlineWidth || OUTLINE_WIDTHS.medium });
+  return updateTitle(b, outlineColourPatch(coverTitleOf(b.coverFront), outlineColor));
 }
 /** The second colour of the fill, or none. */
 export const setTitleFillTo = (b: CoverBuilder, fillTo: string | undefined) => updateTitle(b, { fillTo });
@@ -259,9 +259,11 @@ export function coverWithoutTitle(cover: AlbumPage): AlbumPage {
 
 /** CoverEditor's title box: the cover layout's caption box 0 in the layout's
  *  margins (none on a full-bleed cover), as fractions of the cover, and the
- *  offset limits from the box's own place, so it can go to every edge of the
- *  cover but never off it. Null for a cover with no title box. */
-export function titleBoxOf(cover: AlbumPage): TitleBox | null {
+ *  offset limits from the box's own place. With the album's size, the box
+ *  stays in the safe print area (freeWords.wordsSafeArea, 0.25" in from the
+ *  trim: owner, 2026-11-07, words dragged too close to an edge get cut off);
+ *  without it, on the cover. Null for a cover with no title box. */
+export function titleBoxOf(cover: AlbumPage, albumSize?: AlbumSizePreset): TitleBox | null {
   const tmpl = cover.templateId ? getTemplateById(cover.templateId) : null;
   const slot = tmpl?.textSlots?.[0];
   if (!tmpl || !slot) return null;
@@ -270,12 +272,17 @@ export function titleBoxOf(cover: AlbumPage): TitleBox | null {
   const baseY = tm.top + slot.y * (1 - tm.top - tm.bottom);
   const w = slot.width * (1 - tm.left - tm.right);
   const h = slot.height * (1 - tm.top - tm.bottom);
-  // A box wider or taller than the cover is tolerated (the range flips).
+  // A box wider or taller than the room is tolerated (the range flips).
   const range = (v: number, lo: number, hi: number) => Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), v));
+  const room = albumSize ? (() => {
+    const a = wordsSafeArea(albumSize, 0, true);
+    const { width: uiW, height: uiH } = getCanvasDimensions(albumSize);
+    return { x0: a.x / uiW, y0: a.y / uiH, x1: (a.x + a.w) / uiW, y1: (a.y + a.h) / uiH };
+  })() : { x0: 0, y0: 0, x1: 1, y1: 1 };
   return {
     baseX, baseY, w, h,
-    clampX: (v) => range(v, -baseX, 1 - w - baseX),
-    clampY: (v) => range(v, -baseY, 1 - h - baseY),
+    clampX: (v) => range(v, room.x0 - baseX, room.x1 - w - baseX),
+    clampY: (v) => range(v, room.y0 - baseY, room.y1 - h - baseY),
   };
 }
 
@@ -297,7 +304,7 @@ export function titleMovable(cover: AlbumPage): boolean {
  *  builder's setBoxTextOffset, as the website's drag). */
 export function moveCoverTitle(b: CoverBuilder, from: { offsetX: number; offsetY: number }, dx: number, dy: number): boolean {
   if (!editsTheCover(b) || !titleMovable(b.coverFront)) return false;
-  const box = titleBoxOf(b.coverFront)!;
+  const box = titleBoxOf(b.coverFront, b.albumSize)!;
   b.setBoxTextOffset(0, box.clampX(from.offsetX + dx), box.clampY(from.offsetY + dy));
   return true;
 }

@@ -140,7 +140,10 @@ async function compareWith(base, manifest, set) {
     console.log(`${same ? 'same' : 'DIFFERENT'}  ${name.padEnd(44)} jpeg ${sha256(jpeg).slice(0, 12)} (${(jpeg.length / 1024).toFixed(0)} KB)  ${a.words.length} word patches`);
     if (!same) diffs.push({ name, before: { image: sha256(jpeg), words: a.words.map((w) => sha256(w)) }, after: { image: sha256(Buffer.from(b.image, 'base64')), words: b.words.map((w) => sha256(w)) } });
   };
-  for (const c of set.cases) {
+  // Words placed by hand with WordArt are new too (owner, 2026-11-07): print
+  // code from before draws a curve or a second colour outside a caption box plain.
+  const cases = set.cases.filter((c) => !c.name.startsWith('wordart-'));
+  for (const c of cases) {
     const input = { page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photos: set.photos };
     await compare(c.name, 'page', { ...input, bakeWords: false });
     await compare(`${c.name} (words baked in)`, 'page', { ...input, bakeWords: true });
@@ -152,7 +155,7 @@ async function compareWith(base, manifest, set) {
   }
   await browser.close();
 
-  const total = set.cases.length * 2 + covers.length;
+  const total = cases.length * 2 + covers.length;
   console.log(`\n${total - diffs.length} of ${total} print files byte-identical to the website's print code at ${ref} (${execFileSync('git', ['-C', REPO_ROOT, 'rev-parse', '--short', ref]).toString().trim()}).`);
   if (diffs.length) {
     fs.mkdirSync(path.join(HERE, 'out'), { recursive: true });

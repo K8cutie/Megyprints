@@ -20,14 +20,14 @@ import { pageTargets } from '../hitTest';
 import { editorPictureWidth } from '../pagePictureWidth';
 import { targetStyle } from '../PageStage';
 import type { EditorContext } from '../registry';
-import { renderedLines } from '../textLines';
+import { placedInk, renderedLines } from '../textLines';
 import { WORDS_ON_PAGE } from './words';
-import { contentOf, pageWithWords, sameWords, targetOfWords, type EditorState, type WordsTarget } from './wordsFlow';
+import { contentOf, pageWithWords, sameWords, targetOfWords, type EditorState, type Placer, type WordsTarget } from './wordsFlow';
 
 /** How long typing has to pause before the page is drawn with it. */
 export const TYPING_PAUSE_MS = 180;
 
-export function WordsOnPage({ ctx, target, state, opened, onTap }: {
+export function WordsOnPage({ ctx, target, state, opened, onTap, place, onCover = false }: {
   ctx: EditorContext;
   target: WordsTarget;
   /** The words as they are now. */
@@ -35,6 +35,10 @@ export function WordsOnPage({ ctx, target, state, opened, onTap }: {
   /** The words as the editor opened with them: the page itself, already drawn. */
   opened: EditorState;
   onTap: () => void;
+  /** Words placed by hand are placed as Done will place them. */
+  place?: Placer;
+  /** The front cover (drawn as print's coverMode). */
+  onCover?: boolean;
 }) {
   const { builder, page, pageIndex, text } = ctx;
   const { width: screenW, height: screenH } = useWindowDimensions();
@@ -49,17 +53,20 @@ export function WordsOnPage({ ctx, target, state, opened, onTap }: {
   }, [state]);
 
   const draft = useMemo(
-    () => (sameWords(contentOf(drawn), contentOf(opened)) ? page : pageWithWords(page, target, contentOf(drawn))),
-    [drawn, opened, page, target],
+    () => (sameWords(contentOf(drawn, onCover), contentOf(opened, onCover)) ? page : pageWithWords(page, target, contentOf(drawn, onCover), place)),
+    [drawn, opened, page, target, place, onCover],
   );
   const photoCount = builder.uploadedPhotos.length;
   const plan = useMemo(
-    () => pageTargets({ page: draft, albumSize: builder.albumSize, pageIndex, photoCount, countLines: renderedLines(text) }),
-    [draft, builder.albumSize, pageIndex, photoCount, text],
+    () => pageTargets({ page: draft, albumSize: builder.albumSize, pageIndex, photoCount, coverMode: onCover, countLines: renderedLines(text), inkOf: placedInk(place?.measurer ?? null) }),
+    [draft, builder.albumSize, pageIndex, photoCount, text, place, onCover],
   );
   const box = targetOfWords(plan.targets, target);
 
-  const picture = usePagePicture(text, { page: draft, pageIndex, albumSize: builder.albumSize, photos: builder.uploadedPhotos, width: editorPictureWidth(screenW, screenH) }, PRIORITY.editing);
+  const picture = usePagePicture(text, {
+    page: draft, pageIndex, albumSize: builder.albumSize, photos: builder.uploadedPhotos, width: editorPictureWidth(screenW, screenH),
+    ...(onCover ? { coverMode: true } : {}),
+  }, PRIORITY.editing);
   const lastShown = useRef<string | null>(null);
   if (picture.uri) lastShown.current = picture.uri;
   const uri = picture.uri ?? lastShown.current;

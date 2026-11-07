@@ -910,6 +910,13 @@ function renderTextElement(
     const bw = freeTextBoxWidth(text) * eff;
     const cx = align === 'left' ? 0 : align === 'right' ? bw : bw / 2;
     const step = fontSize * TEXT_LINE_HEIGHT;
+    if (text.curve) {
+      // On a curve (words placed by hand, freeWords.ts): one line, its middle
+      // where a one-line straight text's middle is.
+      drawCurvedWordArtText(ctx, text.text, cx, step / 2, fontSize, align as 'left' | 'center' | 'right', text.curve, text, eff, coverMode);
+      ctx.restore();
+      return;
+    }
     const lines = wrapTextLines(ctx, text.text, bw);
     lines.forEach((line, i) => drawWordArtText(ctx, line, cx, step / 2 + i * step, text, eff, coverMode));
     if (text.underline) {
@@ -952,6 +959,13 @@ function renderSlotText(
   const pad = w * CAPTION_PAD_X;
   const cx = align === 'left' ? x + pad : align === 'right' ? x + w - pad : x + w / 2;
   const cy = y + h / 2;
+
+  if (st.curve) {
+    // On a curve: one line, not clipped to the frame (the caption branch's rule).
+    drawCurvedWordArtText(ctx, st.text, cx, cy, fontSize, align as 'left' | 'center' | 'right', st.curve, st, W / uiW, coverMode);
+    ctx.restore();
+    return;
+  }
 
   // Wrapped + clipped to the slot, mirroring the DOM preview (see the caption
   // branch of renderTextElement). A themed quote is longer than a caption, so

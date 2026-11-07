@@ -22,12 +22,28 @@
      quotes again after a sign-in the picker asked for (resumeQuote.ts), one
      fetches the fonts the album uses that this phone doesn't have yet (an
      album made on the website, or on another phone).
+   • "Add text" under a picked photo (owner, 2026-11-07: "adding text on a
+     photo is possible"): Edit text for new words placed by hand, their
+     middle on the photo's middle (wordsFlow newWords, freeWords.ts); and
+     the finger on placed words (WordsDragOverlay): drag to move, tap to change.
    ══════════════════════════════════════════════════════════════════════════ */
-import { useCallback, useEffect } from 'react';
+import { createElement, useCallback, useEffect } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { getCanvasDimensions } from '@web/pages/builder/layouts';
+import { getPrintDimensions } from '@web/pages/builder/printSize';
+import { isPlacedWords } from '@web/pages/builder/freeWords';
 import { CHOICE_WORDS } from '../editorWords';
-import { ORDER, registerEditorPart, type EditorContext } from '../registry';
+import { ORDER, registerEditorPart, type EditorContext, type OverlayProps } from '../registry';
 import type { Target } from '../hitTest';
+
+/* Loaded when first shown, on a page with words placed by hand: the page
+   without the moving words is drawn by the page renderer (Skia), which the
+   other parts' tests don't have. */
+function WordsOnTheFinger(props: OverlayProps) {
+  if (!props.ctx.page.textElements?.some(isPlacedWords)) return null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return createElement((require('./WordsDragOverlay') as typeof import('./WordsDragOverlay')).WordsDragOverlay, props);
+}
 import { fontStore } from './fonts/appFonts';
 import { familiesOn } from './fonts/fontStore';
 import { catalogFace } from './fonts/fontSources';
@@ -35,11 +51,18 @@ import { PageColourSheet } from './PageColourSheet';
 import { QuotePickerSheet } from './QuotePickerSheet';
 import { takeResume } from './resumeQuote';
 import { TextEditorSheet } from './TextEditorSheet';
-import { PAGE_COLOUR } from './words';
-import { tapOpens, wordsTargetOf } from './wordsFlow';
+import { ADD_TEXT, PAGE_COLOUR } from './words';
+import { newWordsId, tapOpens, wordsTargetOf, type WordsTarget } from './wordsFlow';
 
 /** Sheet ids ('text:<name>'). */
 export const TEXT_SHEETS = { edit: 'text:edit', quotes: 'text:quotes', pageColour: 'text:pageColour' } as const;
+
+/** New words on a picked photo: their middle on the photo's middle (design
+ *  px; the photo's box is in page px, the renderer's print px). */
+export function newWordsOn(photo: Target, albumSize: Parameters<typeof getCanvasDimensions>[0], id = newWordsId()): Extract<WordsTarget, { kind: 'newWords' }> {
+  const perDesign = getPrintDimensions(albumSize).width / getCanvasDimensions(albumSize).width;
+  return { kind: 'newWords', textId: id, cx: (photo.box.x + photo.box.w / 2) / perDesign, cy: (photo.box.y + photo.box.h / 2) / perDesign };
+}
 
 function openWords(target: Target, ctx: EditorContext, opens: 'quotes' | 'editor'): boolean {
   const words = wordsTargetOf(target);
@@ -121,6 +144,14 @@ registerEditorPart({
       onPick: (target, ctx) => { openWords(target, ctx, 'editor'); },
     },
   ],
+  // Beside Mask and Filter, under the picked photo.
+  selectedActions: [{
+    id: 'addWords',
+    label: ADD_TEXT,
+    kinds: ['photo'],
+    order: 25,
+    onPress: (t, ctx) => ctx.openSheet(TEXT_SHEETS.edit, { target: newWordsOn(t, ctx.builder.albumSize) }),
+  }],
   tools: [{
     id: 'pageColour',
     label: PAGE_COLOUR,
@@ -128,6 +159,7 @@ registerEditorPart({
     onPress: (ctx) => ctx.openSheet(TEXT_SHEETS.pageColour),
   }],
   sheets: { edit: TextEditorSheet, quotes: QuotePickerSheet, pageColour: PageColourSheet },
+  overlays: [WordsOnTheFinger],
   banners: [
     { id: 'text-resume-quote', order: 900, Component: ResumeQuote },
     { id: 'text-page-fonts', order: 901, Component: PageFonts },

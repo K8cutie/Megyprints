@@ -68,7 +68,30 @@ export function appWords(plan: PagePlan, text: PageText): TextItemLines[] {
     let lines: AppLine[];
     let zone: Area;
     const b = plan.bleed;
-    if (it.kind === 'boxText' && it.source === 'caption' && it.style.curve) {
+    if (it.kind === 'freeText' && it.style.curve) {
+      // Words placed by hand on a curve (drawPage freeText): each letter, its
+      // middle where a one-line straight text's middle is, in the free text's transform.
+      const m = freeMatrix(it.x, it.y, it.rotation, it.scaleX, it.scaleY);
+      const curve = curveGlyphs(it.style.text, text.measurer(look), it.fontSize, it.style.curve);
+      const cx = curveCentreX(it.anchorX, it.align, curve.width);
+      const cy = step / 2;
+      const letters = (over: Partial<AppLine>): AppLine[] => curve.glyphs.map((g) => {
+        const p = applyMatrix(m, cx + g.x, cy + g.y);
+        return { ...base, align: 'center', onCurve: true, text: g.text, pageX: p.x, pageY: p.y, width: text.measure(g.text, look), ...over };
+      });
+      const casts = it.style.glow ? WORDART_GLOW_PASSES : 1;
+      lines = base.shadow && !base.outlined
+        ? [...Array.from({ length: casts }, () => letters({ color: plainColor, shadow: true })).flat(), ...letters({ shadow: false })]
+        : letters({});
+      const pad = it.fontSize;
+      const corners = [[cx - curve.width / 2 - pad, cy - curve.height / 2 - pad], [cx + curve.width / 2 + pad, cy - curve.height / 2 - pad],
+        [cx - curve.width / 2 - pad, cy + curve.height / 2 + pad], [cx + curve.width / 2 + pad, cy + curve.height / 2 + pad]]
+        .map(([x, y]) => applyMatrix(m, x, y));
+      const W = plan.width + 2 * b, H = plan.height + 2 * b;
+      const xs = corners.map((p) => p.x + b), ys = corners.map((p) => p.y + b);
+      const left = Math.max(0, Math.min(...xs)), top = Math.max(0, Math.min(...ys));
+      zone = { x: left, y: top, w: Math.min(W, Math.max(...xs)) - left, h: Math.min(H, Math.max(...ys)) - top };
+    } else if (it.kind === 'boxText' && it.style.curve) {
       // Each letter, as drawPage draws them: with no outline the shadow is cast
       // by a pass of its own, under the fills.
       const curve = curveGlyphs(it.style.text, text.measurer(look), it.fontSize, it.style.curve);
@@ -92,9 +115,11 @@ export function appWords(plan: PagePlan, text: PageText): TextItemLines[] {
       zone = { x: it.box.x + b, y: it.box.y + b, w: it.box.w, h: it.box.h };
     } else {
       const m = freeMatrix(it.x, it.y, it.rotation, it.scaleX, it.scaleY);
-      lines = words.map((w, i) => {
+      // A glow with no outline: each line is drawn once for each time it is cast.
+      const casts = it.style.glow && !base.outlined ? WORDART_GLOW_PASSES : 1;
+      lines = words.flatMap((w, i) => {
         const p = applyMatrix(m, it.anchorX, step / 2 + i * step);
-        return { ...base, text: w, pageX: p.x, pageY: p.y, width: text.measure(w, look) };
+        return Array.from({ length: casts }, () => ({ ...base, text: w, pageX: p.x, pageY: p.y, width: text.measure(w, look) }));
       });
       const pad = it.fontSize * 0.5;
       const corners = [[-pad, -pad], [it.boxWidth + pad, -pad], [-pad, words.length * step + pad], [it.boxWidth + pad, words.length * step + pad]]

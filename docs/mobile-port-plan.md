@@ -4101,6 +4101,87 @@ emulator at 1080×2340, density 450.
   gesture, which keeps the words and closes the editor. Start a swipe further in.
 - In no build yet: not in the 2.0.7 file uploaded on 2026-11-05.
 
+## Words on a photo, with WordArt, on pages and the cover (2026-11-07, `feat/port-words-on-photos`)
+
+Owner, after the list of PowerPoint's text features: "I like wordart and effect
+features included when editing photos so adding text on a photo is possible. I like
+those features applied in cover and pages picture editor." He said yes to the three
+points put to him: the effects are for the words, not the photo; the cover title's
+five effects first (reflection, bevel, 3-D and picture fills are not in it: none is
+proven in print); and more words on the cover too. And "applying your solution to
+potential risks": words stop at the safe print area.
+
+- **Words placed by hand** (`src/pages/builder/freeWords.ts`, shared): a free text
+  marked `placed`, at x/y in design px, as wide as its words (`placeWords`: the
+  widest line plus room for a letter's overhang and the outline, never wider than the
+  area). Every change places them again with their middle where it was, so a longer
+  line grows both ways and a bigger size stays put. New ones start white, a thin dark
+  outline (2) and the shadow, Cinzel 40 bold (`NEW_WORDS_LOOK`), so they read on any
+  photo. `freeSpot` puts a second one under the first.
+- **The safe print area** (`wordsSafeArea`): 0.25" from the top and bottom trim
+  (`PRINTER_SPEC.safeIn`) and, on a page, 1/2" from BOTH side edges (the hardbound
+  allowance: the cover is chosen after the album is made; and a page's spine side
+  flips whenever a page is added, deleted or copied before it, which would have left
+  words placed by its outer edge 0.25" from the new spine). The cover's front: 0.25"
+  all round. `wordsInk` is where the letters reach, measured as print measures (a
+  curve's full height included), and that is what is kept inside, not a box round
+  them. Too long for the page: "Too long for this page… Make it fit (size N)"
+  (`placedWordsFit`, by placing them), and Done makes them that size and says so, so
+  placed words never print cut off. At most 300 characters.
+- **An album opening never moves them**: `bindStrandedCaptions` (which puts a stray
+  free text into an empty caption box) skips `placed`, and their ids keep the live
+  website's old heal away too (see Rollout below).
+- **Pages:** "Add text" under a picked photo, just before Mask and Filter, opens Edit
+  text for new words, their middle on the photo's middle (`newWordsOn`). Typed and
+  Done: on the page, one Undo step (`addPlacedWords`, a new builder action). ✕, or
+  nothing typed, adds nothing. A tap on them opens them; "Remove" in the header (or
+  emptied words) takes them off. A finger drags them (`WordsDragOverlay`, a handle the
+  size of their letters, over the photo's own move-and-zoom): the page without them
+  shows under the words where the finger has them (drawn ahead at the lowest
+  priority), the safe area shows as a dotted line, they stop at it, and the first two
+  times a line says why. One change when the finger lets go.
+- **Effects in Edit text:** the format bar's Outline and Shadow switches became
+  "Effects ▾", a panel in the list's place: Outline (none, thin, medium, thick, any
+  colour), Two colours, Glow, Shape (straight, arch, smile, wave) and Shadow. One
+  source with the cover title's buttons (`text/WordArtControls`, `wordArtEdits`). Every
+  kind of words takes them: caption boxes, words in a frame (on a curve they aren't
+  clipped to the frame, so its editor says "Too long" for a curve too wide for it:
+  `textFit.slotBoxSize`), free texts and placed words. An outline made before (3 px)
+  shows as Thin.
+- **Cover:** "More words" under the title's size with a row per placed words and
+  "+ Add text" (also on the Background tab once there is a photo). Edit text opens
+  over the cover (the same sheet, on the cover's scope); on the cover they float on
+  the cover's shadow unless it is switched off. Dragging on the cover moves words
+  before the title or the photo; a tap opens them. The title's own drag now stops at
+  the safe area too (it went to the cover's edges).
+- **Drawn in every renderer:** print's free branch and `renderSlotText` draw a curve
+  (one line, its middle where a one-line straight text's middle is; not clipped); the
+  website's preview draws a curve or a second colour with print's own code on a canvas
+  (`WordArtCanvas`, a `free` mode), for free texts and frames too; the app's renderer
+  does the same (`drawPage` freeText and boxText). The website's desktop editor
+  (Fabric) still shows them straight and in one colour; its preview and print are right.
+- **An independent review the same day found, and these were fixed:**
+  - the spine side flipping (above);
+  - a curve in a caption box or a photo frame isn't clipped, and an arch in a bottom
+    band reached past the page's edge: now its letters must stay in the safe area too
+    (`curveInBoxFit`, with each box's place: `textFit.captionBoxRect`/`slotBoxRect`),
+    "Too long for this page" with "Make it fit", and Done makes it that size; an old
+    free text (not placed) gets no Shape;
+  - words that fit at no size (a long line on a curve) were saved anyway: Done now
+    keeps the editor open and says to shorten them or pick Straight;
+  - placed words on the cover never become the spine line (`deriveSpine` skips them);
+  - new words went on top of the cover title or a caption: they now go to the nearest
+    clear spot under, over, left or right (`freeSpot`, with their real size);
+  - the website's preview lost typed line breaks in free text (`pre-wrap` now), drew a
+    two-colour placed text one line tall and without its underline, and drew captions
+    over placed words that print over them (placed words on top, as in print; the
+    app's taps the same);
+  - the app ignored a curved free text's see-through (opacity) where print keeps it.
+- **Rollout:** new words' ids start `theme-quote-placed-`: the live website's and older
+  app builds' `bindStrandedCaptions` leave ids starting "theme-quote" alone, so opening
+  an album with placed words there before 2.0 is merged doesn't move them into a caption
+  box. The live website still prints a curve or a second colour on them plain.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
