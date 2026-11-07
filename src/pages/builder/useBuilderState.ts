@@ -609,8 +609,10 @@ function isStateCorrupted(state: SerializedState): boolean {
 /** Heal STRANDED captions: an unbound text element (free, not a deliberate theme
  *  quote) on a page that has an empty textbox should belong IN that box. Bind it
  *  so it renders fixed + centered instead of floating at the top-left. Only fills
- *  boxes with no caption yet; idempotent (already-bound text is left alone). */
-function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
+ *  boxes with no caption yet; idempotent (already-bound text is left alone).
+ *  Words the customer placed by hand (Add text: `placed`) are where they put
+ *  them, never stranded: they stay where they are. */
+export function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
   return pages.map((page) => {
     if (!page.textElements?.length || !page.templateId) return page;
     const slots = getTemplateById(page.templateId)?.textSlots ?? [];
@@ -625,7 +627,7 @@ function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
     (page.textSlotOrnament ?? []).forEach((o, i) => { if (o) filled.add(i); });
     let changed = false;
     const textElements = page.textElements.map((t) => {
-      if (t.boxIndex != null || t.id.startsWith('theme-quote')) return t;
+      if (t.boxIndex != null || t.id.startsWith('theme-quote') || t.placed) return t;
       let slot = -1;
       for (let i = 0; i < slots.length; i++) { if (!filled.has(i)) { slot = i; break; } }
       if (slot < 0) return t; // no empty box left
@@ -965,6 +967,10 @@ export interface BuilderActions {
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
   deleteTextElement: (id: string) => void;
+  /** Words the customer placed by hand (Add text on a photo: freeWords.ts),
+   *  already placed and sized, onto the page being edited (the cover, while
+   *  its scope is on). One undo step. */
+  addPlacedWords: (words: TextElement) => void;
   /** Set the text for a template text box (textSlots[slotIndex]). Targets the
    *  current page by default, or an explicit pageIndex (the preview spread shows
    *  two pages). Creates/updates the boxed TextElement; empty text clears it. */
@@ -3376,6 +3382,11 @@ export function useBuilderState(): BuilderActions {
     }));
   }, [updateCurrentPage]);
 
+  const addPlacedWords = useCallback((words: TextElement) => {
+    pushSnapshot();
+    updateCurrentPage((page) => ({ ...page, textElements: [...page.textElements, { ...words, placed: true, boxIndex: undefined }] }));
+  }, [updateCurrentPage]);
+
   // Text bound to a template text box (textSlots[slotIndex]). Position/size come
   // from the template's slot at render time, so x/y are unused for boxed text.
   const setBoxText = useCallback((slotIndex: number, content: Partial<TextElement> & { text: string }, pageIndex?: number) => {
@@ -4056,6 +4067,7 @@ export function useBuilderState(): BuilderActions {
     addThemedQuote,
     updateTextElement,
     deleteTextElement,
+    addPlacedWords,
     setBoxText,
     finishBoxesWithQuotes,
     requoteForOccasion,

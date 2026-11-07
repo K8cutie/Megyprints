@@ -98,7 +98,7 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.0.7', () => {
+  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.0.8', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
     // 100 (2.0.0) was built 2026-11-03 but never uploaded; 101 (2.0.1) went to Alpha 2026-11-04;
@@ -107,9 +107,10 @@ describe('the Play build is the 1.x app, a newer version', () => {
     // 104 (2.0.4, owner: "put this latest in 2.0.4") has the fixes for what round 3 found;
     // 105 (2.0.5) the speed work and the page-flip switch (owner: "most importantly performance issue");
     // 106 (2.0.6) the owner's list from testing on his phone;
-    // 107 (2.0.7) Edit text and Change layout stay open, WordArt on the cover title.
-    expect(play.android.versionCode).toBe(107);
-    expect(play.version).toBe('2.0.7');
+    // 107 (2.0.7) Edit text and Change layout stay open, WordArt on the cover title;
+    // 108 (2.0.8) Edit text's bottom row on its side, Add text on a photo, WordArt on all words.
+    expect(play.android.versionCode).toBe(108);
+    expect(play.version).toBe('2.0.8');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {

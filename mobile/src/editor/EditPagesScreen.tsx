@@ -64,7 +64,7 @@ import { PageStage, type EmptyHintInfo, type ReachInfo } from './PageStage';
 import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registryVersion, runTap, selectedActionsFor, sheetById, toolsFor, type EditorContext } from './registry';
 import { editThePages } from './scope';
 import { selectedTarget, selectTarget } from './selection';
-import { renderedLines } from './textLines';
+import { placedInk, renderedLines } from './textLines';
 import { lastEditorVisit, MOST_STEPS, nothingChanged, redoShown, rememberVisit, startOnOpen, undoShown } from './undoBar';
 import './parts';
 
@@ -191,8 +191,11 @@ export default function EditPagesScreen() {
 
   // ── What a tap can hit, and what is selected ──
   const plan = useMemo(
-    () => (page ? pageTargets({ page, albumSize: builder.albumSize, pageIndex: index, photoCount: builder.uploadedPhotos.length, countLines: renderedLines(text) }) : null),
-    [page, builder.albumSize, index, builder.uploadedPhotos.length, text],
+    () => (page ? pageTargets({
+      page, albumSize: builder.albumSize, pageIndex: index, photoCount: builder.uploadedPhotos.length, countLines: renderedLines(text),
+      inkOf: placedInk(platform.textMeasurer()),
+    }) : null),
+    [page, builder.albumSize, index, builder.uploadedPhotos.length, text, platform],
   );
   const targets = useMemo(() => plan?.targets ?? [], [plan]);
   const selected = selectedTarget(builder.selectedElementId, index, targets);

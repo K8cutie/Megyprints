@@ -110,6 +110,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/densities.ts',
   'src/pages/builder/faceCentre.ts',
   'src/pages/builder/fontCatalog.ts',
+  'src/pages/builder/freeWords.ts',
   'src/pages/builder/generateAlbum.ts',
   'src/pages/builder/gradient.ts',
   'src/pages/builder/lastPagePhoto.ts',

@@ -90,14 +90,14 @@ describe('the picked thing\'s buttons: in rows, all in view, the red one last', 
     expect(dangerLast([])).toEqual([]);
   });
 
-  it('a photo on a real album: Replace, Swap, Mask, Filter, then Remove photo', async () => {
+  it('a photo on a real album: Replace, Swap, Add text, Mask, Filter, then Remove photo', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     const b = builder();
     const i = b.albumPages.findIndex((_p, k) => pageTargets({ page: b.albumPages[k], albumSize: b.albumSize, pageIndex: k, photoCount: b.uploadedPhotos.length }).targets.some((t) => t.kind === 'photo'));
     await act(async () => { builder().goToPage(i); });
     const ctx = ctxOn(platform);
     const photo = ctx.targets.find((t) => t.kind === 'photo')!;
-    expect(dangerLast(selectedActionsFor(photo, ctx)).map((x) => x.label)).toEqual(['Replace photo', 'Swap photo', 'Mask', 'Filter', 'Remove photo']);
+    expect(dangerLast(selectedActionsFor(photo, ctx)).map((x) => x.label)).toEqual(['Replace photo', 'Swap photo', 'Add text', 'Mask', 'Filter', 'Remove photo']); // Add text: owner, 2026-11-07
   });
 
   it('the screen: a wrapping row, not a sideways scroll', () => {

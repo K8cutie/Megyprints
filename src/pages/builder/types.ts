@@ -330,6 +330,10 @@ export interface TextElement extends TextStyle {
    *  (useBuilderState.requoteForOccasion) until the customer writes or picks
    *  a line of their own for the box. */
   fromOccasion?: string;
+  /** Words the customer placed by hand ("Add text" on a photo, freeWords.ts):
+   *  a free text kept in the safe print area, as wide as its words. Never
+   *  bound into a caption box when an album opens (bindStrandedCaptions). */
+  placed?: boolean;
 }
 
 /** STUDIO: a customer-moved photo frame. Each index corresponds to

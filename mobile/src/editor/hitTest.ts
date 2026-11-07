@@ -37,7 +37,8 @@
    imports the qrcode package, ornaments.ts rasterizes in a browser). The
    app draws neither yet (the renderer's own job adds them).
    ══════════════════════════════════════════════════════════════════════════ */
-import type { AlbumPage, AlbumSizePreset } from '@web/pages/builder/types';
+import type { AlbumPage, AlbumSizePreset, TextElement } from '@web/pages/builder/types';
+import { isPlacedWords, type Ink } from '@web/pages/builder/freeWords';
 import { adaptTemplateToOrientation, getTemplateById } from '@web/pages/builder/pageTemplates';
 import { marginForTemplate } from '@web/pages/builder/binding';
 import { resolveSlotBox } from '@web/pages/builder/slotGeometry';
@@ -117,6 +118,10 @@ export interface TargetsInput {
   /** Binding allowance, inches (default: the editor's 3/8"). */
   bindingIn?: number;
   countLines?: CountLines;
+  /** Where placed words' letters reach (freeWords.wordsInk with the page
+   *  fonts): their tap area is their letters, a curve's whole height
+   *  included. Without it, as any free text. */
+  inkOf?: (t: TextElement) => Ink | null;
 }
 
 export interface PageTargets {
@@ -127,7 +132,9 @@ export interface PageTargets {
   targets: Target[];
 }
 
-const Z = { frame: 1, frameTop: 2, freeText: 3, box: 5, sticker: 6 } as const;
+/** Words placed by hand go on the page after its captions and print over
+ *  them, so a tap where they overlap takes the placed words. */
+const Z = { frame: 1, frameTop: 2, freeText: 3, box: 5, placedWords: 5.5, sticker: 6 } as const;
 
 function target(kind: TargetKind, index: number, key: string, box: Rect, z: number, extra: Partial<Target> = {}): Target {
   return { kind, index, key, box, rotation: 0, pivot: 'center', scaleX: 1, scaleY: 1, shape: 'rect', z, ...extra };
@@ -145,7 +152,7 @@ function photoArea(box: Rect, shape: string | undefined): { box: Rect; shape: Ta
 }
 
 /** Every element a tap can hit on this page: see the top of this file. */
-export function pageTargets({ page, albumSize, pageIndex, photoCount, coverMode = false, bindingIn, countLines = typedLines }: TargetsInput): PageTargets {
+export function pageTargets({ page, albumSize, pageIndex, photoCount, coverMode = false, bindingIn, countLines = typedLines, inkOf }: TargetsInput): PageTargets {
   const { width: W, height: H } = getPrintDimensions(albumSize);
   const { width: uiW } = getCanvasDimensions(albumSize);
   const scale = W / uiW;
@@ -188,6 +195,13 @@ export function pageTargets({ page, albumSize, pageIndex, photoCount, coverMode 
   for (const t of page.textElements ?? []) {
     const ts = t.boxIndex != null && adapted && safe ? adapted.textSlots?.[t.boxIndex] : undefined;
     if (ts) continue;
+    const ink = isPlacedWords(t) ? inkOf?.(t) ?? null : null;
+    if (ink) {
+      all.push(target('freeText', -1, `text:${t.id}`, {
+        x: (t.x + ink.left) * scale, y: (t.y + ink.top) * scale, w: (ink.right - ink.left) * scale, h: (ink.bottom - ink.top) * scale,
+      }, Z.placedWords, { pivot: 'topLeft', textId: t.id }));
+      continue;
+    }
     const fontSize = (t.fontSize || 24) * scale;
     const boxWidth = freeTextBoxWidth(t) * scale;
     const lines = countLines({ text: t.text, fontFamily: t.fontFamily, bold: t.bold, italic: t.italic, fontSize }, boxWidth);

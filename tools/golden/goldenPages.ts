@@ -35,6 +35,7 @@
 import { generateAlbum } from '../../src/pages/builder/generateAlbum';
 import type { AlbumPage, AlbumSizePreset, TextElement, SlotText, CoverDesign, CoverType, MaterialType, QrFill, OrnamentFill, OrnamentTransform } from '../../src/pages/builder/types';
 import { COVERS } from '../../src/pages/builder/types';
+import { NEW_WORDS_LOOK } from '../../src/pages/builder/freeWords';
 import { mulberry32 } from '../../src/test/mulberry32';
 import { PHOTO_SIZES, P3_PHOTO, P3_PHOTO_IMAGE, BIG_PHOTO, BIG_PHOTO_IMAGE, CORNER_BASE } from './syntheticPhotos';
 
@@ -445,6 +446,38 @@ export function buildGoldenSet(): GoldenSet {
     })),
   ];
 
+  // ── Part D: words placed by hand on a photo, with WordArt (owner,
+  //    2026-11-07: "Add text" on a photo, the cover title's effects on every
+  //    word). websiteSame.mjs skips these: print code from before draws a
+  //    curve or a second colour outside a caption box plain, as it should. ──
+  const placedWords = (text: string, x: number, y: number, width: number, over: Partial<TextElement> = {}): TextElement => ({
+    ...caption(0, { ...NEW_WORDS_LOOK, text }), boxIndex: undefined, placed: true, x, y, width, ...over,
+  });
+  const partD: GoldenCase[] = [
+    b('wordart-placed-new-look', '8x8', 0, 'words placed on a full-bleed photo in the new-words look: white, a thin dark outline, the small shadow', page('8x8', 't88-fb-solo', [4], {
+      textElements: [placedWords('Our beach day', 230, 340, 330)],
+    })),
+    b('wordart-placed-two-colour-thick', '8x8', 2, 'two lines placed on a photo: a two-colour fill and a thick outline in its own colour, left-aligned', page('8x8', 't88-fb-solo', [1], {
+      textElements: [placedWords('Lola and Lolo\nfifty years', 80, 120, 420, { fontFamily: PLAYFAIR, fontSize: 52, color: '#FFE9A8', fillTo: '#E8772E', outlineColor: '#5A2A0C', outlineWidth: 8, shadow: undefined, alignment: 'left' })],
+    })),
+    b('wordart-placed-glow-64', '6x4', 1, '6x4, words placed on a framed photo with a glow in its own colour (left-hand page)', page('6x4', 't64-solo-landscape', [2], {
+      textElements: [placedWords('Bohol 2026', 220, 210, 300, { color: '#FFFFFF', glow: '#FF8A3D', outlineWidth: undefined, outlineColor: undefined, shadow: undefined, fontSize: 44 })],
+    })),
+    b('wordart-placed-arch', '8x8', 4, 'words placed on an arch over a photo: a two-colour fill and an outline, the shadow cast by the outline', page('8x8', 't88-fb-solo', [0], {
+      textElements: [placedWords('Our Beach Days', 180, 300, 420, { fontFamily: PLAYFAIR, fontSize: 56, color: '#FFE9A8', fillTo: '#E8772E', outlineColor: '#5A2A0C', outlineWidth: 3, curve: 'arch' })],
+    })),
+    b('wordart-placed-wave-smile', '8x8', 6, 'two placed words on one photo: a wave with a glow, a smile left-aligned with the shadow', page('8x8', 't88-fb-solo', [3], {
+      textElements: [
+        placedWords('Summer in Siargao', 140, 160, 470, { color: '#FFFFFF', glow: '#6FA8DC', outlineWidth: undefined, outlineColor: undefined, shadow: undefined, fontSize: 40, curve: 'wave' }),
+        placedWords('Bohol 2026', 120, 520, 300, { fontFamily: PLAYFAIR, fontSize: 46, color: '#FFFBF7', outlineWidth: undefined, outlineColor: undefined, alignment: 'left', curve: 'smile' }),
+      ],
+    })),
+    b('wordart-frame-and-box', '8x8', 8, 'words in a photo frame on a smile with two colours (not clipped to the frame), a caption with a glow', page('8x8', 't88-fb-sq-box-tr-gap', [2, null, 0], {
+      slotTexts: [null, style({ text: 'Home is wherever we are', fontFamily: DANCING, fontSize: 36, color: '#B85C38', fillTo: '#5A2A0C', curve: 'smile' }), null],
+      textElements: [caption(0, { text: 'Sunday lunch', fontFamily: DM_SANS, fontSize: 30, bold: true, color: '#FFFFFF', glow: '#B85C38' })],
+    })),
+  ];
+
   // ── The covers ──
   const title = (text: string, over: Partial<TextElement> = {}): TextElement => ({
     ...caption(0, { text, fontFamily: 'Cinzel, serif', fontSize: 32, bold: true }), opacity: 1, ...over,
@@ -547,6 +580,19 @@ export function buildGoldenSet(): GoldenSet {
       }),
     },
     {
+      name: 'cover-wordart-placed-words', albumSize: '8x8', pageCount: 60, cover: 'hardboundLeather', material: 'matte',
+      checks: 'words placed by hand on a photo cover beside the title (owner, 2026-11-07): one on an arch floating on the cover\'s shadow, one with its shadow off and an outline; the spine follows the title',
+      coverFront: coverPage('8x8', 'cover-hero', {
+        slotFills: [],
+        background: { type: 'image', photoId: 'p0', zoom: 1, focusX: 0.5, focusY: 0.5 },
+        textElements: [
+          title('The Garcia Family', { color: '#FFFFFF', fontFamily: PLAYFAIR, fontSize: 48 }),
+          placedWords('Est. 2026', 280, 90, 190, { fontSize: 36, curve: 'arch', shadow: undefined, outlineWidth: undefined, outlineColor: undefined }),
+          placedWords('Cebu · Bohol', 240, 650, 270, { fontFamily: DM_SANS, fontSize: 28, shadow: false, outlineColor: '#7A2E12', outlineWidth: 4 }),
+        ],
+      }),
+    },
+    {
       name: 'cover-wordart-wave', albumSize: '8x8', pageCount: 60, cover: 'softcover', material: 'matte',
       checks: 'WordArt: the words on a wave with a glow, on a plain colour',
       coverFront: coverPage('8x8', 'cover-plain', {
@@ -590,6 +636,6 @@ export function buildGoldenSet(): GoldenSet {
   // isHardcover() takes anything but 'softcover' as hard. So check here.
   const coverTypes = new Set<string>(COVERS.map((c) => c.type));
   for (const c of covers) if (!coverTypes.has(c.cover)) throw new Error(`golden cover ${c.name}: '${c.cover}' is not a cover type an order stores (${[...coverTypes].join(', ')})`);
-  return { seed: GOLDEN_SEED, photos, cases: [...partA, ...partB, ...partC], covers };
+  return { seed: GOLDEN_SEED, photos, cases: [...partA, ...partB, ...partC, ...partD], covers };
 
 }

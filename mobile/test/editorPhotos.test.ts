@@ -291,7 +291,7 @@ describe('Replace photo, Remove photo and "Add a photo"', () => {
     await tapOn(platform, t);
     ctx = ctxNow(platform);
     const actions = selectedActionsFor(ctx.selected!, ctx);
-    expect(actions.map((a) => a.id)).toEqual(['replace', 'remove', 'swap', 'mask', 'filter']); // Remove second: on screen on a narrow phone
+    expect(actions.map((a) => a.id)).toEqual(['replace', 'remove', 'swap', 'addWords', 'mask', 'filter']); // Remove second: on screen on a narrow phone; Add text (the words part's) before Mask
     const remove = actions.find((a) => a.id === 'remove')!;
     expect(remove.label).toBe('Remove photo');
     expect(remove.danger).toBe(true);

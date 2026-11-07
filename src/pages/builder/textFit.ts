@@ -19,6 +19,8 @@
 import type { AlbumPage, AlbumSizePreset } from './types';
 import { adaptTemplateToOrientation, getTemplateById } from './pageTemplates';
 import { marginForTemplate } from './binding';
+import { resolveSlotBox } from './slotGeometry';
+import { applyMask, isMaskId } from './maskShapes';
 import { getCanvasDimensions } from './layouts';
 import { curveGlyphs, wrapTextLines, TEXT_LINE_HEIGHT, CAPTION_PAD_X, type WordArtCurve } from './wordArtRules';
 import { defaultMeasurer } from './canvasMeasurer';
@@ -32,9 +34,13 @@ export interface CaptionStyle { fontSize?: number; fontFamily?: string; bold?: b
  *  browser canvas's 2D context is one). */
 export type Measurer = TextMeasurer;
 
-/** A caption box's size in DESIGN px (getCanvasDimensions space — the space
- *  fontSize is authored in), exactly as print lays it out. */
-export function captionBoxSize(page: AlbumPage, boxIndex: number, albumSize: AlbumSizePreset, pageIndex: number, opts?: { coverMode?: boolean }): Box | null {
+/** A box on the page in DESIGN px: where it is and how big. */
+export interface BoxRect extends Box { x: number; y: number }
+
+/** A caption box's place and size in DESIGN px (getCanvasDimensions space —
+ *  the space fontSize is authored in), exactly as print lays it out. On the
+ *  cover, with the caption's nudge off its box (print's coverMode). */
+export function captionBoxRect(page: AlbumPage, boxIndex: number, albumSize: AlbumSizePreset, pageIndex: number, opts?: { coverMode?: boolean }): BoxRect | null {
   const t = page.templateId ? getTemplateById(page.templateId) : undefined;
   if (!t) return null;
   const { width: W, height: H } = getCanvasDimensions(albumSize);
@@ -42,7 +48,41 @@ export function captionBoxSize(page: AlbumPage, boxIndex: number, albumSize: Alb
   const ts = tt.textSlots?.[boxIndex];
   if (!ts) return null;
   const tm = marginForTemplate(tt, tt.margin, albumSize, pageIndex, { noBinding: !!opts?.coverMode });
-  return { w: ts.width * W * (1 - tm.left - tm.right), h: ts.height * H * (1 - tm.top - tm.bottom) };
+  const sw = W * (1 - tm.left - tm.right), sh = H * (1 - tm.top - tm.bottom);
+  const el = opts?.coverMode ? page.textElements?.find((x) => x.boxIndex === boxIndex) : undefined;
+  return {
+    x: W * tm.left + ts.x * sw + (el?.offsetX ?? 0) * W, y: H * tm.top + ts.y * sh + (el?.offsetY ?? 0) * H,
+    w: ts.width * sw, h: ts.height * sh,
+  };
+}
+
+/** A caption box's size in DESIGN px, exactly as print lays it out. */
+export function captionBoxSize(page: AlbumPage, boxIndex: number, albumSize: AlbumSizePreset, pageIndex: number, opts?: { coverMode?: boolean }): Box | null {
+  const r = captionBoxRect(page, boxIndex, albumSize, pageIndex, opts);
+  return r ? { w: r.w, h: r.h } : null;
+}
+
+/** A photo frame's place and size in DESIGN px, as print lays out words in it
+ *  (renderSlotText: the frame moved and masked as it prints). Words on a
+ *  curve aren't clipped to the frame, so the editor asks whether they fit. */
+export function slotBoxRect(page: AlbumPage, slotIndex: number, albumSize: AlbumSizePreset, pageIndex: number, opts?: { coverMode?: boolean }): BoxRect | null {
+  const t = page.templateId ? getTemplateById(page.templateId) : undefined;
+  if (!t) return null;
+  const { width: W, height: H } = getCanvasDimensions(albumSize);
+  const tt = adaptTemplateToOrientation(t, W, H);
+  const raw = tt.slots?.[slotIndex];
+  if (!raw) return null;
+  const rawMask = page.slotMasks?.[slotIndex];
+  const slot = applyMask(resolveSlotBox(raw, page.slotGeometries?.[slotIndex]), isMaskId(rawMask) ? rawMask : null);
+  const tm = marginForTemplate(tt, tt.margin, albumSize, pageIndex, { noBinding: !!opts?.coverMode });
+  const sw = W * (1 - tm.left - tm.right), sh = H * (1 - tm.top - tm.bottom);
+  return { x: W * tm.left + slot.x * sw, y: H * tm.top + slot.y * sh, w: slot.width * sw, h: slot.height * sh };
+}
+
+/** A photo frame's size in DESIGN px, as print lays out words in it. */
+export function slotBoxSize(page: AlbumPage, slotIndex: number, albumSize: AlbumSizePreset, pageIndex: number, opts?: { coverMode?: boolean }): Box | null {
+  const r = slotBoxRect(page, slotIndex, albumSize, pageIndex, opts);
+  return r ? { w: r.w, h: r.h } : null;
 }
 
 const fontOf = (s: CaptionStyle, size: number) =>
