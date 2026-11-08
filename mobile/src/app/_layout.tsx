@@ -1,8 +1,10 @@
 import { router, Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useLayoutEffect } from 'react';
+import { Platform } from 'react-native';
 import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
+import { useAppStoreUpdatePrompt } from '../lib/appStoreUpdate';
 import { useAppUpdatePrompt } from '../lib/appUpdate';
 import { useAskBeforeClosing } from '../lib/closeAsk';
 import { DraftProvider } from '../lib/draftStore';
@@ -29,10 +31,19 @@ function AskBeforeClosing() {
 }
 
 /** A new version on Google Play: asked for, then "ready" (appUpdate.ts). */
-function AskAboutUpdates() {
+function AskAboutPlayUpdates() {
   useAppUpdatePrompt();
   return null;
 }
+
+/** A new version on the App Store: "ready", Update in App Store (appStoreUpdate.ts). */
+function AskAboutAppStoreUpdates() {
+  useAppStoreUpdatePrompt();
+  return null;
+}
+
+/** The phone's own store. */
+const AskAboutUpdates = Platform.OS === 'ios' ? AskAboutAppStoreUpdates : AskAboutPlayUpdates;
 
 export default function RootLayout() {
   // Every screen is upright; only the Preview turns with the phone, while it
