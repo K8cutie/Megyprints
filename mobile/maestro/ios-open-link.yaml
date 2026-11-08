@@ -1,12 +1,15 @@
 # Opens one of the app's test screens by its link on an iPhone simulator:
 #   maestro --device <udid> test -e LINK=megyprints-dev://golden-pages?run=1 mobile/maestro/ios-open-link.yaml
 # iPhone asks "Open in "Megy Prints 2.0 (dev)"?" before it follows an app's
-# own link, so Maestro opens the link itself (its helper is running by then)
-# and taps Open. Used by ios-golden.yml and tools/photo-check/phoneServerIos.mjs.
+# own link, a moment after the link is opened, so Maestro waits for the Open
+# button (an optional tap alone gave up before it showed, and the screen sat
+# unopened for an hour) and taps it. Used by ios-golden.yml and
+# tools/photo-check/phoneServerIos.mjs.
 appId: com.megyprints.app.dev
 ---
 - launchApp
 - openLink: ${LINK}
-- tapOn:
-    text: "Open"
-    optional: true
+- extendedWaitUntil:
+    visible: "Open"
+    timeout: 30000
+- tapOn: "Open"

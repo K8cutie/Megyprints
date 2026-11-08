@@ -4367,6 +4367,22 @@ album code and the Skia renderer carry over unchanged. What iPhone needed:
 - `.github/workflows/ios-photo-check.yml`: `tools/photo-check` on the simulator
   (`phoneServerIos.mjs`) against the website, same test pictures.
 
+**Results so far (iPhone 17 Pro simulator, iOS 26.5):**
+- Album walk signed out: 84 photos → Select all → cover photo → Make my album → Preview "Page 2
+  of 45" with the photos drawn (photo-files' drawableCopy); the sign-in screen with Sign in with
+  Apple and Google. Seen and fixed: the back button after Home said "index" (Home had no title).
+- Print check (golden pages drawn by iPhone's Skia, compared on Windows): first run 214 / 224;
+  every failure a cover with light letters, 7-18 % heavier ink than the website's. Android's
+  0.2 px light-letter hairline was the cause: on iPhone every light text is within the 6 % bar
+  with none (worst 5.1 %), so iPhone gets 0 (`pageText.ts phoneLightWeightPx`). Second run
+  **223 / 224**. The Display P3 photo passes after the Swift srgbCopy and fails without it (as it
+  must). `cover-86-old-form`, Android's known failure, passes on iPhone.
+- **Open:** `cover-wordart-two-colour-shadow` text 4, the back cover's grey Megy Prints mark:
+  ink 9.0 % off (bar 6 %); the same mark is 4-5 % on the other covers, so iPhone's mid-grey
+  letters run a little heavy. Not loosened (the bars stay); to fix before any iPhone order.
+- The whole golden run (108 pages and covers, the texture tiles, the timing pass and the
+  light-letter trials) took 131 s on the simulator (report.json totalMs).
+
 **The owner's steps before a real iPhone build** (none needed for the simulator checks):
 1. An Apple Developer account ($99 a year; a company account needs a D-U-N-S number first).
 2. In it: the app id `com.megyprints.app` with Sign in with Apple switched on.
