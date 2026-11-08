@@ -68,8 +68,17 @@ export type LineStyle = WordArtStyle & { color?: string };
 
 const LAYOUT_WIDTH = 1e7;
 /** On the phone: the hairline of weight light letters get, device px (see
- *  "Light letters on the phone" above); 0 = none. */
+ *  "Light letters on the phone" above); 0 = none. Measured on Android. */
 export const PHONE_LIGHT_WEIGHT_PX = 0.2;
+/** On an iPhone: none. iPhone's Skia draws light letters as heavy as the
+ *  website's print files already: its golden run (2026-11-09, iPhone 17 Pro
+ *  simulator, iOS 26.5) had every light text within the 6 % ink bar at 0 px
+ *  (worst 5.1 %, cover-64-soft-plain) and up to 24 % off at 0.15-0.25 px. */
+export const IPHONE_LIGHT_WEIGHT_PX = 0;
+/** The light letters' hairline for the phone the app runs on (`Platform.OS`). */
+export function phoneLightWeightPx(os: string): number {
+  return os === 'ios' ? IPHONE_LIGHT_WEIGHT_PX : PHONE_LIGHT_WEIGHT_PX;
+}
 /** The widths the phone's golden run tries for light letters, device px, to
  *  pick PHONE_LIGHT_WEIGHT_PX from. */
 export const LIGHT_WEIGHT_TRIALS: readonly number[] = [0, 0.15, 0.2, 0.25];
@@ -92,8 +101,10 @@ export class PageText {
   private readonly loaded: { font: BundledFont; metrics: FontFileMetrics }[] = [];
   private readonly widths = new Map<string, number>();
 
-  constructor(private readonly Skia: Skia, files: readonly FontFile[]) {
-    this.lightWeight = isCanvasKit(Skia) ? 0 : PHONE_LIGHT_WEIGHT_PX;
+  /** `phoneLightWeight`: the light letters' hairline on a phone
+   *  (phoneLightWeightPx(Platform.OS)); CanvasKit in Node never gets one. */
+  constructor(private readonly Skia: Skia, files: readonly FontFile[], phoneLightWeight: number = PHONE_LIGHT_WEIGHT_PX) {
+    this.lightWeight = isCanvasKit(Skia) ? 0 : phoneLightWeight;
     this.provider = Skia.TypefaceFontProvider.Make();
     for (const f of files) {
       const typeface = Skia.Typeface.MakeFreeTypeFaceFromData(Skia.Data.fromBytes(f.bytes));

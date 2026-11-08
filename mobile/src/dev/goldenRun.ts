@@ -40,7 +40,7 @@ import { TileMode } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import type { AlbumPage, AlbumSizePreset, CoverDesign, CoverType, MaterialType } from '@web/pages/builder/types';
 import { planPage, type PagePlan } from '../render/pagePlan';
 import { PageDrawer } from '../render/drawPage';
-import { PageText, isLightColor, LIGHT_WEIGHT_TRIALS, type FontFile } from '../render/pageText';
+import { PageText, isLightColor, LIGHT_WEIGHT_TRIALS, PHONE_LIGHT_WEIGHT_PX, type FontFile } from '../render/pageText';
 import { BUNDLED_FONTS } from '../render/fontTable';
 import { appWords, type TextItemLines } from '../render/pageWords';
 import { AssetCache, fromBase64 } from '../render/assets';
@@ -182,6 +182,9 @@ export interface RunOptions {
   timingPages?: readonly string[];
   /** The light-weight trials, device px (default LIGHT_WEIGHT_TRIALS; [] for none). */
   lightWeightTrials?: readonly number[];
+  /** The light letters' hairline this phone draws with (pageText
+   *  phoneLightWeightPx; default PHONE_LIGHT_WEIGHT_PX, Android's). */
+  phoneLightWeightPx?: number;
 }
 
 /** A camera-sized photo made on the device (no real photo): colour washes,
@@ -216,7 +219,7 @@ function cameraPhoto(Sk: Skia, drawer: PageDrawer): SkImage {
 /** Draw every golden page with this Skia and write the pictures and report.json. */
 export async function runGoldenPages(Sk: Skia, bundle: GoldenBundle, writer: GoldenWriter, options: RunOptions = {}): Promise<PhoneReport> {
   const t0 = Date.now();
-  const text = new PageText(Sk, bundleFonts(bundle));
+  const text = new PageText(Sk, bundleFonts(bundle), options.phoneLightWeightPx ?? PHONE_LIGHT_WEIGHT_PX);
   const drawer = new PageDrawer(Sk, text);
   const served = new Map((bundle.assetFiles ?? []).map((a) => [a.url, a.base64]));
   const assets = new AssetCache(Sk, (src) => { const b = served.get(src); return b ? fromBase64(b) : null; });

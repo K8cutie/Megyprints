@@ -8,7 +8,7 @@
    pages and measure the captions (the builder's textMeasurer).
    ══════════════════════════════════════════════════════════════════════════ */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import '@shopify/react-native-skia/lib/commonjs/skia/NativeSetup';
 import { Skia } from '@shopify/react-native-skia/lib/commonjs/skia/Skia';
 import { BuilderPlatformContext, type AppLifecycle, type TextMeasurer } from '@web/shared/platform';
@@ -20,7 +20,7 @@ import { useDraftFollowsAlbum } from '../lib/draftFollowsAlbum';
 import { useAccountSave } from './accountSave';
 import { withQrOnOuterSide } from '../lib/memories/qrSide';
 import { supabase } from '../lib/supabase';
-import { PageText } from '../render/pageText';
+import { PageText, phoneLightWeightPx } from '../render/pageText';
 import { createAppPlatform, type AppPlatform } from './appPlatform';
 import { fileKeyValueStore, memoryStore } from './deviceStore';
 import { expoSyncFiles } from './expoFiles';
@@ -50,7 +50,7 @@ export function pageFonts(): Promise<PageText | null> {
     fontsLoading = loadPageFonts()
       .then(async (files) => {
         PageText.expectAll(files);
-        const t = new PageText(Skia, files);
+        const t = new PageText(Skia, files, phoneLightWeightPx(Platform.OS));
         // Caption fonts fetched on earlier visits (src/editor/text/fonts), in
         // before the first page is drawn, so it is drawn in them.
         await loadDownloadedFonts(t);

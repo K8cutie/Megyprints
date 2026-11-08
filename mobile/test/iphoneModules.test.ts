@@ -16,6 +16,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import fs from 'node:fs';
 import path from 'node:path';
+import { IPHONE_LIGHT_WEIGHT_PX, PHONE_LIGHT_WEIGHT_PX, phoneLightWeightPx } from '../src/render/pageText';
 
 const MODULES = path.join(__dirname, '..', 'modules');
 
@@ -72,5 +73,25 @@ describe.each(BOTH)('modules/%s on Android and iPhone', (name) => {
   it('the same events', () => {
     const events = (src: string) => [...src.matchAll(/Events\("([A-Za-z]+)"\)/g)].map((m) => m[1]).sort();
     expect(events(swift)).toEqual(events(kotlin));
+  });
+});
+
+/* Print: light letters (white, cream) get a hairline of extra weight on
+   Android's phones, where native Skia draws them thinner than the website's
+   print files; iPhone's Skia does not (its golden run, 2026-11-09: every
+   light text within the 6 % ink bar at 0 px, up to 24 % off with the
+   Android hairline). Both the album builder and the golden run use it. */
+describe("light letters' hairline per phone (render/pageText.ts)", () => {
+  it('Android keeps its measured 0.2 px; iPhone none', () => {
+    expect(phoneLightWeightPx('android')).toBe(PHONE_LIGHT_WEIGHT_PX);
+    expect(PHONE_LIGHT_WEIGHT_PX).toBe(0.2);
+    expect(phoneLightWeightPx('ios')).toBe(IPHONE_LIGHT_WEIGHT_PX);
+    expect(IPHONE_LIGHT_WEIGHT_PX).toBe(0);
+  });
+
+  it('the album builder and the golden run draw with the phone\'s own', () => {
+    const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8');
+    expect(read('src/builder/BuilderProvider.tsx')).toContain('new PageText(Skia, files, phoneLightWeightPx(Platform.OS))');
+    expect(read('src/app/golden-pages.tsx')).toContain('phoneLightWeightPx: phoneLightWeightPx(Platform.OS)');
   });
 });
