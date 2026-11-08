@@ -1,9 +1,12 @@
-# iPhone asks "Open in "Megy Prints 2.0 (dev)"?" before it follows one of the
-# app's own links (simctl openurl megyprints-dev://…). The checks that open a
-# test screen by its link (ios-golden.yml, tools/photo-check/phoneServerIos.mjs)
-# run this right after, to tap Open. Nothing happens when iPhone did not ask.
+# Opens one of the app's test screens by its link on an iPhone simulator:
+#   maestro --device <udid> test -e LINK=megyprints-dev://golden-pages?run=1 mobile/maestro/ios-open-link.yaml
+# iPhone asks "Open in "Megy Prints 2.0 (dev)"?" before it follows an app's
+# own link, so Maestro opens the link itself (its helper is running by then)
+# and taps Open. Used by ios-golden.yml and tools/photo-check/phoneServerIos.mjs.
 appId: com.megyprints.app.dev
 ---
+- launchApp
+- openLink: ${LINK}
 - tapOn:
     text: "Open"
     optional: true
