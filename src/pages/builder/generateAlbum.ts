@@ -68,6 +68,111 @@ const MOMENT_GAP_MS = 3 * 60 * 60 * 1000; // 3 hours
  *  robin), so a 3-hour party (one moment) came out in shape order. */
 export const TIME_ORDER_REACH = 12;
 
+/* ══════════════════════════════════════════════════════════════════════════
+   SCENES (owner, 2026-11-09): "if the gap is big then that picture might not
+   be related to the group of pictures clustered within 5 mins of each other".
+   Inside a moment, a new SCENE starts when consecutive shots are more than
+   SCENE_GAP_MS apart, or were taken more than SCENE_MOVE_M apart (both with a
+   place from the photo's EXIF). A page never holds photos of two scenes: the
+   3 roller-coaster shots at 2:00 are not on a page with the lunch at 3:15,
+   which TIME_ORDER_REACH (a count, not a time) used to allow.
+
+   The page budget: a page is a price (sheets past 40 pages cost), so scenes
+   may never ADD a page. The album is laid out once with the moments alone
+   (the budget) and once with the scenes; while the scenes make more pages,
+   the scenes closest in time are merged and it is laid out again, down to
+   the moments themselves. At a chosen photos-per-page the page count is
+   promised before Generate, so a scene cannot end a page early; there the
+   plan's counts are dealt in the order that fits the scenes instead (see
+   nextPlanned).
+   ══════════════════════════════════════════════════════════════════════════ */
+/** A new scene starts when consecutive shots are more than this apart. */
+export const SCENE_GAP_MS = 5 * 60 * 1000; // 5 minutes
+/** ...or were taken more than this far apart (metres), when both have a place. */
+export const SCENE_MOVE_M = 200;
+
+/** Metres between two places (haversine). */
+export function distanceM(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const R = 6_371_000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+type Placed = Pick<UploadedPhoto, 'capturedAt' | 'location'>;
+
+/** Consecutive shots (in time order) belong to different scenes. */
+function sceneBreak(prev: Placed, next: Placed): boolean {
+  if (typeof prev.capturedAt === 'number' && typeof next.capturedAt === 'number' && next.capturedAt - prev.capturedAt > SCENE_GAP_MS) return true;
+  if (prev.location && next.location && distanceM(prev.location, next.location) > SCENE_MOVE_M) return true;
+  return false;
+}
+
+/** Each photo's scene (a number; equal = same scene), by photo id. Walks the
+ *  moments in time order (groupPhotosByMoment), so a scene never crosses a
+ *  moment; photos without a capture time are one scene of their own. The
+ *  builder works this out under "Grouping the moments" and hands it to
+ *  generateAlbum (options.scenes); generateAlbum works it out itself when
+ *  it isn't handed one. */
+export function planScenes(photos: UploadedPhoto[]): Map<string, number> {
+  const scenes = new Map<string, number>();
+  let scene = 0;
+  for (const group of groupPhotosByMoment(photos)) {
+    let prev: UploadedPhoto | null = null;
+    for (const i of group) {
+      const p = photos[i];
+      if (prev && sceneBreak(prev, p)) scene++;
+      scenes.set(p.id, scene);
+      prev = p;
+    }
+    scene++;
+  }
+  return scenes;
+}
+
+/** A moment's photos (time order) split where their scene changes. */
+function splitByScene(group: number[], sceneOf: (i: number) => number | undefined): number[][] {
+  const out: number[][] = [];
+  let cur: number[] = [];
+  let last: number | undefined;
+  for (const i of group) {
+    const s = sceneOf(i);
+    if (cur.length && s !== last) { out.push(cur); cur = []; }
+    cur.push(i);
+    last = s;
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
+
+/** The scenes closest in time merged (the smallest quarter of the gaps, at
+ *  least one), moment by moment; null when there is nothing left to merge.
+ *  A change of place counts as a long gap, so place splits merge last. */
+function mergeClosestScenes(groups: number[][][], photos: UploadedPhoto[]): number[][][] | null {
+  const gaps: { m: number; k: number; score: number }[] = [];
+  groups.forEach((scenes, m) => {
+    for (let k = 0; k + 1 < scenes.length; k++) {
+      const a = photos[scenes[k][scenes[k].length - 1]];
+      const b = photos[scenes[k + 1][0]];
+      const dt = typeof a.capturedAt === 'number' && typeof b.capturedAt === 'number' ? b.capturedAt - a.capturedAt : 0;
+      const moved = a.location && b.location && distanceM(a.location, b.location) > SCENE_MOVE_M;
+      gaps.push({ m, k, score: dt + (moved ? 2 * SCENE_GAP_MS : 0) });
+    }
+  });
+  if (gaps.length === 0) return null;
+  gaps.sort((x, y) => x.score - y.score);
+  const chosen = gaps.slice(0, Math.max(1, Math.ceil(gaps.length / 4)));
+  const next = groups.map((scenes) => scenes.map((s) => [...s]));
+  // Merge from the last boundary of each moment down, so earlier ks stay valid.
+  for (const g of chosen.sort((x, y) => y.m - x.m || y.k - x.k)) {
+    const scenes = next[g.m];
+    scenes.splice(g.k, 2, [...scenes[g.k], ...scenes[g.k + 1]]);
+  }
+  return next;
+}
+
 /** Split photos into chronological "moments" by EXIF capture time, so photos
  *  taken close together land on the same page(s). Photos without EXIF time keep
  *  their upload order in a trailing group. Returns arrays of photo indices. */
@@ -1262,6 +1367,10 @@ export interface GenerateOptions {
   /** The share of Surprise pages that are full pages (FULL_PAGE_SHARE).
    *  0 = only the opening and memory pages, as before 2026-10-26. */
   fullPageShare?: number;
+  /** Each photo's scene by id (planScenes), worked out by the builder under
+   *  "Grouping the moments". Left out: worked out here. false: no scenes
+   *  (pages fill across the moment as before 2026-11-09). */
+  scenes?: Map<string, number> | false;
 }
 
 /**
@@ -1287,7 +1396,11 @@ export function generateAlbum(
   background?: AlbumPage['background'] | undefined,
   options?: GenerateOptions,
 ): AlbumPage[] {
-  const made = (memoryPages: number) => generateAlbumWith(photos, albumSize, photosPerPage, background, options, memoryPages);
+  // SCENES: worked out once, on the whole album. The photos reserved for the
+  // opening and memory pages leave gaps in what is laid out around them, and
+  // those gaps must not split the rest into more scenes.
+  const opts = options?.scenes === undefined ? { ...options, scenes: planScenes(photos) } : options;
+  const made = (memoryPages: number) => generateAlbumWith(photos, albumSize, photosPerPage, background, opts, memoryPages);
   const base = made(MIN_MEMORY_PAGES);
   const share = options?.fullPageShare ?? FULL_PAGE_SHARE;
   if (photosPerPage != null || !(share > 0) || !memorySingleTemplate(albumSize)) return base;
@@ -1415,6 +1528,56 @@ function layoutAlbum(
    *  opening full pages): the look and rhythm guards start from it. */
   after?: PageTemplate,
 ): AlbumPage[] {
+  // SCENES and the page budget (see SCENE_GAP_MS above).
+  const moments = groupPhotosByMoment(photos);
+  const sceneOf = options?.scenes === false ? null : (options?.scenes ?? planScenes(photos));
+  const lay = (groups: number[][][]) => layoutAlbumWith(photos, albumSize, photosPerPage, background, options, basis, after, groups);
+  const plain = moments.map((m) => [m]);
+  if (!sceneOf) return lay(plain);
+  let groups = moments.map((m) => splitByScene(m, (i) => sceneOf.get(photos[i].id)));
+  if (groups.every((g) => g.length <= 1)) return lay(plain);
+  // A chosen photos-per-page (2+) promises its page count: the plan's counts
+  // are dealt scene by scene (nextPlanned), the count can't change, one pass.
+  const randomize = options?.randomize ?? false;
+  if (!randomize && photosPerPage != null && photosPerPage > 1) return lay(groups);
+  // The budget: the album without scenes. Every layout after it REPLAYS the
+  // random draws the budget's made (then draws on), so two layouts differ
+  // only by the scenes: the deal's own swing between two tries (two or
+  // three pages either way) no longer passes for a page the scenes added.
+  const drawn: number[] = [];
+  const real = Math.random;
+  Math.random = () => { const v = real(); drawn.push(v); return v; };
+  let base: AlbumPage[];
+  try { base = lay(plain); } finally { Math.random = real; }
+  const replay = (f: () => AlbumPage[]): AlbumPage[] => {
+    let k = 0;
+    Math.random = () => (k < drawn.length ? drawn[k++] : real());
+    try { return f(); } finally { Math.random = real; }
+  };
+  let pages = replay(() => lay(groups));
+  while (pages.length > base.length) {
+    const merged = mergeClosestScenes(groups, photos);
+    if (!merged) break;
+    groups = merged;
+    pages = replay(() => lay(groups));
+  }
+  // Fully merged and still a page over (the deal's own randomness): the
+  // budget's own album, so scenes never cost a page.
+  return pages.length > base.length ? base : pages;
+}
+
+function layoutAlbumWith(
+  photos: UploadedPhoto[],
+  albumSize: AlbumSizePreset,
+  photosPerPage: number | undefined,
+  background: AlbumPage['background'] | undefined,
+  options: GenerateOptions | undefined,
+  basis: { photos: number; minPages: number } | undefined,
+  after: PageTemplate | undefined,
+  /** The photos moment by moment, each moment scene by scene (indices into
+   *  photos, time order). Every moment is one scene when scenes are off. */
+  sceneGroups: number[][][],
+): AlbumPage[] {
   // STUDIO: when the caller keeps some pages out of the reshuffle it asks for
   // fewer fresh pages, so the merged album still lands on the minimum.
   const minPages = Math.max(1, Math.floor(options?.minPages ?? MIN_PAGES));
@@ -1481,6 +1644,46 @@ function layoutAlbum(
   const planCap = fillMode ? Math.min(deckMax, photosPerPage ?? Math.max(2, naturalPerPage(albumSize))) : 1;
   let plan: number[] | null = null; // built below, once the pool's ratios are known
   let planCarry = 0; // photos the plan wanted on earlier pages that the queues could not supply yet
+  // The plan's whole debt so far: what its pages wanted minus what they took.
+  // planCarry forgives any debt past planCap (want is capped), so it can't
+  // say how much the album still owes; this can (the scene rule reads it).
+  let plannedSum = 0;
+  let takenSum = 0;
+  // The fill plan's counts as they are still to deal (nextFillCount).
+  let fillQueue: number[] | null = null;
+  let fillAt = 0;
+  /** The fill plan's remaining counts, dealt in the order that fits the
+   *  scenes (as nextPlanned does for a chosen count): the count that ends
+   *  the leading scene's photos of this shape exactly, else the largest that
+   *  stays inside it, else the smallest. The same counts in another order:
+   *  the same photos on the same number of pages, so this costs no page.
+   *  Past the plan's length (singles added pages) it cycles, as before. */
+  const nextFillCount = (inScene: number, fitScene: boolean): number => {
+    if (!plan || plan.length === 0) return 1;
+    if (!fillQueue) fillQueue = [...plan];
+    if (fillAt >= fillQueue.length) return fillQueue[pages.length % fillQueue.length];
+    // No scene to fit (the scene reaches past the page, or holds one lone
+    // photo of this shape): the plan's own order, its rhythm.
+    if (!fitScene) return fillQueue[fillAt++];
+    // Only a count that fits INSIDE the scene is worth bringing forward (the
+    // one that ends it exactly first, else the largest under it). A page
+    // that spills either way takes the plan's next count: spending the
+    // smaller counts on spills left only the big ones for the scenes after
+    // (199 photos at 4 a page: more two-scene pages, not fewer).
+    let best = -1;
+    for (let k = fillAt; k < fillQueue.length; k++) {
+      const c = fillQueue[k];
+      if (c > inScene) continue;
+      if (best < 0 || c > fillQueue[best]) best = k;
+      if (c === inScene) break;
+    }
+    if (best < 0) return fillQueue[fillAt++];
+    const c = fillQueue[best];
+    fillQueue[best] = fillQueue[fillAt];
+    fillQueue[fillAt] = c;
+    fillAt++;
+    return c;
+  };
 
   // No photos → minimum empty pages
   if (totalPhotos === 0) {
@@ -1491,8 +1694,9 @@ function layoutAlbum(
   const analysis = analyzePhotos(photos);
   const dominantRatio = analysis.dominantRatio;
 
-  // ── 2. Group photos into chronological "moments" (EXIF capture time) ──
-  const momentGroups = groupPhotosByMoment(photos);
+  // ── 2. The chronological "moments" (EXIF capture time), as handed in:
+  //       each moment's photos in time order, its scenes one after another ──
+  const momentGroups = sceneGroups.map((scenes) => scenes.flat());
 
   // photo index → aspect ratio (from the ratio analysis)
   const ratioOf: Record<number, PhotoRatio> = {};
@@ -1729,6 +1933,22 @@ function layoutAlbum(
     //       out full. ──
     const remaining = [...group];
     const ahead = () => remaining.slice(0, TIME_ORDER_REACH);
+    // SCENES: the leading scene's photos still to place (the scene of the
+    // earliest unplaced photo; the scenes sit one after another in
+    // remaining). A page is one shape (no mixed pages in fill mode), so a
+    // page that may only take the leading scene's photos of its shape ends
+    // SHORT whenever the scene has fewer than the page wants: every burst of
+    // five phone shots in three shapes became three pages, and the budget
+    // then merged every scene away. So the scene is a preference, taken
+    // when the album can afford the short page (emitOnePage), not a wall.
+    const sceneNo = new Map<number, number>();
+    sceneGroups[moment].forEach((scene, k) => scene.forEach((i) => sceneNo.set(i, k)));
+    const leading = (): number => {
+      const s = sceneNo.get(remaining[0]);
+      let n = 0;
+      while (n < remaining.length && sceneNo.get(remaining[n]) === s) n++;
+      return n;
+    };
     const ratioIn = (i: number): PhotoRatio => ratioOf[i] ?? dominantRatio;
     /** Photos of `ratio` a page may take right now: the whole moment's at a
      *  chosen photos-per-page, else only those within reach. */
@@ -1763,7 +1983,11 @@ function layoutAlbum(
     const tryMixedPage = (): boolean => {
       if (!mixedBag) return false;
       const head = remaining[0];
-      const pool = ahead();
+      // SCENES: a mixed-shape page from the leading scene's photos when they
+      // can fill one (the same page count: one page either way); else from
+      // the photos ahead, as before.
+      const near = leading() >= 2 ? remaining.slice(0, Math.min(TIME_ORDER_REACH, leading())) : null;
+      const pool = near && mixedTemplates.some((t) => tryMixedFill(t, near)?.includes(head)) ? near : ahead();
       // Every mixed template fillable from the photos ahead, starting here.
       const fillable = mixedTemplates
         .map((t) => ({ t, fills: tryMixedFill(t, pool) }))
@@ -1865,11 +2089,55 @@ function layoutAlbum(
       return { key: ratio, ratioTemplates, onePhoto, singles, multi, plan: own, planAt: 0, carry: 0 };
     });
 
+    /** The room the plan's later pages have under planCap: what a page
+     *  that ends at a scene can hand on without adding a page. */
+    const planSlackLeft = (): number => {
+      if (!plan) return 0;
+      let room = 0;
+      for (let j = pages.length + 1; j < plan.length; j++) room += planCap - plan[j];
+      return room;
+    };
+
+    /** A chosen photos-per-page promises its page count (chosenQueuePlans),
+     *  so a scene can't end a page early. Instead the queue's remaining
+     *  planned counts are dealt in the order that fits the scenes: the count
+     *  that ends the leading scene exactly, else the largest that stays
+     *  inside it, else the smallest (the least spill into the next scene).
+     *  The counts are the same, only their order changes, so the page count
+     *  the upload step said still holds. */
+    const nextPlanned = (st: RatioState, inScene: number, fitScene: boolean): number => {
+      const queue = st.plan!;
+      if (st.planAt >= queue.length) { st.planAt++; return 1; }
+      // No scene to fit (the scene holds the rest of this shape's photos, or
+      // one lone photo of it): the plan's own order, its rhythm.
+      if (!fitScene) return queue[st.planAt++];
+      // Only a count that fits INSIDE the scene is brought forward (see
+      // nextFillCount); a page that spills either way keeps the plan's order.
+      let best = -1;
+      for (let k = st.planAt; k < queue.length; k++) {
+        const c = queue[k];
+        if (c > inScene) continue;
+        if (best < 0 || c > queue[best]) best = k;
+        if (c === inScene) break;
+      }
+      if (best < 0) return queue[st.planAt++];
+      const c = queue[best];
+      queue[best] = queue[st.planAt];
+      queue[st.planAt] = c;
+      st.planAt++;
+      return c;
+    };
+
     // Emit exactly one page from a ratio's queue (drains 1..slotCount photos).
     const emitOnePage = (st: RatioState) => {
       const { key, ratioTemplates, singles, multi } = st;
-      const avail = availableOf(key);
-      const fits = multi.filter((t) => t.slotCount <= avail);
+      let avail = availableOf(key);
+      // SCENES: the photos of this shape in the leading scene (at least the
+      // page's first). A page that would reach past the scene for its count
+      // ends at the scene instead when the album can afford the short page
+      // (below); otherwise it fills across, as before 2026-11-09.
+      const inScene = Math.max(1, remaining.slice(0, leading()).filter((i) => ratioIn(i) === key).length);
+      let fits = multi.filter((t) => t.slotCount <= avail);
 
       // ── Planned fill ── deal this page at its planned count (plus any
       // carry the earlier pages could not place), choosing a layout that
@@ -1878,8 +2146,29 @@ function layoutAlbum(
         // Past the plan's length (singles added pages) the plan CYCLES, so the
         // tail keeps the same rhythm instead of collapsing to one per page.
         // A queue with its own plan (exactPlan) deals it in order.
-        const planned = st.plan ? (st.plan[st.planAt++] ?? 1) : (plan!.length ? plan![pages.length % plan!.length] : 1);
+        // A lone photo of its shape in the leading scene (inScene 1) is never
+        // given a page for the scene's sake: a solo costs the most and keeps
+        // one photo apart, and bursts are full of them (one landscape among
+        // the portraits, the odd square), so they spent the plan's room in
+        // the first ten pages and left nothing for the scenes after. It joins
+        // the next scene's photos of its shape. Two or more fit the scene.
+        const fitScene = inScene >= 2 && inScene < avail;
+        const planned = st.plan ? nextPlanned(st, inScene, fitScene) : nextFillCount(inScene, fitScene);
         const want = Math.max(1, Math.min(st.plan ? chosenCap : planCap, planned + (st.plan ? st.carry : planCarry)));
+        // A short page's missing photos carry to the next pages, which take
+        // up to planCap. Affordable while the plan's SLACK can pay for them:
+        // the room its later pages have under planCap (planSlackLeft). A
+        // page ends short only while the whole debt after it fits in that
+        // room, so the pages stay as planned and the count holds (the budget
+        // check in layoutAlbum is the backstop). Checked on the whole debt,
+        // not the page's own: a per-page bound let every lone photo end a
+        // page while the debt stayed high, and the album grew by a quarter.
+        // A chosen count (st.plan) deals its counts scene by scene instead
+        // (nextPlanned) and never ends short.
+        if (!st.plan && fitScene && plannedSum - takenSum + planned - inScene <= planSlackLeft()) {
+          avail = inScene;
+          fits = multi.filter((t) => t.slotCount <= avail);
+        }
         let template: PageTemplate | undefined;
         // Counts this page may take: never MORE than wanted (2026-10-04, the
         // 1-star testers): a page over the plan left the album short of photos
@@ -1932,7 +2221,7 @@ function layoutAlbum(
         // What this page did not take is owed to the next one. (Never negative
         // now — no page takes more than it wants — so the album can only run
         // out of plan, never out of photos: no blank pages at the end.)
-        if (st.plan) st.carry = want - take; else planCarry = want - take;
+        if (st.plan) st.carry = want - take; else { planCarry = want - take; plannedSum += planned; takenSum += take; }
         pushPage(template, takeOf(key, take));
         return;
       }
@@ -1945,6 +2234,14 @@ function layoutAlbum(
       // the hero on a BOX page during the cooldown — which is exactly what the
       // cadence is trying to hold down. In that case skip the hero and let a
       // (box-free) multi page carry this slot instead.
+      // SCENES (no plan: the natural mix): a page stays inside the leading
+      // scene when the scene has a page's worth of this shape (the size's
+      // natural count or more): the page is then as full as the mix would
+      // make it anyway. Fewer join the next scene's rather than add a page.
+      if (inScene >= naturalPerPage(albumSize) && inScene < avail) {
+        avail = inScene;
+        fits = multi.filter((t) => t.slotCount <= avail);
+      }
       const heroPool = boxAware(singles);
       const heroWouldBox = captionCooldown > 0 && heroPool.every(hasBox);
       const heroAllowed = singles.length > 0 && !heroWouldBox &&

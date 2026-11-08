@@ -682,6 +682,12 @@ export interface UploadedPhoto {
   width: number;
   height: number;
   capturedAt?: number | null; // EXIF DateTimeOriginal (ms) — drives moment grouping
+  /** Where it was taken (EXIF GPS), when the photo carries it. Read on the
+   *  website; the app's photos have none (Android keeps a photo's place
+   *  behind ACCESS_MEDIA_LOCATION, which the app does not ask for). With
+   *  capturedAt it splits a moment into scenes (generateAlbum SCENE_MOVE_M).
+   *  Stays on this device: never saved to the account (albumCloud). */
+  location?: { lat: number; lon: number } | null;
   /** Megy's free photo check (blur, fingerprint, closed eyes) — lib/photoCheck. */
   check?: PhotoCheck;
   /** The customer said keep it: never suggested out again. */

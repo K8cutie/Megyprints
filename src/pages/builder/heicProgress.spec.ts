@@ -85,10 +85,10 @@ describe('"Making your album" waiting for iPhone photos', () => {
     Object.assign(ctx, { generating: 'measuring', heicProgress: { done: 44, total: 44 } });
     const O = await overlay();
     act(() => root.render(createElement(O)));
-    expect($('generating-stage')!.textContent).toBe('Looking at your photos…');
-    expect(host.textContent).toContain('This takes a few seconds');
+    expect($('generating-stage')!.textContent).toBe('Looking at your photos');
+    expect(host.textContent).toContain('Your photos stay on this device.');
     Object.assign(ctx, { generating: 'laying_out', heicProgress: null });
     act(() => root.render(createElement(O)));
-    expect($('generating-stage')!.textContent).toBe('Arranging them across the pages…');
+    expect($('generating-stage')!.textContent).toBe('Laying out the pages');
   });
 });

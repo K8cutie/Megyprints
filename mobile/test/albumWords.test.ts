@@ -74,9 +74,17 @@ describe("the app's album steps use the website's words", () => {
 
   it('"Making your album" (GeneratingOverlay.tsx)', () => {
     for (const w of Object.values(GENERATING_COPY)) expect(web.making).toContain(`'${w}'`);
-    for (const w of ['Making your album', 'Please stand by while Megy does the magic. This takes a few seconds.']) {
+    for (const w of ['Making your album']) {
       expect(web.making).toContain(w);
       expect(app.making).toContain(w);
+    }
+    // The same promise, said for the device each one runs on.
+    expect(web.making).toContain('Your photos stay on this device.');
+    expect(app.making).toContain('Your photos stay on your phone.');
+    // The count line and the photos line are built the same way.
+    for (const w of ['. ${count.done} of ${count.total}', "photo${n === 1 ? '' : 's'}"]) {
+      expect(web.making).toContain(w);
+      expect(read('mobile/src/builder/albumFlow.ts')).toContain(w);
     }
   });
 

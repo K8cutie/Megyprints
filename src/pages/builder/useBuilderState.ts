@@ -25,7 +25,7 @@ import { placePhoto } from './slotSwap';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, planScenes, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './maskShapes';
 import { isLookId, type LookId } from './lookRules';
@@ -57,7 +57,7 @@ import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fontCatalog';
 import { readAlbumThemeFrom, writeAlbumThemeTo } from '../../lib/albumThemeRules';
-import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
+import { nextCheckJob, checkIsReady, checkProgress, faceCheckProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -733,7 +733,19 @@ function getInitialState({ deviceStore, sessionStore }: Pick<BuilderPlatform, 'd
 }
 
 /** The stages of a whole-album generation, in order. Shown to the customer. */
-export type GeneratingPhase = 'measuring' | 'laying_out' | 'quotes' | 'finishing';
+/** The steps of making an album, as the "Making your album" screen names
+ *  them (GENERATING_COPY). Owner (2026-11-09): a wait is fine when the screen
+ *  says what the phone is doing, with a real count, so the work on the
+ *  photos (the blur check, the face pass) is waited for and counted here
+ *  instead of being left half done. */
+export type GeneratingPhase = 'measuring' | 'checking' | 'faces' | 'grouping' | 'laying_out' | 'quotes' | 'finishing';
+/** How far the step on screen is, when it counts photos. */
+export interface GeneratingCount { done: number; total: number }
+/** The longest Generate waits for the photo check (the blur check, then the
+ *  face pass) before laying out the album from what was checked: a slow
+ *  phone is never stuck on it. 200 photos take about a minute on a phone
+ *  that finds faces fast. */
+export const CHECK_WAIT_MS = 120_000;
 
 /** What generateAlbum did, and (for a new size) the memories' plan. */
 export type GenerateResult =
@@ -872,6 +884,9 @@ export interface BuilderActions {
    *  generation can take several seconds (measuring, laying out, waiting on
    *  the theme's quotes) and a silent wait reads as a hang (owner, 2026-09-12). */
   generating: GeneratingPhase | null;
+  /** How far the step in `generating` is, when it counts photos ("Checking
+   *  photos for blur 37 of 200"); null when the step has no count. */
+  generatingCount: GeneratingCount | null;
   regeneratePage: () => void;
   shuffleLayout: () => void;
   cycleLayout: () => void;
@@ -1119,7 +1134,7 @@ export function useBuilderState(): BuilderActions {
   const { deviceStore, sessionStore, faces, photoCheck: checker, lifecycle, textMeasurer, occasionChanged, cloud: account } = platform;
   /** The occasion's caption lines (website: lib/quotes; app: its own pool). */
   const { ensureThemeQuotes } = platform.quotes;
-  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview } = platform.photos;
+  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview } = platform.photos;
   /** A saved photo URL that must be found again in the photo store when the
    *  album opens: none at all, or one the device says doesn't last (website:
    *  a blob: URL, dead with the old tab; app: a picker's URI). */
@@ -1192,6 +1207,7 @@ export function useBuilderState(): BuilderActions {
   if (editedAtRef.current === undefined) editedAtRef.current = getInitialState(platform).editedAt ?? 0;
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState(platform).albumPages);
   const [generating, setGenerating] = useState<GeneratingPhase | null>(null);
+  const [generatingCount, setGeneratingCount] = useState<GeneratingCount | null>(null);
   const albumPagesRef = useRef(albumPages);
   useEffect(() => { albumPagesRef.current = albumPages; }, [albumPages]);
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState(platform).currentPageIndex);
@@ -1963,13 +1979,13 @@ export function useBuilderState(): BuilderActions {
           }
           const stored = await idbPhotos.store(usable, id);
           const dims = stored ?? await getImageDimensions(usable);
-          const capturedAt = await captureTime(file); // the original: a JPEG copy has no EXIF
+          const [capturedAt, location] = await Promise.all([captureTime(file), captureLocation ? captureLocation(file) : null]); // the original: a JPEG copy has no EXIF
           if (dims.width > 0 && dims.height > 0) measuredRef.current.set(id, { width: dims.width, height: dims.height });
           const note = copyQuality(recorded.get(id) ?? { width: 0, height: 0 }, dims);
           const shown = usable !== file ? { previewUrl: previewUrlOf(usable), type: usable.type } : {};
           uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === id ? { ...p, ...shown } : p));
           setUploadedPhotos((prev) => prev.map((p) => (p.id === id
-            ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
+            ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(location ? { location } : {}), ...(note ? { copyNote: note } : {}) }
             : p)));
           return 'ok' as const;
         });
@@ -2028,7 +2044,7 @@ export function useBuilderState(): BuilderActions {
         // A failed write (e.g. a full disk) returns null — still measure, or the
         // photo stays 0×0 and gets classified by guesswork.
         const dims = stored ?? await getImageDimensions(usable);
-        const capturedAt = await captureTime(file); // the original: a JPEG copy has no EXIF
+        const [capturedAt, location] = await Promise.all([captureTime(file), captureLocation ? captureLocation(file) : null]); // the original: a JPEG copy has no EXIF
         // Record the size SYNCHRONOUSLY here — see measuredRef.
         if (dims.width > 0 && dims.height > 0) {
           measuredRef.current.set(photo.id, { width: dims.width, height: dims.height });
@@ -2041,7 +2057,7 @@ export function useBuilderState(): BuilderActions {
         setUploadedPhotos((prev) =>
           prev.map((p) =>
             p.id === photo.id
-              ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt }
+              ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt, ...(location ? { location } : {}) }
               : p,
           ),
         );
@@ -2054,7 +2070,7 @@ export function useBuilderState(): BuilderActions {
     }
 
     return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies, heic: heicDone() };
-  }, [idbPhotos, looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, convertingPreview]);
+  }, [idbPhotos, looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, convertingPreview]);
 
   /* ── Megy's free photo check (lib/photoCheck) ──
      One photo at a time, in the background, on the phone: blur + fingerprint
@@ -2243,11 +2259,48 @@ export function useBuilderState(): BuilderActions {
 
   /** Resolve once every in-flight photo measurement has settled. Drains in a
    *  loop because waiting can overlap a fresh batch of uploads. */
-  const whenPhotosMeasured = useCallback(async () => {
+  const whenPhotosMeasured = useCallback(async (onProgress?: (pending: number) => void) => {
     while (pendingMeasureRef.current.size > 0) {
-      await Promise.allSettled([...pendingMeasureRef.current]);
+      onProgress?.(pendingMeasureRef.current.size);
+      // One at a time, so the count on screen moves with each photo.
+      await Promise.race([...pendingMeasureRef.current]).catch(() => { /* a failed measure must not block generation */ });
+      await new Promise((r) => setTimeout(r, 0)); // let the settled task leave the set
     }
+    onProgress?.(0);
   }, []);
+
+  /** Megy's photo check, finished before the album is made (owner,
+   *  2026-11-09): the blur check and the face pass run in the background
+   *  while photos are picked, and Generate used to lay out whatever was
+   *  done. Now it waits for them with the count on screen ("Checking photos
+   *  for blur 37 of 200", then "Finding the faces"), so the full pages pick
+   *  sharp, eyes-open shots and the repeats are known — never past
+   *  CHECK_WAIT_MS, and never for a check that isn't running: a slow phone
+   *  gets its album from what was checked. */
+  const whenPhotosChecked = useCallback(async () => {
+    if (!checker.available()) return;
+    const deadline = Date.now() + CHECK_WAIT_MS;
+    let idle = 0;
+    for (;;) {
+      const photos = uploadedPhotosRef.current;
+      const job = nextCheckJob(photos, checkTriedRef.current, checker.facesForAllPhotos());
+      if (!job) break;
+      if (job.stage === 'basic') {
+        setGenerating('checking');
+        setGeneratingCount(checkProgress(photos));
+      } else {
+        setGenerating('faces');
+        setGeneratingCount(faceCheckProgress(photos, checker.facesForAllPhotos()));
+      }
+      if (Date.now() > deadline) break;
+      // The check loop starts from an effect; give it a moment, then stop
+      // waiting for a check that isn't running.
+      idle = checkRunningRef.current ? 0 : idle + 1;
+      if (idle > 3) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    setGeneratingCount(null);
+  }, [checker]);
 
   const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
     const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
@@ -2265,7 +2318,11 @@ export function useBuilderState(): BuilderActions {
     // guess — putting photos into frames of the wrong orientation and cropping
     // heads off. Wait for the measurements, then read sizes from measuredRef,
     // which is authoritative the instant a measurement lands.
-    await whenPhotosMeasured();
+    await whenPhotosMeasured((pending) => {
+      const total = uploadedPhotosRef.current.length;
+      setGeneratingCount(pending > 0 ? { done: Math.max(0, total - pending), total } : null);
+    });
+    await whenPhotosChecked();
     setGenerating('laying_out');
     await paintFrame();
     const photos = uploadedPhotosRef.current.map((p) => {
@@ -2344,7 +2401,14 @@ export function useBuilderState(): BuilderActions {
         }
       } catch { /* no faces known → least-crop order */ }
     }
-    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    // SCENES (owner, 2026-11-09): photos taken within 5 minutes are one
+    // scene, and a page never holds two scenes (generateAlbum SCENE_GAP_MS).
+    setGenerating('grouping');
+    await paintFrame();
+    const scenes = planScenes(pool);
+    setGenerating('laying_out');
+    await paintFrame();
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, scenes, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     // Bank quotes are off (DEAL_BANK_QUOTES): quote boxes are made empty, so
@@ -2392,8 +2456,9 @@ export function useBuilderState(): BuilderActions {
     return { made: true, ...(memories ? { memories } : {}) };
     } finally {
       setGenerating(null);
+      setGeneratingCount(null);
     }
-  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme, ensureThemeQuotes]);
+  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme, ensureThemeQuotes, whenPhotosMeasured, whenPhotosChecked]);
 
   /** Does the current page carry a video memory? Then its layout stays the
    *  full photo with the QR badge (see relayPageOnTemplate), and the layout
@@ -4023,6 +4088,7 @@ export function useBuilderState(): BuilderActions {
     duplicatePage,
     generateAlbum: generateAlbumAction,
     generating,
+    generatingCount,
     regeneratePage,
     shuffleLayout,
     cycleLayout,

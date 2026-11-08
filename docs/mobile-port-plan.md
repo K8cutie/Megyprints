@@ -4366,6 +4366,65 @@ screen, its menu and Sign in push the screens and never open the browser),
 `checkoutWalk` and `profileWalk` (the same, from Place order and My profile). A **new
 APK** is needed.
 
+## 2.1.0 (code 110): scenes, the photo's place, and a making screen that says what it is doing (2026-11-09, `feat/port-scene-grouping`)
+
+Owner, 2026-11-09, on how photos share a page: "if the gap is big then that picture might
+not be related to the group of pictures clustered within 5 mins of each other". And on the
+wait: "i dont have a problem when the phone generates the album applying all those algos.
+What i want is to not let the user feel like the app hanged." Stacked on #279 (the legal
+screens), which is also in 2.1.0.
+
+**Scenes (shared `generateAlbum.ts`).** Inside a moment (3 hours), a new scene starts
+when consecutive shots are more than 5 minutes apart (`SCENE_GAP_MS`) or were taken more
+than 200 m apart (`SCENE_MOVE_M`, when both carry a place). The builder works the scenes
+out under "Grouping the moments" (`planScenes`) and hands them to the generator. The
+dealer keeps a page inside the leading scene when it can: the fill plan's counts (and a
+chosen count's queue plan) are dealt in the order that fits the scenes (`nextFillCount`,
+`nextPlanned`: the same counts, so the same pages); a page ends at a scene when the plan's
+room under its cap pays for it (`planSlackLeft`); a lone photo of its shape joins the next
+scene's rather than take a page. **A page is a price, so scenes never add one:** the
+layout is made without scenes first (the budget), then with them replaying the same random
+draws; while the scenes make more pages, the closest scenes are merged and it is laid out
+again, down to the budget's own album.
+
+**Measured** (5 sizes × 5 photo counts × 6 days of bursts, Surprise and "4 per page", 300
+albums; `scenes.spec.ts` keeps the bounds): pages with scenes vs without: never more
+(Surprise mean −0.15, max 0; a chosen count exactly the estimate). Pages holding two
+scenes, Surprise: 25.2 → 24.2 of 41.7 multi-photo pages on average; where the album has
+room, 11.5x8 at 60 photos 7.7 → 3.0, 8x8 at 97 photos 18.7 → 16.2, 6x8 at 97 photos
+23.2 → 20.8. "4 per page" at 60 photos: about half (8x8 7.2 → 3.8, 6x8 10.0 → 5.0), and
+one or two pages fewer at every size and count. **Why not more:** a page holds one photo
+shape (mixed-shape pages are off in fill mode) and a burst of five phone shots is usually
+three shapes, so most two-scene pages hold a lone landscape or square beside the next
+burst's. Past 120 photos on Surprise (the natural mix, no plan) nothing can pay for a short
+page, so the budget keeps the album as it was. The next lever is mixed-shape pages inside a
+scene, in fill mode.
+
+**The photo's place.** `UploadedPhoto.location` (lat, lon) from EXIF GPS, read on the
+website (`exif.ts` `readCaptureLocation`, `PhotoIntake.captureLocation`, optional).
+It stays on the device: `albumCloud` / `draftAlbumRow` do not save it. **The app reads
+none:** Android keeps a photo's place behind `ACCESS_MEDIA_LOCATION`, which `app.json`
+blocks (`blockedPermissions`, `isAccessMediaLocationEnabled: false`). Asking for it is a
+Play Console declaration and the owner's call; until then the app splits scenes on time only.
+
+**The making screen** (website `GeneratingOverlay.tsx`, app `making.tsx`; words in
+`GENERATING_COPY`, mirrored in `albumFlow.ts`, `test/albumWords.test.ts` keeps them
+equal). "Making your album", "200 photos", then the step with a real count where it counts
+photos: "Looking at your photos", "Checking photos for blur. 37 of 200", "Finding the
+faces. 112 of 200", "Grouping the moments", "Laying out the pages", "Choosing the words",
+"Almost done"; a bar moves with the count; "Your photos stay on your phone." (website:
+"on this device"). Generate now **waits for the photo check** (the blur check, then the
+face pass) with the count on screen, so full pages pick sharp, eyes-open shots: never past
+`CHECK_WAIT_MS` (2 min) and never for a check that isn't running (`whenPhotosChecked`).
+Nothing is padded: a step shows only while its work runs.
+
+### Release notes 2.1.0 (draft: check against the app on upload day)
+
+    New:
+    • Photos taken within 5 minutes of each other stay together on a page when the album has room
+    • Making your album shows each step with a count, like "Checking photos for blur. 37 of 200"
+    • Privacy Policy and Terms of Service open inside the app
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
