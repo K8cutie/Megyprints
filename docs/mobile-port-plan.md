@@ -4418,12 +4418,48 @@ face pass) with the count on screen, so full pages pick sharp, eyes-open shots: 
 `CHECK_WAIT_MS` (2 min) and never for a check that isn't running (`whenPhotosChecked`).
 Nothing is padded: a step shows only while its work runs.
 
+**In the app the two counted steps never show (found on the emulator walk, 2026-11-09).**
+The app's builder platform still has `photoCheck.available: () => false`
+(`mobile/src/builder/appPlatform.ts`; the phone's check, `phonePhotoCheck.ts`, is only
+on the dev lab screen), so Generate has no check to wait for. On the 2.1.0 Play build the
+making screen showed "Making your album", "70 photos" / "150 photos", "Looking at your
+photos", "Laying out the pages", "Almost done", "Your photos stay on your phone." and was
+gone in about half a second, also with 150 photos of 12 MP. "Checking photos for blur" and
+"Finding the faces" are website-only until the phone's check is wired into the app.
+
+### Walked on the emulator, 2026-11-09 (2.1.0 code 110 Play build over 2.0.9)
+
+Signed out, 8x8, Surprise, Vacation. Test roll: copies of the owner's Hong Kong photos,
+70 shots in 16 known bursts (15 to 50 s between shots, 8 to 25 min between bursts, four
+moments over two days), cropped to a phone mix (51 upright, 17 wide, 2 square), EXIF time
+with a +08:00 zone tag.
+
+- Installed over 2.0.9, opened, three albums made (70, 70 and 150 photos), no crash, no
+  error in the log. Privacy Policy and Terms of Service open as the app's own screens from
+  the menu; Back returns to Home.
+- 70 photos made 41 pages. 17 pages hold two or more photos: 10 hold one scene, 7 hold two
+  scenes that are neighbours in time. The same roll through the generator 40 times: 7.9
+  two-scene pages with scenes, 8.4 without, same page count. A small gain, as measured.
+- **Full pages land late (not new, the same with scenes off).** About 11 pages an album are
+  a full-page photo from a scene the album has already left, 1.3 of them from a moment
+  (3 hours) already left: a morning shop photo facing the afternoon ride. Cause:
+  `insertMemoryPages` never puts two full pages side by side, and with half the pages full
+  (`FULL_PAGE_SHARE`) a scene with more full pages than multi-photo pages pushes the extra
+  ones one page later, past the next scene's page. This is the bigger lever for "related
+  photos together" than the scenes rule itself.
+- A test-roll trap: a photo copied to the phone within a day of its EXIF time, with no zone
+  tag, gets its time zone guessed by Android from the file's date (in quarter-hour steps), which
+  reshuffled one day of the first roll. Phone cameras write the zone tag; photos from an
+  older camera copied the same day can hit it.
+
 ### Release notes 2.1.0 (draft: check against the app on upload day)
 
     New:
     • Photos taken within 5 minutes of each other stay together on a page when the album has room
-    • Making your album shows each step with a count, like "Checking photos for blur. 37 of 200"
     • Privacy Policy and Terms of Service open inside the app
+
+(The line about the making screen's count was taken out after the 2026-11-09 walk: the
+count needs the phone's photo check, which is not in the app yet.)
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
