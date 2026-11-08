@@ -76,10 +76,31 @@ appId: com.megyprints.app.dev
       id: cover-next
     timeout: 60000
 - takeScreenshot: out/screens/walk-08-cover
+# The first photo on the front cover: drawn from the photo module's small
+# sRGB copy (drawableCopy), the iPhone half's own work.
+- tapOn:
+    id: "cover-photo-.*"
+    index: 0
+- waitForAnimationToEnd:
+    timeout: 15000
+- takeScreenshot: out/screens/walk-08b-cover-photo
 - tapOn:
     id: cover-next
 - extendedWaitUntil:
     visible:
       id: preview-book
     timeout: 300000
+- waitForAnimationToEnd:
+    timeout: 15000
 - takeScreenshot: out/screens/walk-09-preview
+# Open the book on page 1, then the next spread: pages drawn with photos.
+- tapOn:
+    id: preview-next
+- waitForAnimationToEnd:
+    timeout: 20000
+- takeScreenshot: out/screens/walk-10-page-1
+- tapOn:
+    id: preview-next
+- waitForAnimationToEnd:
+    timeout: 20000
+- takeScreenshot: out/screens/walk-11-pages-2-3
