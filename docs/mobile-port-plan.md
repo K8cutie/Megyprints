@@ -4455,7 +4455,9 @@ with a +08:00 zone tag.
 ### Release notes 2.1.0 (draft: check against the app on upload day)
 
     New:
-    • Photos taken within 5 minutes of each other stay together on a page when the album has room
+    • Megy now groups your photos by moment. Photos taken within 5 minutes of each other go on the same page when there is room
+    • A ride, a meal or a group pose is split across pages less often
+    • Grouping never adds a page, so your price stays the same
     • Privacy Policy and Terms of Service open inside the app
 
 (The line about the making screen's count was taken out after the 2026-11-09 walk: the
