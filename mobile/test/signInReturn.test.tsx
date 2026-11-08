@@ -4,6 +4,7 @@
    signed in" (review of the checkout screens). Opened from anywhere else,
    sign-in still opens My albums, as in Phase 1.
    ══════════════════════════════════════════════════════════════════════════ */
+import { Platform } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import SignIn from '../src/app/sign-in';
 
@@ -73,6 +74,11 @@ describe('where sign-in goes after it works', () => {
 });
 
 describe('Sign in with Google (lib/googleSignIn.ts)', () => {
+  // Android's way: a Chrome tab, back through the link (jest runs as iOS;
+  // iPhone's way, Apple's sign-in window, is in signInTestBuild.test.tsx).
+  beforeEach(() => { jest.replaceProperty(Platform, 'OS', 'android'); });
+  afterEach(() => { jest.restoreAllMocks(); });
+
   it('the website\'s button and words; it opens Google in a tab with a new one-time code', async () => {
     await render(<SignIn />);
     expect(screen.getByText('Signed up with a Gmail? Sign in with Google using that same Gmail. Your albums will be there.')).toBeOnTheScreen();
