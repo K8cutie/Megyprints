@@ -1,0 +1,166 @@
+# The 2.0 app on an iPhone: built by GitHub on a Mac, opened on an iPhone
+# simulator, with pictures of what it shows.
+#
+# Why GitHub: an iPhone app can only be built on a Mac (Xcode), and this
+# project is made on Windows. The repository is public, so GitHub's Mac
+# machines cost nothing. No EAS (mobile/AGENTS.md: no paid services).
+#
+# What it builds: the TEST app, "Megy Prints 2.0 (dev)" (com.megyprints.app.dev),
+# Release, so the app's code is inside and no computer is needed to run it.
+# For the SIMULATOR only: no Apple account, no signing. A build for a real
+# iPhone (TestFlight) needs the owner's Apple Developer account and comes later.
+#
+# What it keeps (the run's Summary → Artifacts → ios-simulator):
+#   screens/*.png   what the app shows after it opens
+#   app-log.txt     the app's own log lines from the simulator
+#   xcodebuild.log  the whole Mac build, when something fails to compile
+#   crash reports   if the app closed by itself
+#
+# Server values: the same two public secrets as the Android test APK
+# (EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY).
+
+name: 2.0 iPhone simulator
+
+on:
+  push:
+    branches: ['feat/port-ios**']
+    paths: ['mobile/**', 'src/**', '.github/workflows/ios-simulator.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    name: 2.0 iPhone simulator
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The newest finished Xcode on the machine (never a beta): Expo SDK 58
+      # needs a recent one, and the runner's default may be older.
+      - name: Newest Xcode
+        run: |
+          ls -d /Applications/Xcode*.app
+          X=$(ls -d /Applications/Xcode_*.app | grep -v -i -E 'beta|release_candidate|_rc' | sort -V | tail -1)
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+          sw_vers
+          xcrun simctl list runtimes
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install the app's packages
+        working-directory: mobile
+        run: npm ci
+
+      - name: The app's server settings (from the secrets, never in git)
+        working-directory: mobile
+        env:
+          URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::warning::No server settings: the app opens but cannot sign in or load prices."
+          else
+            printf 'EXPO_PUBLIC_SUPABASE_URL=%s\nEXPO_PUBLIC_SUPABASE_ANON_KEY=%s\n' "$URL" "$KEY" > .env.local
+          fi
+
+      - name: Make the iPhone project (expo prebuild)
+        working-directory: mobile
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install the iPhone libraries (CocoaPods)
+        working-directory: mobile/ios
+        run: pod install
+
+      - name: Build for the iPhone simulator
+        working-directory: mobile/ios
+        run: |
+          mkdir -p ../../out
+          WS=$(ls -d *.xcworkspace | head -1)
+          SCHEME=$(basename "$WS" .xcworkspace)
+          echo "workspace $WS, scheme $SCHEME"
+          if ! xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
+               -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+               -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+               build > ../../out/xcodebuild.log 2>&1; then
+            echo "::error::The iPhone build failed. First errors:"
+            grep -n -E "error:|❌" ../../out/xcodebuild.log | head -60
+            tail -80 ../../out/xcodebuild.log
+            exit 1
+          fi
+          tail -3 ../../out/xcodebuild.log
+
+      # A new iPhone on the newest iOS the machine has, the app installed
+      # fresh, opened, and pictures taken while it starts.
+      - name: Open it on an iPhone simulator
+        run: |
+          APP=$(find mobile/ios/build/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")
+          echo "app $APP ($BUNDLE)"
+          UDID=$(xcrun simctl list -j | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)
+          ios = [r for r in d["runtimes"] if r.get("platform") == "iOS" and r.get("isAvailable")]
+          ios.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          for r in reversed(ios):
+              phones = [x for x in d["devices"].get(r["identifier"], []) if x.get("isAvailable") and x["name"].startswith("iPhone")]
+              # A plain size first ("iPhone 17", "iPhone 17 Pro"): the size most customers hold.
+              plain = [x for x in phones if re.fullmatch(r"iPhone \d+( Pro)?", x["name"])]
+              pick = (plain or phones)
+              if pick:
+                  print(pick[0]["udid"]); sys.stderr.write("simulator: %s, iOS %s\n" % (pick[0]["name"], r["version"])); break
+          ')
+          test -n "$UDID" || { echo "::error::No iPhone simulator on this machine"; exit 1; }
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          echo "BUNDLE=$BUNDLE" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p out/screens
+          xcrun simctl launch "$UDID" "$BUNDLE"
+          sleep 5;  xcrun simctl io "$UDID" screenshot out/screens/after-05s.png
+          sleep 10; xcrun simctl io "$UDID" screenshot out/screens/after-15s.png
+          sleep 15; xcrun simctl io "$UDID" screenshot out/screens/after-30s.png
+          if xcrun simctl spawn "$UDID" launchctl list | grep -q "UIKitApplication:$BUNDLE"; then
+            echo "The app is still open after 30 s." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::The app is not open 30 s after it started (it closed by itself)."
+            echo "ALIVE=no" >> "$GITHUB_ENV"
+          fi
+
+      - name: Keep the app's log and any crash report
+        if: always()
+        run: |
+          mkdir -p out
+          if [ -n "$UDID" ]; then
+            xcrun simctl spawn "$UDID" log show --last 5m --style compact \
+              --predicate 'subsystem == "com.facebook.react.log" OR process CONTAINS[c] "megy"' > out/app-log.txt 2>&1 || true
+            grep -i -E "error|exception|fatal|unhandled" out/app-log.txt | head -40 || true
+          fi
+          find ~/Library/Logs/DiagnosticReports -iname '*megy*' -exec cp {} out/ \; 2>/dev/null || true
+          ls -la out out/screens 2>/dev/null || true
+          test "$ALIVE" != "no"
+
+      - name: Keep the pictures and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-simulator
+          path: out/
+          retention-days: 14
+          if-no-files-found: ignore
