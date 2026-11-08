@@ -24,6 +24,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -57,11 +58,43 @@ if (push) {
 }
 simctl('privacy', udid, 'grant', 'photos', APP);
 
+/* iPhone renames a photo added to Photos (IMG_0001.JPG…) and keeps the file's
+   own name only as its "original" name; the app's photo grid (expo-media-library)
+   gives the Photos name. The test screen finds pictures by name, so it is
+   asked for the Photos names (read from the simulator's Photos records), and
+   its answers are put back under the test pictures' own names. */
+function photosNames() {
+  const db = path.join(os.homedir(), 'Library', 'Developer', 'CoreSimulator', 'Devices', udid, 'data', 'Media', 'PhotoData', 'Photos.sqlite');
+  try {
+    const out = execFileSync('sqlite3', ['-readonly', '-separator', '|', db,
+      'SELECT a.ZFILENAME, aa.ZORIGINALFILENAME FROM ZASSET a JOIN ZADDITIONALASSETATTRIBUTES aa ON aa.ZASSET = a.Z_PK;'], { encoding: 'utf8' });
+    return new Map(out.trim().split('\n').filter(Boolean).map((l) => { const [inPhotos, original] = l.split('|'); return [original, inPhotos]; }));
+  } catch (e) {
+    console.warn(`Could not read the simulator's Photos names (${e.message}); asking by the files' own names.`);
+    return new Map();
+  }
+}
+let names = photosNames();
+for (let t = 0; t < 60 && !manifest.every((m) => names.has(m.file)); t++) {
+  await new Promise((r) => setTimeout(r, 1000));
+  names = photosNames();
+}
+const iosName = (file) => names.get(file) ?? file;
+const ownName = new Map(manifest.map((m) => [iosName(m.file), m.file]));
+console.log(`Photos holds ${manifest.filter((m) => names.has(m.file)).length}/${manifest.length} test pictures, e.g. ${manifest.slice(0, 3).map((m) => `${m.file} → ${iosName(m.file)}`).join(', ')}`);
+/** Every string in the answers that is a Photos name, back to the picture's own name. */
+const backToOwnNames = (v) => (typeof v === 'string' ? (ownName.get(v) ?? v)
+  : Array.isArray(v) ? v.map(backToOwnNames)
+  : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, backToOwnNames(x)]))
+  : v);
+const shot = (name) => { try { simctl('io', udid, 'screenshot', path.join(OUT, name)); } catch { /* none */ } };
+
 const done = new Promise((resolve, reject) => {
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/manifest') {
+      console.log('The test screen asked for the pictures.');
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(manifest.map((m) => ({ file: m.file, capturedAt: m.capturedAt ?? null }))));
+      res.end(JSON.stringify(manifest.map((m) => ({ file: iosName(m.file), capturedAt: m.capturedAt ?? null }))));
       return;
     }
     if (req.method === 'POST' && req.url === '/results') {
@@ -69,7 +102,7 @@ const done = new Promise((resolve, reject) => {
       req.on('data', (c) => chunks.push(c));
       req.on('end', () => {
         try {
-          const report = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+          const report = backToOwnNames(JSON.parse(Buffer.concat(chunks).toString('utf8')));
           fs.writeFileSync(path.join(OUT, 'phone.json'), JSON.stringify(report, null, 1));
           res.writeHead(200).end('ok');
           server.close();
@@ -83,7 +116,7 @@ const done = new Promise((resolve, reject) => {
     res.writeHead(404).end();
   });
   server.listen(PORT, '127.0.0.1', () => console.log(`Waiting for the app on :${PORT}…`));
-  setTimeout(() => { server.close(); reject(new Error(`No answers after ${timeoutMin} minutes`)); }, timeoutMin * 60_000).unref();
+  setTimeout(() => { shot('phone-lab-timeout.png'); server.close(); reject(new Error(`No answers after ${timeoutMin} minutes`)); }, timeoutMin * 60_000).unref();
 });
 
 /** The app's memory now (MB): the simulator app's process on this Mac. */
@@ -114,7 +147,15 @@ execFile('maestro', ['--device', udid, 'test', '-e', 'LINK=megyprints-dev://phot
     if (e) console.warn(`Opening the test screen did not run (${e.message}); the screen may still be waiting for it.`);
   });
 let running = true;
-const poll = (async () => { while (running) { sample('checking'); await new Promise((r) => setTimeout(r, 2000)); } })();
+// The screen every 2 minutes (its status line says what it is doing, or why it stopped).
+const poll = (async () => {
+  let n = 0;
+  while (running) {
+    sample('checking');
+    if (++n % 60 === 0) shot('phone-lab-progress.png');
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+})();
 const report = await done;
 running = false;
 await poll;
