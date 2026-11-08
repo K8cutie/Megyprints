@@ -3436,6 +3436,9 @@ both links on the start screen and in the menu, and the Sign in line, open
 the live pages; Back comes back to the app. The Privacy page's ML Kit
 paragraph is website PR #264. A **new APK** is needed.
 
+**Since 2026-11-09 the links open the app's own screens**, not the browser
+("Privacy Policy and Terms of Service as the app's own screens", below).
+
 ## main merged in; the pay card and the cover photo row (2026-11-03, `feat/port-main-sync`, 2.0.1)
 
 The owner released 2.0.0 (code 100) to the testers and said "Merge what
@@ -4302,7 +4305,8 @@ its top colour via `solidOf`), and `recolorPageTo`: each word judged on the colo
 behind it (`colorAt`: a caption box's or photo frame's middle, a free text's x/y), a
 two-colour word kept only while both colours show, else one clean ink; quotes in photo
 frames are judged too now; words placed on a photo keep their colour. The app's gradient
-swatch is 12 bands of the blended colours in a circle (no drawing library).
+swatch is 32 overlapping bands of the blended colours in a circle (no drawing library; 12
+bands showed steps on the phone).
 
 **Proof.** Website: `pageColors.spec.ts` (the list, gradients, keys, `colorAt`, words by
 where they sit, two-colour words), `dailyTest.spec.ts` (the tester lesson's colour now from
@@ -4325,6 +4329,42 @@ Owner: "once done lets release it as part of 2.0.9". In it: the 20 more masks (a
     • Words can be a gradient too
 
 297 characters.
+
+## Privacy Policy and Terms of Service as the app's own screens (2026-11-09, `feat/port-legal-screens`)
+
+A tester sent the owner a screenshot of a coral screen with the Megy logo cut off at
+"PRINTS": the website's own launch screen (`vite.config.ts` `background_color` #F05239,
+the round-cropped maskable icon), seen after installing the WEBSITE from its "Install Megy
+Prints" banner (`src/components/InstallPrompt.tsx`, every page on a phone in Chrome). 2.0
+sent people to that banner: its Privacy Policy and Terms of Service links opened the
+website in the browser. Owner: "what i want is for TOS and privacy to be part of the native
+app and not a redirect".
+
+Now both are screens of the app (`src/app/privacy.tsx`, `terms.tsx`; header "Privacy
+Policy" / "Terms of Service"), drawn by `src/components/LegalDocumentView.tsx` the way the
+website's page is (Last updated, Playfair headings, DM Sans words in #5B534C, bold where the
+website is bold, terracotta underlined links). Every link that opened the browser (start
+screen, its menu, Sign in's and Place order's agree line, My profile) opens them
+(`LegalLinks.tsx`, `legal.ts` `PRIVACY_SCREEN` / `TERMS_SCREEN`).
+
+**One copy of the words.** They moved out of the website's `Privacy.tsx` / `Terms.tsx`
+into `src/lib/legalPages.ts` (shared): sections of paragraphs and lists, a line made of
+words, bold words and links that name where they go (`LegalLinkTo`), not an address. The
+website draws them with `LegalDocumentPage` (`components/LegalPage.tsx`): both pages' HTML
+was compared before and after, **byte for byte the same**. In the app (`legal.ts`
+`legalTarget`): Privacy, Terms, Your orders and My Memories open the app's screens; the
+email opens the phone's email app; the Contact page opens as "Message us" does (the
+website's, in the browser); the account deletion page is the website's form for people
+without the app (`delete-account.html`). The website's /privacy and /terms stay: Play
+Console's privacy link is the website's.
+
+**Proof.** Website: `legalPages.spec.ts` (names, no stray spaces where pieces meet, the two
+link each other), `privacyLink.spec.ts` and `termsPage.spec.ts` unchanged and passing.
+App: `test/legalLinks.test.tsx` (every heading, paragraph and list item of both pages shown,
+in order; every link's place; no link opens the website's Privacy or Terms; the start
+screen, its menu and Sign in push the screens and never open the browser),
+`checkoutWalk` and `profileWalk` (the same, from Place order and My profile). A **new
+APK** is needed.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

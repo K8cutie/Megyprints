@@ -74,6 +74,7 @@ export const SHARED_MODULES = [
   'src/lib/inAppBrowser.ts',
   'src/lib/jpegZip.ts',
   'src/lib/legal.ts',
+  'src/lib/legalPages.ts',
   'src/lib/limit.ts',
   'src/lib/localDraftRules.ts',
   'src/lib/megyMascot.ts',
