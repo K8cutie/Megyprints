@@ -37,8 +37,8 @@ import {
 
 const RING = '#9A4A2C';
 const RAINBOW = ['#C62828', '#E8772E', '#D4A017', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
-/** Bands in a gradient swatch: enough to read as smooth at its size. */
-const BANDS = 12;
+/** Bands in a gradient swatch: enough to read as smooth at its size (12 showed steps on the phone). */
+const BANDS = 32;
 
 /** A swatch's face: one colour, or a gradient's colours top to bottom. */
 function Face({ hex, gradient, size, on, testID }: { hex: string; gradient?: Pick<ColorGradient, 'top' | 'bottom'>; size: number; on: boolean; testID?: string }) {
