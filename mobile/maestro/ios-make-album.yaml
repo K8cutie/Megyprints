@@ -28,6 +28,9 @@ appId: com.megyprints.app.dev
     id: album-name
 - inputText: iPhone test
 - hideKeyboard
+# The occasion can't be skipped (Megy writes the quotes to match it).
+- tapOn:
+    id: occasion-Vacation
 - takeScreenshot: out/screens/walk-02-name
 - tapOn:
     id: name-next

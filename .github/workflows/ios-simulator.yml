@@ -171,6 +171,11 @@ jobs:
             grep -i -E "error|exception|fatal|unhandled" out/app-log.txt | head -40 || true
           fi
           find ~/Library/Logs/DiagnosticReports -iname '*megy*' -exec cp {} out/ \; 2>/dev/null || true
+          # Maestro saves the walk's pictures next to the flow file and its
+          # debug pictures in a hidden folder: gather them where they are kept.
+          mkdir -p out/screens
+          find . ~/.maestro -name 'walk-*.png' -not -path './out/*' -exec cp {} out/screens/ \; 2>/dev/null || true
+          find out/maestro-debug ~/.maestro/tests -name '*.png' -exec cp {} out/screens/ \; 2>/dev/null || true
           ls -la out out/screens 2>/dev/null || true
           test "$ALIVE" != "no"
 
@@ -182,3 +187,4 @@ jobs:
           path: out/
           retention-days: 14
           if-no-files-found: ignore
+          include-hidden-files: true
