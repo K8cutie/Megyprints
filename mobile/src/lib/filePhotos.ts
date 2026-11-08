@@ -10,10 +10,16 @@
    src/lib/pickedFiles.ts) decides what is a photo, and says what was left out.
    ══════════════════════════════════════════════════════════════════════════ */
 import { getDocumentAsync, type DocumentPickerAsset } from 'expo-document-picker';
+import { Platform } from 'react-native';
 import { kindOfPick, leftOutNote } from '@web/lib/pickedFiles';
 import { describePickedFiles, pickPhotoFiles, type PickedFileInfo } from '../../modules/photo-files';
 import { photoKey, type DraftPhoto } from './photoDraft';
 import { parseExifDateTime } from './photoTime';
+
+/** "Choose from Files" is offered on Android only. On iPhone, photos live in
+ *  Photos (the grid), and a Files pick gives an address that stops working
+ *  once the app closes: the album would be left with missing photos. */
+export const FILES_OFFERED = Platform.OS === 'android';
 
 export interface FilesPick {
   photos: DraftPhoto[];

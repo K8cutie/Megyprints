@@ -20,7 +20,7 @@ import { AskForPhotos } from '../components/AskForPhotos';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useDraft } from '../lib/draftStore';
-import { accessToGiveBack, pickFromFiles } from '../lib/filePhotos';
+import { accessToGiveBack, FILES_OFFERED, pickFromFiles } from '../lib/filePhotos';
 import { addPhotosLabel, askBeforeLeavingPicks } from '../lib/pickLeave';
 import { photosForAlbum, type GalleryPhoto } from '../lib/gallery';
 import { formatCount, gridRows, groupByDay, type Day, type GridRow } from '../lib/photoDays';
@@ -124,7 +124,7 @@ export default function PickPhotos() {
   const access = gallery.access;
   if (!access || draftLoading) return <Centered><ActivityIndicator color={colors.accent} size="large" /></Centered>;
 
-  if (access.state === 'ask') return <AskForPhotos access={access} onAsk={gallery.ask} onFiles={fromFiles} />;
+  if (access.state === 'ask') return <AskForPhotos access={access} onAsk={gallery.ask} onFiles={FILES_OFFERED ? fromFiles : undefined} />;
 
   const limited = access.state === 'limited';
 
@@ -142,7 +142,7 @@ export default function PickPhotos() {
       <Centered>
         <Text style={styles.heading}>Could not open your photos</Text>
         <Button label="Try again" onPress={gallery.reload} style={styles.wide} testID="gallery-retry" />
-        <Button label={FILES} kind="plain" onPress={fromFiles} style={styles.wide} />
+        {FILES_OFFERED && <Button label={FILES} kind="plain" onPress={fromFiles} style={styles.wide} />}
       </Centered>
     );
   }
@@ -153,13 +153,13 @@ export default function PickPhotos() {
         <Text style={styles.heading}>No photos chosen yet</Text>
         <Text style={styles.muted}>Megy Prints can see only the photos you choose.</Text>
         <Button label="Choose photos" onPress={() => { void gallery.chooseMore(); }} style={styles.wide} testID="choose-more" />
-        <Button label={FILES} kind="plain" onPress={fromFiles} style={styles.wide} />
+        {FILES_OFFERED && <Button label={FILES} kind="plain" onPress={fromFiles} style={styles.wide} />}
       </Centered>
     ) : (
       <Centered>
         <Text style={styles.heading}>No photos on this phone</Text>
-        <Text style={styles.muted}>Photos you take or save show here. You can also pick photos from Files.</Text>
-        <Button label={FILES} onPress={fromFiles} style={styles.wide} testID="files-empty" />
+        <Text style={styles.muted}>{FILES_OFFERED ? 'Photos you take or save show here. You can also pick photos from Files.' : 'Photos you take or save show here.'}</Text>
+        {FILES_OFFERED && <Button label={FILES} onPress={fromFiles} style={styles.wide} testID="files-empty" />}
       </Centered>
     );
   }
@@ -188,9 +188,11 @@ export default function PickPhotos() {
           testID="select-all"
         />
       )}
-      <Pressable accessibilityRole="button" onPress={fromFiles} style={styles.link} testID="files-link">
-        <Text style={styles.linkText}>Photos not here? Choose from Files</Text>
-      </Pressable>
+      {FILES_OFFERED && (
+        <Pressable accessibilityRole="button" onPress={fromFiles} style={styles.link} testID="files-link">
+          <Text style={styles.linkText}>Photos not here? Choose from Files</Text>
+        </Pressable>
+      )}
     </View>
   );
 
