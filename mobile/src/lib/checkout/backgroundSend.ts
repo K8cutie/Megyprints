@@ -44,10 +44,19 @@ export function placedNotice(order: Pick<PlacedOrder, 'order_number'>, tester: b
     : { title: `Order ${order.order_number} is placed`, text: 'Pay by bank transfer to finish.' };
 }
 
-/** Android 13+ asks the person before an app may show notifications. Asked
- *  when Place order is tapped (Android shows its own question). */
+/** Android 13+ and iPhone ask the person before an app may show
+ *  notifications. Asked when Place order is tapped (the phone shows its own
+ *  question; iPhone asks once, then remembers the answer). */
 export async function askToNotify(native: KeeperNative | null = orderKeeper): Promise<boolean> {
-  if (Platform.OS !== 'android' || !native) return false;
+  if (!native) return false;
+  if (Platform.OS === 'ios') {
+    try {
+      return typeof native.requestNotifications === 'function' ? await native.requestNotifications() : false;
+    } catch {
+      return false;
+    }
+  }
+  if (Platform.OS !== 'android') return false;
   try {
     if (Number(Platform.Version) >= 33) {
       const p = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;

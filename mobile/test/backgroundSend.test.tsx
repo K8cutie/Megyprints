@@ -24,7 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { act, render, screen } from '@testing-library/react-native';
 import {
-  BACKGROUND_NOTE, FAILED_TITLE, KEEPER_TITLE, placedNotice, startKeeper, type KeeperDeps, type KeeperNative,
+  askToNotify, BACKGROUND_NOTE, FAILED_TITLE, KEEPER_TITLE, placedNotice, startKeeper, type KeeperDeps, type KeeperNative,
 } from '../src/lib/checkout/backgroundSend';
 import { KEEP_OPEN_NOTE, sendFrame } from '../src/lib/checkout/placeRun';
 import type { SendStep } from '../src/lib/checkout/sendOrder';
@@ -202,6 +202,50 @@ describe('the order keeper', () => {
   });
 });
 
+/* iPhone (ios/OrderKeeperModule.swift): no foreground service. iOS 26+ keeps
+   the order going with its own "continued processing" task (start answers
+   service: true); older iPhones only get ~30 s, so start answers false and
+   the screen keeps "Keep this screen open". Notifications: iPhone's own
+   question (requestNotifications). Jest runs as iOS (jest-expo). */
+describe('the order keeper on iPhone', () => {
+  it('Place order asks iPhone\'s notification question through the module', async () => {
+    const n = { ...fakeNative(), requestNotifications: jest.fn(async () => true) };
+    await expect(askToNotify(n)).resolves.toBe(true);
+    expect(n.requestNotifications).toHaveBeenCalledTimes(1);
+    const no = { ...fakeNative(), requestNotifications: jest.fn(async () => false) };
+    await expect(askToNotify(no)).resolves.toBe(false);
+  });
+
+  it('a build without the iPhone question, or one that throws: no notifications, nothing breaks', async () => {
+    await expect(askToNotify(fakeNative())).resolves.toBe(false);
+    await expect(askToNotify({ ...fakeNative(), requestNotifications: async () => { throw new Error('boom'); } })).resolves.toBe(false);
+    await expect(askToNotify(null)).resolves.toBe(false);
+  });
+
+  it('iOS 26 keeps it going (service: true): "you can use other apps"', async () => {
+    const k = await startKeeper('Placing your order…', deps(fakeNative({ started: { service: true, task: false } })));
+    await expect(k.background).resolves.toBe(true);
+  });
+
+  it('an older iPhone (only ~30 s): "Keep this screen open", as before', async () => {
+    const k = await startKeeper('Placing your order…', deps(fakeNative({ started: { service: false, task: false } })));
+    await expect(k.background).resolves.toBe(false);
+  });
+
+  it('the iPhone half: same module name, its task ids allowed by app.json', () => {
+    const swift = read('mobile/modules/order-keeper/ios/OrderKeeperModule.swift');
+    expect(swift).toMatch(/Name\("MegyOrderKeeper"\)/);
+    for (const fn of ['notificationsAllowed', 'update']) expect(swift).toContain(`Function("${fn}")`);
+    for (const fn of ['requestNotifications', 'start', 'finish']) expect(swift).toContain(`AsyncFunction("${fn}")`);
+    expect(swift).toContain('.order.\\(counter)');
+    const cfg = JSON.parse(read('mobile/modules/order-keeper/expo-module.config.json')) as { platforms: string[]; ios: { modules: string[] } };
+    expect(cfg.platforms).toEqual(['android', 'ios']);
+    expect(cfg.ios.modules).toEqual(['OrderKeeperModule']);
+    const app = JSON.parse(read('mobile/app.json')) as { expo: { ios: { infoPlist: { BGTaskSchedulerPermittedIdentifiers: string[] } } } };
+    expect(app.expo.ios.infoPlist.BGTaskSchedulerPermittedIdentifiers).toEqual(['$(PRODUCT_BUNDLE_IDENTIFIER).order.*']);
+  });
+});
+
 /* ── The Sending screen ── */
 const mockKeeper: { native: (KeeperNative & { calls: Call[] }) | null; ask: boolean; asking?: Promise<boolean> } = { native: null, ask: true };
 const mockSend: { run: (c: { onStep: (s: SendStep) => void; onOrder: (o: unknown) => void }) => Promise<unknown> } = { run: async () => ({}) };
@@ -296,7 +340,12 @@ describe('the native half', () => {
 
   it('autolinking finds it, and both halves use the same names', () => {
     const cfg = JSON.parse(read(`${MOD}/expo-module.config.json`)) as { platforms: string[]; android: { modules: string[] } };
-    expect(cfg).toEqual({ platforms: ['android'], android: { modules: ['expo.modules.megyorderkeeper.OrderKeeperModule'] } });
+    // Both halves (the iPhone one: 'the order keeper on iPhone' above).
+    expect(cfg).toEqual({
+      platforms: ['android', 'ios'],
+      android: { modules: ['expo.modules.megyorderkeeper.OrderKeeperModule'] },
+      ios: { modules: ['OrderKeeperModule'] },
+    });
     const kt = read(`${KT}/OrderKeeperModule.kt`);
     const js = read(`${MOD}/index.ts`);
     expect(kt).toContain('Name("MegyOrderKeeper")');

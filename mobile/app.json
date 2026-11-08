@@ -29,7 +29,10 @@
       "buildNumber": "109",
       "supportsTablet": false,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "$(PRODUCT_BUNDLE_IDENTIFIER).order.*"
+        ]
       }
     },
     "web": {
