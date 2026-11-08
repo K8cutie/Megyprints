@@ -67,7 +67,9 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: colors.background },
             }}
           >
-            <Stack.Screen name="index" options={{ headerShown: false }} />
+            {/* The title is never shown here (no header), but iPhone's back
+                button on the next screen says it: without one it said "index". */}
+            <Stack.Screen name="index" options={{ headerShown: false, title: 'Home' }} />
             <Stack.Screen name="sign-in" options={{ title: 'Sign in' }} />
             <Stack.Screen name="albums" options={{ title: 'My albums' }} />
             <Stack.Screen name="shared-check" options={{ title: 'Shared code check' }} />

@@ -4326,6 +4326,64 @@ Owner: "once done lets release it as part of 2.0.9". In it: the 20 more masks (a
 
 297 characters.
 
+## iPhone (2026-11-09, `feat/port-ios`)
+
+Owner: "a month from now apple port can it be made with our stack now?" → yes (Expo builds iPhone
+from the same code) → "Yes, go". The iPhone app is the SAME 2.0 app: every screen, the shared
+album code and the Skia renderer carry over unchanged. What iPhone needed:
+
+- **Settings** (`app.json` `ios`): `com.megyprints.app.dev` for the test app (as Android's), build
+  number = versionCode, phone only, the Photos question's words, no "save photos" permission,
+  `BGTaskSchedulerPermittedIdentifiers` for Place order, Sign in with Apple.
+- **The app's own native modules, iPhone halves** (Swift, `modules/*/ios`, same names and calls as
+  the Kotlin halves; `test/iphoneModules.test.ts` holds them together):
+  - `photo-files`: Photos photos by `ph://` (iCloud downloaded when the pixels are needed, never by
+    `inspect`), small and print copies turned upright and into sRGB (almost every iPhone photo is
+    Display P3).
+  - `photo-pixels`: the small copy by the Android half's exact Chrome-resize steps; faces by
+    **Apple Vision**, not ML Kit (ML Kit has no build for the Apple-chip simulators the app is checked
+    on; Vision sends nothing and adds nothing). Vision gives no "eye open" chance, so each eye's
+    aspect ratio is measured from its outline the website's way and put on ML Kit's scale
+    (`phoneFaces.ts openChanceFromEar`, the exact inverse of `earFromOpenChance`).
+  - `video-shrink`: AVFoundation, the website's H.264/AAC targets.
+  - `order-keeper`: iOS 26's continued-processing task (iOS's own progress bar) keeps Place order
+    going in other apps; older iPhones get ~30 s and the screen keeps "Keep this screen open"; the
+    "done" notification as on Android.
+- **Photos only**: "Choose from Files" stays Android-only (`filePhotos FILES_OFFERED`): on iPhone a
+  Files pick's address stops working once the app closes. Settings directions in iPhone's words.
+- **Updates**: the App Store installs them; the app only says "A new version of Megy Prints is
+  ready." with Update in App Store / Later (`lib/appStoreUpdate.ts`, Android's rules).
+- **Sign-in**: Sign in with Apple (App Review rule 4.8); Google through Apple's sign-in window
+  (`openGoogleOnIphone`), so the iPhone test app has Google too; `public/auth-native.js` hands an
+  iPhone the `megyprints://auth` link (Android's pinned `intent://` link unchanged).
+
+**How it is checked without a Mac** (GitHub's Mac machines, free for a public repository; no EAS):
+- `.github/workflows/ios-simulator.yml`: builds, opens it on an iPhone simulator and walks Make an
+  album signed out with the 78 sample photos (Maestro, `mobile/maestro/ios-make-album.yaml`),
+  screenshots of every step.
+- `.github/workflows/ios-golden.yml`: the golden pages drawn by the iPhone's Skia (Windows makes the
+  data where the bars were measured); then on a Windows PC
+  `GOLDEN_PHONE_DIR=<artifact folder> npm run golden:phone`.
+- `.github/workflows/ios-photo-check.yml`: `tools/photo-check` on the simulator
+  (`phoneServerIos.mjs`) against the website, same test pictures.
+
+**The owner's steps before a real iPhone build** (none needed for the simulator checks):
+1. An Apple Developer account ($99 a year; a company account needs a D-U-N-S number first).
+2. In it: the app id `com.megyprints.app` with Sign in with Apple switched on.
+3. Supabase → Auth → Providers → Apple: switch it on, client ids `com.megyprints.app` and
+   `com.megyprints.app.dev` (the native sign-in needs no secret).
+
+**Before the App Store release** (must, not nice-to-have):
+- Google's way back on iPhone moves to a verified `https` link (Associated Domains with the owner's
+  Apple team id, an `apple-app-site-association` file on the website): iOS link schemes are not
+  pinned to one app the way Android's `intent://…package=` is.
+- Deleting an account made with Sign in with Apple must revoke Apple's token (Apple's rule): the
+  website's `/api/delete-account` calls Apple's revoke endpoint with a key from the Apple account.
+- Video years bought apart from an album order would be a digital purchase under Apple's rules: on
+  iPhone they come only with an album order.
+- A real iPhone walk (TestFlight), the App Store listing, privacy answers (Apple Vision sends
+  nothing; no ML Kit on iPhone).
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

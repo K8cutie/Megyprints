@@ -161,6 +161,12 @@ jobs:
           mkdir -p out/screens
           maestro --device "$UDID" test mobile/maestro/ios-make-album.yaml --debug-output out/maestro-debug
 
+      # The sign-in screen: Sign in with Apple and Google both offered (no account used).
+      - name: Walk - the sign-in screen on the iPhone (Maestro)
+        run: |
+          export PATH="$PATH:$HOME/.maestro/bin"
+          maestro --device "$UDID" test mobile/maestro/ios-sign-in.yaml --debug-output out/maestro-debug-sign-in
+
       - name: Keep the app's log and any crash report
         if: always()
         run: |
@@ -175,7 +181,7 @@ jobs:
           # debug pictures in a hidden folder: gather them where they are kept.
           mkdir -p out/screens
           find . ~/.maestro -name 'walk-*.png' -not -path './out/*' -exec cp {} out/screens/ \; 2>/dev/null || true
-          find out/maestro-debug ~/.maestro/tests -name '*.png' -exec cp {} out/screens/ \; 2>/dev/null || true
+          find out/maestro-debug out/maestro-debug-sign-in ~/.maestro/tests -name '*.png' -exec cp {} out/screens/ \; 2>/dev/null || true
           ls -la out out/screens 2>/dev/null || true
           test "$ALIVE" != "no"
 
