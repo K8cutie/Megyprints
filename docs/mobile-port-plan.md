@@ -4310,6 +4310,22 @@ the 28). App: the page sheet (40 swatches; a gradient on one page and every page
 text (a gradient, then a plain colour), the cover title. Golden page
 `palette-gradient-page` (app vs print 0.028%). Renderers unchanged.
 
+## 2.0.9 (code 109): 2026-11-08
+
+Owner: "once done lets release it as part of 2.0.9". In it: the 20 more masks (above, PR
+#277) and the words' colours with 12 gradients for pages and words (above), stacked on
+2.0.8 (#276). Built from the branch `feat/port-colour-palettes`.
+
+### Release notes 2.0.9 (draft: check against the app on upload day)
+
+    New:
+    • 20 more photo masks, like a film strip, an instant photo, taped on, an old print, a gold oval, a balloon and a house
+    • On a full-page photo, a mask stays inside the print area, so nothing is cut off
+    • Page colours now match your word colours, plus 12 gradients
+    • Words can be a gradient too
+
+297 characters.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.
