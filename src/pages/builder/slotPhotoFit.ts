@@ -3,6 +3,8 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { resolveSlotBox } from './slotGeometry';
 import { getCanvasDimensions } from './layouts';
+import { isArtMask } from './maskShapes';
+import { artBox, maskArt } from './maskArt';
 
 /* ══════════════════════════════════════════════════════════════════════════
    SLOT PHOTO FIT — the ONE cover-fit + pan a slot photo is drawn with.
@@ -148,7 +150,7 @@ export function faceCentrePan(face: { x: number; y: number }, img: Size, slot: S
  *  exactly as the renderers place it: the orientation-adapted template, the
  *  margin plus binding keep-out (none on a cover panel), the Studio override. */
 export function slotDesignSize(
-  page: Pick<AlbumPage, 'templateId' | 'slotGeometries'>,
+  page: Pick<AlbumPage, 'templateId' | 'slotGeometries' | 'slotMasks'>,
   slotIndex: number,
   albumSize: AlbumSizePreset,
   pageIndex: number,
@@ -162,5 +164,14 @@ export function slotDesignSize(
   if (!raw) return null;
   const m = marginForTemplate(adapted, adapted.margin, albumSize, pageIndex, { noBinding: coverMode });
   const box = resolveSlotBox(raw, page.slotGeometries?.[slotIndex]);
-  return { w: box.width * W * (1 - m.left - m.right), h: box.height * H * (1 - m.top - m.bottom) };
+  const safeW = W * (1 - m.left - m.right), safeH = H * (1 - m.top - m.bottom);
+  // A mask that paints fits the photo to its window (maskArt): the size the
+  // photo is drawn in, so a face is centred where it shows.
+  const mask = page.slotMasks?.[slotIndex];
+  if (isArtMask(mask)) {
+    const frame = { x: W * m.left + box.x * safeW, y: H * m.top + box.y * safeH, w: box.width * safeW, h: box.height * safeH };
+    const { photo } = maskArt(mask, artBox(frame, { albumSize, pageIndex, coverMode, fullBleed: !!adapted.fullBleed, kx: 1, ky: 1 }));
+    return { w: photo.w, h: photo.h };
+  }
+  return { w: box.width * safeW, h: box.height * safeH };
 }

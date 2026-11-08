@@ -478,6 +478,48 @@ export function buildGoldenSet(): GoldenSet {
     })),
   ];
 
+  // ── Part E: the masks that paint (owner, 2026-11-08: all 20 from the
+  //    numbered sheet; maskArt.ts). Every one, on full-bleed layouts (the
+  //    mask kept inside the safe print area) and on framed ones, wide and
+  //    tall, with pans, zooms and a look. websiteSame.mjs skips these: print
+  //    code from before draws them as plain photos. ──
+  const partE: GoldenCase[] = [
+    b('artmask-film-cards', '8x8', 30, 'film strip, instant photo, photo slide and photo corners on a full-bleed grid (kept in the safe area), a cream page', page('8x8', 't88-fb-quad-grid-gap', [0, 1, 2, 3], {
+      background: { type: 'solid', solid: '#EFE7DD' }, slotMasks: ['film', 'instant', 'slide', 'photo-corners'],
+    })),
+    b('artmask-tape-print', '8x8', 31, 'taped on (zoom and pan), old print with a sepia look, stitched and gold oval', page('8x8', 't88-fb-quad-grid-gap', [4, 5, 6, 7], {
+      slotMasks: ['taped', 'old-print', 'stitched', 'gold-oval'], slotLooks: [null, 'sepia', null, null],
+      slotScales: [1.3, 1, 1, 1.2], slotOffsetsX: [25, 0, 0, -15], slotOffsetsY: [-20, 0, 0, 10],
+    })),
+    b('artmask-lines-ticket', '8x8', 32, 'inside line, dark corners, ticket (tear line) and speech bubble on a blue page', page('8x8', 't88-fb-quad-grid-gap', [1, 3, 5, 7], {
+      background: { type: 'solid', solid: '#A9C7DF' }, slotMasks: ['inside-line', 'dark-corners', 'ticket-stub', 'bubble'],
+    })),
+    b('artmask-shapes', '8x8', 33, 'flower, badge, puzzle piece and window (white bars) masks', page('8x8', 't88-fb-quad-grid-gap', [2, 4, 6, 0], {
+      slotMasks: ['flower', 'badge', 'puzzle', 'window'], slotScales: [1, 1, 1.4, 1], slotOffsetsX: [0, 0, 30, 0],
+    })),
+    b('artmask-shapes-2', '8x8', 34, 'pebble, balloon (string and shine), paw print and house masks on a yellow page', page('8x8', 't88-fb-quad-grid-gap', [3, 5, 7, 1], {
+      background: { type: 'solid', solid: '#FCE883' }, slotMasks: ['pebble', 'balloon', 'paw', 'house'],
+    })),
+    b('artmask-tall', '8x8', 35, 'film strip on a tall frame (holes down the sides), a tall ticket and a tall photo slide', page('8x8', 't88-fb-trio-hero-left-gap', [0, 2, 4], {
+      slotMasks: ['film', 'ticket-stub', 'slide'],
+    })),
+    b('artmask-framed-page', '8x8', 36, 'film strip on a layout with margins (not moved in), a black & white look', page('8x8', 't88-solo-landscape', [6], {
+      background: { type: 'solid', solid: '#FFFBF7' }, slotMasks: ['film'], slotLooks: ['bw'],
+    })),
+    b('artmask-full-page', '8x8', 37, 'an instant photo on a full-page photo: the card inside the safe area, its shadow on a green page', page('8x8', 't88-fb-solo', [2], {
+      background: { type: 'solid', solid: '#C5E1A5' }, slotMasks: ['instant'],
+    })),
+    b('artmask-turned', '8x8', 38, "the template's turned slot (15 degrees) under a gold oval and a speech bubble", page('8x8', 't8x8-07', [0, 3], {
+      slotMasks: ['gold-oval', 'bubble'],
+    })),
+    b('artmask-turned-look', '8x8', 39, "the turned slot (15 degrees) as an instant photo with a sepia look: turned inside its bake, as without a look", page('8x8', 't8x8-07', [4, 6], {
+      slotMasks: ['stitched', 'instant'], slotLooks: [null, 'sepia'], slotScales: [1, 1.2],
+    })),
+    b('artmask-64', '6x4', 23, '6x4, film strip and house on a full-bleed duo, a pan on the house', page('6x4', 't64-fb-duo-tall-gap', [1, 5], {
+      slotMasks: ['film', 'house'], slotOffsetsY: [0, -30],
+    })),
+  ];
+
   // ── The covers ──
   const title = (text: string, over: Partial<TextElement> = {}): TextElement => ({
     ...caption(0, { text, fontFamily: 'Cinzel, serif', fontSize: 32, bold: true }), opacity: 1, ...over,
@@ -636,6 +678,6 @@ export function buildGoldenSet(): GoldenSet {
   // isHardcover() takes anything but 'softcover' as hard. So check here.
   const coverTypes = new Set<string>(COVERS.map((c) => c.type));
   for (const c of covers) if (!coverTypes.has(c.cover)) throw new Error(`golden cover ${c.name}: '${c.cover}' is not a cover type an order stores (${[...coverTypes].join(', ')})`);
-  return { seed: GOLDEN_SEED, photos, cases: [...partA, ...partB, ...partC, ...partD], covers };
+  return { seed: GOLDEN_SEED, photos, cases: [...partA, ...partB, ...partC, ...partD, ...partE], covers };
 
 }

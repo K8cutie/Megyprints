@@ -14,9 +14,45 @@ import { maskTextureUrl, maskOverlayUrl, featherGradients, type TextureMask, typ
    ══════════════════════════════════════════════════════════════════════════ */
 
 /* The shapes themselves (which masks there are, applyMask, the outline
-   generators) live in maskShapes.ts, which the 2.0 app shares. Everything
-   is re-exported here, so the website imports this file as before. */
+   generators) live in maskShapes.ts, which the 2.0 app shares, and the masks
+   that paint (film strip, instant photo…) in maskArt.ts. Everything is
+   re-exported here, so the website imports this file as before. */
 export * from './maskShapes';
+export * from './maskArt';
+import type { ArtPaint } from './maskArt';
+
+/** Canvas (print, and the desktop editor's bake): draw a mask's paints
+ *  (maskArt) as they are. A shadow is the canvas's own; a dash starts where
+ *  the path does. */
+export function paintArt(ctx: CanvasRenderingContext2D, paints: readonly ArtPaint[]): void {
+  for (const a of paints) {
+    ctx.save();
+    const path = new Path2D(a.d);
+    if (a.kind !== 'radial' && a.shadow) {
+      ctx.shadowColor = a.shadow.color;
+      ctx.shadowBlur = a.shadow.blur;
+      ctx.shadowOffsetY = a.shadow.dy;
+    }
+    if (a.kind === 'fill') {
+      ctx.fillStyle = a.color;
+      ctx.fill(path, a.evenOdd ? 'evenodd' : 'nonzero');
+    } else if (a.kind === 'stroke') {
+      ctx.strokeStyle = a.color;
+      ctx.lineWidth = a.width;
+      ctx.lineCap = a.round ? 'round' : 'butt';
+      ctx.lineJoin = 'miter';
+      ctx.miterLimit = 10;
+      ctx.setLineDash(a.dash ?? []);
+      ctx.stroke(path);
+    } else {
+      const g = ctx.createRadialGradient(a.cx, a.cy, 0, a.cx, a.cy, a.r);
+      for (const s of a.stops) g.addColorStop(s.offset, s.color);
+      ctx.fillStyle = g;
+      ctx.fill(path);
+    }
+    ctx.restore();
+  }
+}
 
 const textureCache = new Map<string, Promise<HTMLImageElement>>();
 function loadMaskImage(url: string): Promise<HTMLImageElement> {

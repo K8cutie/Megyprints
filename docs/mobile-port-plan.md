@@ -4197,7 +4197,80 @@ Owner: "Build .8 now ill upload it later". In it: Edit text's bottom row on its 
     • Effects for all your words: outline, two colours, glow, shadow, and arch, smile or wave
     • Words stop at a dotted line, so nothing is cut off when your album is trimmed
 
-324 characters.
+324 characters. Uploaded by the owner 2026-11-07 (Closed testing, Alpha, in review).
+
+## 20 more masks: film strip and the numbered sheet (2026-11-08, `feat/port-more-masks`)
+
+Owner: "masks id like you to add more of those i saw a mask that looks like the strip
+of a camera film". A sample (black 35 mm film, holes the page shows through) → "yes
+thats what i meant". Photobook's editor needs an account, so "No, skip Photobook"; a
+numbered sheet of 20 ideas drawn fresh on our sample photos → "all of them are good
+add them to the selection". Stacked on `feat/port-words-on-photos` (2.0.8).
+
+**The 20.** Masks that also paint: Film strip, Instant photo, Photo slide, Photo
+corners, Taped on, Old print, Stitched, Gold oval, Inside line, Dark corners. Shapes:
+Ticket, Speech bubble, Flower, Badge, Puzzle piece, Window, Pebble, Balloon, Paw print,
+House. All 46 masks are in the Mask sheet (the app) and the Studio's mask strip (the
+website); nothing else changes in either.
+
+**One description, every renderer.** `src/pages/builder/maskArt.ts` (shared) says, in the
+frame's own px, what a mask draws: the box the photo is fitted to (`photo`), where it
+shows (`clip`, SVG path data) and what is painted `under` it (a card and its shadow),
+`inside` the shape (window bars, a tear line, dark corners, a balloon's shine) and
+`over` it (the film, tape, stitches, a ring). Sizes are fractions of the frame's shorter
+side; even patterns (film holes, the old print's scallops) are whole numbers per side,
+counted from the frame's real size. `applyMask` marks the slot `art` (its shape stays a
+rectangle). Print (`renderSlotPhoto`) and the desktop editor's bake paint it with
+`masks.ts paintArt` (canvas, Path2D); the website's preview and the phone Studio's
+thumbnails with `MaskArtDom.tsx` (SVG, a canvas shadow as an SVG drop shadow of half its
+blur); the desktop editor's card and paint over are `fabric.Path`s placed by their centre
+(Fabric moves a path placed by its corner by half its line width); the app with
+`drawPage` (`planPage` carries the description, Skia paths, a shadow blurred with
+sigma = blur / 2).
+
+**Two choices that keep faces and prints safe.**
+- A mask with a window (film, instant photo, slide, tape, old print) fits the photo to
+  the window, so the paint never hides part of it (better than the "keep faces away from
+  the edge" note first offered). The app's framing (`frameCell`) works in the same window.
+- A full-bleed layout keeps the mask inside the safe print area (`artBox`: the dotted
+  line words stop at, 1/2" at the sides, 1/4" top and bottom), only on the sides that
+  touch the trim. Most layouts the album maker deals are full-bleed with gutters, so a
+  masked photo there sits in from the page's edge. Layouts with margins are unchanged.
+
+**Proof.** `maskArt.spec.ts` (every mask in five frames: inside its frame, a line by half
+its width too; the film turns with the frame and has whole holes; tape inside the frame;
+full-bleed boxes); `printParity.spec.ts` (all renderers and the app draw from maskArt);
+11 golden pages `artmask-*` (app vs print, 0.015% at most; `websiteSame.mjs` skips them,
+the old print code draws them as plain photos); `editorPhotosFraming.test.ts` (the window
+on every layout). A throwaway check drew the same pages with the website's preview, its
+desktop editor and print side by side: the same.
+
+**An independent review, and what it found (fixed here).**
+- A template's turned slot: the preview cropped the photo to the window before turning
+  it, and print and the app (with a colour look) baked a window-sized photo and then
+  turned it, so corners differed by renderer. Now every renderer turns the whole
+  cover-fitted photo: the preview sizes the photo at its full fit, and a look's bake turns
+  the photo inside itself (the clip lies inside the window, so it is the same picture).
+  Golden page `artmask-turned-look`.
+- The desktop editor dropped the stitches' dark edge (Fabric drops a line's shadow
+  unless `affectStroke`).
+- The app's drag and pinch showed the photo over the film or the card while the finger
+  moved it: the moving photo is now clipped, level, to the window.
+- Film holes, old-print waves and which way the film runs were counted from each
+  renderer's own px, whose page size is rounded (40 of 10,424 frames differed between the
+  editor and print, more at preview sizes). They are now counted from the frame's print
+  size, which `artBox` gives every renderer (`ref`).
+- Face centring (`slotDesignSize`) centred a face in the frame, not in the window the
+  photo is drawn in. It uses the window now.
+- A frame with no width (only bad saved numbers) would loop without end drawing film
+  holes; it draws a plain photo now.
+- Not changed: the "prints a little soft" note measures the frame, not the smaller
+  window, so it can come a little early (on the safe side).
+
+**Seen, not changed.** Existing masks on full-bleed pages still reach the trim (a stamp's
+holes, torn paper), as before; changing them would move every printed page that has one.
+Oval and rounded masks still print as rectangles (known since the golden work). The Mask
+sheet is a long list now (46); no thumbnails in the app's list.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

@@ -32,6 +32,7 @@ import { adaptTemplateToOrientation, getTemplateById } from '@web/pages/builder/
 import { marginForTemplate } from '@web/pages/builder/binding';
 import { printSharpness, resolveSlotBox, type GuardContext, type SlotBox } from '@web/pages/builder/slotGeometry';
 import { applyMask, isMaskId } from '@web/pages/builder/maskShapes';
+import { artBox, maskArt } from '@web/pages/builder/maskArt';
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
 import { getPrintDimensions } from '@web/pages/builder/printSize';
 import { coverSize, panRoom, slotPhotoRect, slotZoom, type Pan, type Rect, type Size } from '@web/pages/builder/slotPhotoFit';
@@ -73,8 +74,13 @@ export function frameCell(page: AlbumPage, slotIndex: number, albumSize: AlbumSi
   const safe = { x: W * m.left, y: H * m.top, w: W * (1 - m.left - m.right), h: H * (1 - m.top - m.bottom) };
   const rawMask = page.slotMasks?.[slotIndex];
   const slot = applyMask(resolveSlotBox(raw, page.slotGeometries?.[slotIndex]), isMaskId(rawMask) ? rawMask : null);
+  const frame = { x: safe.x + slot.x * safe.w, y: safe.y + slot.y * safe.h, w: slot.width * safe.w, h: slot.height * safe.h };
+  // A mask that paints fits the photo to its window (planPage's art.photo).
+  const box = slot.art
+    ? maskArt(slot.art, artBox(frame, { albumSize, pageIndex, coverMode: false, fullBleed: adapted.fullBleed ?? false, kx: W / uiW, ky: H / uiH })).photo
+    : frame;
   return {
-    box: { x: safe.x + slot.x * safe.w, y: safe.y + slot.y * safe.h, w: slot.width * safe.w, h: slot.height * safe.h },
+    box,
     rotation: slot.rotation ?? 0,
     k: { x: W / uiW, y: H / uiH },
     slot: { x: slot.x, y: slot.y, width: slot.width, height: slot.height },

@@ -9,7 +9,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
-import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha, type MaskId } from './masks';
+import { applyMask, isMaskId, archPathCentered, starPoints, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha, maskArt, artBox, paintArt, type MaskId, type ArtPaint } from './masks';
 import { applyLookPixels, isLookId, type LookId } from './looks';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
@@ -1381,7 +1381,57 @@ export function renderTemplateSlots(
         let photo = img;
         const rawLook = slotLooks?.[i];
         const look: LookId | null = isLookId(rawLook) ? rawLook : null;
-        if (slot.feather || slot.texture || look) {
+        // A mask that paints (maskArt): print's description in design px. The
+        // photo (fitted to the mask's window, turned, its look) and the paint
+        // inside the shape are baked into one image clipped to the shape; the
+        // card under it and the paint over it are passive paths around it.
+        const art = slot.art
+          ? maskArt(slot.art, artBox({ x: sx, y: sy, w: sw, h: sh }, { albumSize: albumSize as AlbumSizePreset, pageIndex, coverMode, fullBleed: !!adaptedTemplate.fullBleed, kx: 1, ky: 1 }))
+          : null;
+        const artObjects: { under: any[]; over: any[] } = { under: [], over: [] };
+        if (art) {
+          const pb = art.photo;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const el = img.getElement ? img.getElement() : (img as any)._element;
+          const off = document.createElement('canvas');
+          off.width = Math.max(1, Math.round(pb.w));
+          off.height = Math.max(1, Math.round(pb.h));
+          const octx = el ? off.getContext('2d') : null;
+          if (octx) {
+            const f = slotPhotoRect({ w: imgW, h: imgH }, { w: pb.w, h: pb.h }, slotScales[i], { x: slotOffsetsX[i] ?? 0, y: slotOffsetsY[i] ?? 0 });
+            octx.save();
+            if (slot.rotation) {
+              octx.translate(pb.w / 2, pb.h / 2);
+              octx.rotate((slot.rotation * Math.PI) / 180);
+              octx.translate(-pb.w / 2, -pb.h / 2);
+            }
+            octx.drawImage(el, f.x, f.y, f.w, f.h);
+            octx.restore();
+            if (look) applyLookPixels(octx, 0, 0, off.width, off.height, look);
+            octx.save();
+            octx.translate(-pb.x, -pb.y);
+            paintArt(octx, art.inside);
+            octx.restore();
+            const clip = centredPath(fab, art.clip, {});
+            clip.absolutePositioned = true;
+            photo = new fab.Image(off, { left: pb.x + pb.w / 2, top: pb.y + pb.h / 2, originX: 'center', originY: 'center', clipPath: clip, ...SLOT_IMAGE_LOCK });
+          }
+          const objectsOf = (paints: readonly ArtPaint[]) => paints.flatMap((a) => (a.kind === 'radial' ? [] : [centredPath(fab, a.d, {
+            fill: a.kind === 'fill' ? a.color : '',
+            fillRule: a.kind === 'fill' && a.evenOdd ? 'evenodd' : 'nonzero',
+            stroke: a.kind === 'stroke' ? a.color : undefined,
+            strokeWidth: a.kind === 'stroke' ? a.width : 0,
+            strokeDashArray: a.kind === 'stroke' ? a.dash : undefined,
+            strokeLineCap: a.kind === 'stroke' && a.round ? 'round' : 'butt',
+            strokeMiterLimit: 10,
+            // affectStroke: Fabric drops a shadow from a line unless asked (the stitches' dark edge)
+            shadow: a.shadow ? new fab.Shadow({ color: a.shadow.color, blur: a.shadow.blur, offsetX: 0, offsetY: a.shadow.dy, affectStroke: true }) : undefined,
+            selectable: false, evented: false, hasControls: false, hasBorders: false, objectCaching: false,
+          })]));
+          artObjects.under = objectsOf(art.under);
+          artObjects.over = objectsOf(art.over);
+          for (const o of [...artObjects.under, ...artObjects.over]) o.slotId = `${SLOT_ID}-art-${i}`;
+        } else if (slot.feather || slot.texture || look) {
           // Bake: Fabric clips have no alpha and its filters are not the CSS
           // ones, so draw the cover-fitted photo into an offscreen canvas,
           // apply the look to the pixels (the same matrices the DOM's CSS
@@ -1430,7 +1480,9 @@ export function renderTemplateSlots(
         photo.slotIndex = i;
         photo.photoId = `slot-photo-${i}`;
 
+        for (const o of artObjects.under) canvas.add(o);
         canvas.add(photo);
+        for (const o of artObjects.over) canvas.add(o);
 
         // Fake shadow — dark semi-transparent rect behind photo.
         // NOT using Fabric.js shadow (unreliable with clipPath).
@@ -1457,6 +1509,7 @@ export function renderTemplateSlots(
         type Follower = { left?: number; top?: number; set: (p: { left: number; top: number }) => unknown };
         const followers: { obj: Follower; left: number; top: number }[] = [];
         const follow = (obj: Follower) => followers.push({ obj, left: obj.left ?? 0, top: obj.top ?? 0 });
+        for (const o of [...artObjects.under, ...artObjects.over]) follow(o);
         const fakeShadow = template.fullBleed || slot.masked ? null : new fab.Rect({
           left: sx + shadowOff - shadowBlur / 2,
           top: sy + shadowOff - shadowBlur / 2,
@@ -1762,6 +1815,16 @@ export function renderTemplateSlots(
 /** The canvas shadow for a text: the cover's floating shadow or the small
  *  caption shadow (wordArtShadow, the one rule all three renderers share), in
  *  design px like the text's fontSize. */
+/** A fabric.Path drawn exactly at its own coordinates (a mask's paint or
+ *  shape, maskArt): placed by its centre, since Fabric moves a path placed by
+ *  its corner by half its line width. */
+function centredPath(fab: any, d: string, opts: Record<string, unknown>): any {
+  const o = new fab.Path(d, { ...opts, originX: 'center', originY: 'center' });
+  o.set({ left: o.pathOffset.x, top: o.pathOffset.y });
+  o.setCoords?.();
+  return o;
+}
+
 function fabricShadow(fab: any, s: WordArtStyle, coverMode: boolean) {
   const sh = wordArtShadow(s, coverMode);
   return sh ? new fab.Shadow({ color: sh.color, blur: sh.blur, offsetX: sh.offsetX, offsetY: sh.offsetY }) : undefined;

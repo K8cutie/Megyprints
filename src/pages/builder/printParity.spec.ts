@@ -219,6 +219,23 @@ describe('Studio slot overrides go through resolveSlotBox in every renderer', ()
     expect(dom).toMatch(/lookCss\(/);
     expect(fabric).toMatch(/applyLookPixels\(/);
     expect(print).toMatch(/applyLookPixels\(/);
+    // the masks that paint (film strip, instant photo… 2026-11-08): ONE
+    // description (maskArt) in the box artBox gives, in all three; print and
+    // the editor's bake paint it with paintArt, the DOM with MaskArtView
+    for (const [name, src] of [['dom', dom], ['fabric', fabric], ['print', print]] as const) {
+      expect(src, name).toMatch(/maskArt\(slot\.art,\s*(\{ x: 0, y: 0, w: ab\.w, h: ab\.h, ref: ab\.ref \}|artBox\()/);
+      expect(src, name).toMatch(/artBox\(/);
+      expect(src, name).toMatch(/fullBleed/);
+    }
+    expect(print).toMatch(/paintArt\(ctx, a\.under\)/);
+    expect(print).toMatch(/paintArt\(ctx, a\.over\)/);
+    expect(fabric).toMatch(/paintArt\(octx, art\.inside\)/);
+    expect(dom).toMatch(/<MaskArtView/);
+    // the app (mobile/src/render) draws the same description: pagePlan → drawPage
+    const plan = readFileSync('mobile/src/render/pagePlan.ts', 'utf8');
+    const app = readFileSync('mobile/src/render/drawPage.ts', 'utf8');
+    expect(plan).toMatch(/maskArt\(slot\.art, artBox\(/);
+    expect(app).toMatch(/this\.paints\(canvas, art\.under\)/);
   });
 });
 

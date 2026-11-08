@@ -10,13 +10,26 @@ import type { TemplateSlot } from './types';
    masks.ts exactly as before.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** Masks drawn from maskArt.ts: a shape, and for some a picture painted
+ *  under, inside or over the photo (owner, 2026-11-08: "all of them are
+ *  good add them to the selection", from the numbered sheet of 20). */
+export const ART_MASKS = [
+  'film', 'instant', 'slide', 'photo-corners', 'taped', 'old-print', 'stitched', 'gold-oval', 'inside-line', 'dark-corners',
+  'ticket-stub', 'bubble', 'flower', 'badge', 'puzzle', 'window', 'pebble', 'balloon', 'paw', 'house',
+] as const;
+export type ArtMask = typeof ART_MASKS[number];
+export function isArtMask(v: unknown): v is ArtMask {
+  return typeof v === 'string' && (ART_MASKS as readonly string[]).includes(v);
+}
+
 export type MaskId =
   | 'none' | 'soft' | 'fade-bottom'
   | 'circle' | 'oval' | 'rounded' | 'arch' | 'leaf' | 'scallop'
   | 'hexagon' | 'octagon' | 'diamond' | 'ticket' | 'cloud'
   | 'heart' | 'star'
   | 'brushed' | 'deckle' | 'frost'
-  | 'torn' | 'pinking' | 'stamp' | 'wavy' | 'paint' | 'watercolor' | 'halftone';
+  | 'torn' | 'pinking' | 'stamp' | 'wavy' | 'paint' | 'watercolor' | 'halftone'
+  | ArtMask;
 
 export const MASKS: { id: MaskId; label: string }[] = [
   { id: 'none', label: 'None' },
@@ -47,6 +60,27 @@ export const MASKS: { id: MaskId; label: string }[] = [
   { id: 'paint', label: 'Paint stroke' },
   { id: 'watercolor', label: 'Watercolor splash' },
   { id: 'halftone', label: 'Halftone dots' },
+  // Owner, 2026-11-08, all 20 from the numbered sheet (maskArt.ts draws them).
+  { id: 'film', label: 'Film strip' },
+  { id: 'instant', label: 'Instant photo' },
+  { id: 'slide', label: 'Photo slide' },
+  { id: 'photo-corners', label: 'Photo corners' },
+  { id: 'taped', label: 'Taped on' },
+  { id: 'old-print', label: 'Old print' },
+  { id: 'stitched', label: 'Stitched' },
+  { id: 'gold-oval', label: 'Gold oval' },
+  { id: 'inside-line', label: 'Inside line' },
+  { id: 'dark-corners', label: 'Dark corners' },
+  { id: 'ticket-stub', label: 'Ticket' },
+  { id: 'bubble', label: 'Speech bubble' },
+  { id: 'flower', label: 'Flower' },
+  { id: 'badge', label: 'Badge' },
+  { id: 'puzzle', label: 'Puzzle piece' },
+  { id: 'window', label: 'Window' },
+  { id: 'pebble', label: 'Pebble' },
+  { id: 'balloon', label: 'Balloon' },
+  { id: 'paw', label: 'Paw print' },
+  { id: 'house', label: 'House' },
 ];
 
 /** Textured edges: an alpha PNG (white = photo, transparent = page) stretched
@@ -103,7 +137,9 @@ export const SOFT_FEATHER = 0.10;
 export const ROUNDED_MASK_RADIUS = 28;
 
 export type FeatherSide = 'all' | 'bottom';
-export type AppliedSlot<T extends TemplateSlot> = T & { feather?: number; featherSide?: FeatherSide; texture?: TextureMask; masked?: boolean };
+/** `art`: a mask maskArt.ts draws (the slot's own shape stays a rectangle,
+ *  so a renderer that doesn't know it draws the photo square, never wrong). */
+export type AppliedSlot<T extends TemplateSlot> = T & { feather?: number; featherSide?: FeatherSide; texture?: TextureMask; art?: ArtMask; masked?: boolean };
 
 /** One gradient of the soft edge: a line from (x0, y0) to (x1, y1) and the
  *  alpha at each stop. The photo keeps its alpha × every gradient. */
@@ -129,6 +165,7 @@ export function applyMask<T extends TemplateSlot>(slot: T, mask?: MaskId | null)
   if (mask === 'soft') return { ...slot, shape: 'rectangle', borderRadius: undefined, feather: SOFT_FEATHER, featherSide: 'all', masked: true };
   if (mask === 'fade-bottom') return { ...slot, shape: 'rectangle', borderRadius: undefined, feather: SOFT_FEATHER * 2.5, featherSide: 'bottom', masked: true };
   if (isTextureMask(mask)) return { ...slot, shape: 'rectangle', borderRadius: undefined, texture: mask, masked: true };
+  if (isArtMask(mask)) return { ...slot, shape: 'rectangle', borderRadius: undefined, art: mask, masked: true };
   if (mask === 'rounded') return { ...slot, shape: 'rounded', borderRadius: slot.borderRadius || ROUNDED_MASK_RADIUS, masked: true };
   return { ...slot, shape: mask, masked: true };
 }

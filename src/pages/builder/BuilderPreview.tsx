@@ -28,8 +28,9 @@ import { BOOK } from './bookFeel';
 import PageTurnLayer from './PageTurnLayer';
 import { planTurn, type TurnFace, type TurnPlan } from './pageTurn';
 import { resolveSlotBox } from './slotGeometry';
-import { slotPhotoDomBox } from './slotPhotoFit';
-import { applyMask, isMaskId, textureOverlayCss } from './masks';
+import { slotPhotoDomBox, slotPhotoRect } from './slotPhotoFit';
+import { applyMask, isMaskId, textureOverlayCss, artBox, maskArt } from './masks';
+import { MaskArtView } from './MaskArtDom';
 import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
 import TesterPageStamp from './TesterPageStamp';
@@ -468,6 +469,47 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
               left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
               showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Quote', 'Text']}
               onTap={() => onEmptyTap(idx)} />
+          );
+        }
+
+        // A mask that paints (maskArt): print's own description, in page px.
+        if (slot.art) {
+          const ab = artBox({ x: slotLeft, y: slotTop, w: slotW, h: slotH },
+            { albumSize: page.size as AlbumSizePreset, pageIndex, coverMode: !!coverMode, fullBleed: !!template.fullBleed, kx: sx, ky: sy });
+          const art = maskArt(slot.art, { x: 0, y: 0, w: ab.w, h: ab.h, ref: ab.ref });
+          const pan = { x: (page.slotOffsetsX?.[idx] ?? 0) * sx, y: (page.slotOffsetsY?.[idx] ?? 0) * sy };
+          // print turns the whole cover-fitted photo, then clips it: a turned
+          // slot needs the photo at its full fit (its size known), not cropped
+          // to the window first
+          const turned = !!slot.rotation && uploaded.width > 0 && uploaded.height > 0;
+          const fitRect = turned ? slotPhotoRect({ w: uploaded.width, h: uploaded.height }, { w: art.photo.w, h: art.photo.h }, page.slotScales?.[idx], pan) : null;
+          const pb = fitRect
+            ? { left: fitRect.x, top: fitRect.y, width: fitRect.w, height: fitRect.h, objectPosition: '50% 50%' }
+            : slotPhotoDomBox({ w: art.photo.w, h: art.photo.h }, page.slotScales?.[idx], pan);
+          return (
+            <MaskArtView key={`slot-${idx}`} slotIndex={idx} art={art} w={ab.w} h={ab.h}
+              onClick={onSlotTap ? (e) => { e.stopPropagation(); onSlotTap(idx); } : undefined}
+              style={{ zIndex: 1, left: ab.x, top: ab.y, cursor: onSlotTap ? 'pointer' : undefined }}
+              photo={
+                // print turns the photo, not the shape (renderSlotPhoto)
+                <div style={{ position: 'absolute', left: art.photo.x, top: art.photo.y, width: art.photo.w, height: art.photo.h,
+                  transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined, transformOrigin: 'center center' }}>
+                  <img src={uploaded.previewUrl} alt="" draggable={false} className="absolute object-cover"
+                    style={{ left: pb.left, top: pb.top, width: pb.width, height: pb.height, maxWidth: 'none', objectPosition: pb.objectPosition,
+                      ...(isLookId(page.slotLooks?.[idx]) ? { filter: lookCss(page.slotLooks?.[idx] as never) } : {}) }} />
+                </div>
+              }>
+              {editable && onRemoveFromSlot && (
+                <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
+                  style={{
+                    position: 'absolute', ...trashSpot(ab, qrBoxes), zIndex: 6, width: TRASH_SIZE, height: TRASH_SIZE,
+                    borderRadius: '50%', background: 'rgba(45,45,45,0.65)', border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  <Trash2 size={16} color="white" />
+                </button>
+              )}
+            </MaskArtView>
           );
         }
 

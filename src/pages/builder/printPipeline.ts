@@ -6,7 +6,7 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
-import { applyMask, isMaskId, archRy, starPoints, heartCurves, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha } from './masks';
+import { applyMask, isMaskId, archRy, starPoints, heartCurves, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha, maskArt, artBox, paintArt } from './masks';
 import { applyLookPixels, isLookId } from './looks';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { PRINT_DPI, getPrintMultiplier, getPrintDimensions } from './printSize';
@@ -251,7 +251,7 @@ async function drawPrintPage(
       const photo = photos[photoIdx];
       if (!photo) continue;
 
-      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, { x: W / uiW, y: H / uiH });
+      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, { x: W / uiW, y: H / uiH }, { albumSize, pageIndex, coverMode });
     }
   }
 
@@ -595,12 +595,28 @@ async function renderSlotPhoto(
   slotIndex: number,
   fullBleed: boolean,
   printScale: { x: number; y: number },
+  where: { albumSize: AlbumSizePreset; pageIndex: number; coverMode: boolean },
 ) {
   // Load original photo at full resolution
   let img: HTMLImageElement;
   try {
     img = await loadImage(photo.previewUrl);
   } catch {
+    return;
+  }
+
+  // A mask that paints (maskArt): its card under the photo, the photo fitted
+  // to its window and clipped to its shape, its paint over. No frame: a mask
+  // draws none.
+  if (slot.art) {
+    const a = maskArt(slot.art, artBox({ x: sx, y: sy, w: sw, h: sh }, { ...where, fullBleed, kx: printScale.x, ky: printScale.y }));
+    paintArt(ctx, a.under);
+    ctx.save();
+    ctx.clip(new Path2D(a.clip));
+    drawSlotImage(ctx, img, slot, a.photo.x, a.photo.y, a.photo.w, a.photo.h, page, slotIndex, printScale);
+    paintArt(ctx, a.inside);
+    ctx.restore();
+    paintArt(ctx, a.over);
     return;
   }
 
@@ -768,6 +784,60 @@ async function renderSlotPhoto(
       ctx.ellipse(sx + sw / 2, sy + sh / 2, sw / 2 - inset, sh / 2 - inset, 0, 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+}
+
+/** A photo cover-fitted to the box (x, y, w, h) with the slot's turn, zoom,
+ *  pan and look: renderSlotPhoto's own steps, for a mask that paints (the
+ *  box is its window; such a mask has no soft or textured edge). The caller
+ *  has set the clip. */
+function drawSlotImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  slot: any,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  page: AlbumPage,
+  slotIndex: number,
+  printScale: { x: number; y: number },
+) {
+  // The whole cover-fitted photo is turned (a template's turned slot), then
+  // the caller's clip cuts it. With a look, the turn happens inside the
+  // bake, which is the window's own size: the clip lies inside the window,
+  // so it is the same picture as without a look.
+  const rotation = slot.rotation || 0;
+  const turn = (c: CanvasRenderingContext2D, cx: number, cy: number) => {
+    if (rotation === 0) return;
+    c.translate(cx, cy);
+    c.rotate((rotation * Math.PI) / 180);
+    c.translate(-cx, -cy);
+  };
+  const fit = slotPhotoRect(
+    { w: img.naturalWidth, h: img.naturalHeight },
+    { w, h },
+    page.slotScales?.[slotIndex],
+    { x: (page.slotOffsetsX?.[slotIndex] ?? 0) * printScale.x, y: (page.slotOffsetsY?.[slotIndex] ?? 0) * printScale.y },
+  );
+  const rawLook = page.slotLooks?.[slotIndex];
+  const look = isLookId(rawLook) ? rawLook : null;
+  const t = look ? document.createElement('canvas') : null;
+  const tc = t?.getContext('2d');
+  if (t && tc && look) {
+    t.width = Math.max(1, Math.ceil(w));
+    t.height = Math.max(1, Math.ceil(h));
+    tc.save();
+    turn(tc, w / 2, h / 2);
+    tc.drawImage(img, fit.x, fit.y, fit.w, fit.h);
+    tc.restore();
+    applyLookPixels(tc, 0, 0, t.width, t.height, look);
+    ctx.drawImage(t, x, y);
+  } else {
+    ctx.save();
+    turn(ctx, x + w / 2, y + h / 2);
+    ctx.drawImage(img, x + fit.x, y + fit.y, fit.w, fit.h);
     ctx.restore();
   }
 }

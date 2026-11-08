@@ -142,7 +142,7 @@ async function compareWith(base, manifest, set) {
   };
   // Words placed by hand with WordArt are new too (owner, 2026-11-07): print
   // code from before draws a curve or a second colour outside a caption box plain.
-  const cases = set.cases.filter((c) => !c.name.startsWith('wordart-'));
+  const cases = set.cases.filter((c) => !c.name.startsWith('wordart-') && !c.name.startsWith('artmask-'));
   for (const c of cases) {
     const input = { page: c.page, albumSize: c.albumSize, pageIndex: c.pageIndex, photos: set.photos };
     await compare(c.name, 'page', { ...input, bakeWords: false });
