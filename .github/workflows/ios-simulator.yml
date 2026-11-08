@@ -10,8 +10,12 @@
 # For the SIMULATOR only: no Apple account, no signing. A build for a real
 # iPhone (TestFlight) needs the owner's Apple Developer account and comes later.
 #
+# Then it makes an album on that iPhone the way a new customer does, signed
+# out, with the 78 sample-album photos (mobile/maestro/ios-make-album.yaml).
+#
 # What it keeps (the run's Summary → Artifacts → ios-simulator):
-#   screens/*.png   what the app shows after it opens
+#   screens/*.png   what the app shows after it opens, and every walk step
+#   maestro-debug/  the walk's own log and its picture where it stopped
 #   app-log.txt     the app's own log lines from the simulator
 #   xcodebuild.log  the whole Mac build, when something fails to compile
 #   crash reports   if the app closed by itself
@@ -143,12 +147,26 @@ jobs:
             echo "ALIVE=no" >> "$GITHUB_ENV"
           fi
 
+      # Make an album the way a new customer does (mobile/maestro/ios-make-album.yaml):
+      # the 78 sample-album photos go into the simulator's Photos first, and
+      # Photos access is given, so no system question stands in the way.
+      # Maestro (open source) taps through the app by its testIDs.
+      - name: Walk - make an album on the iPhone (Maestro)
+        run: |
+          xcrun simctl addmedia "$UDID" public/sample-photos/*.jpg
+          xcrun simctl privacy "$UDID" grant photos "$BUNDLE"
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          export PATH="$PATH:$HOME/.maestro/bin"
+          maestro --version
+          mkdir -p out/screens
+          maestro --device "$UDID" test mobile/maestro/ios-make-album.yaml --debug-output out/maestro-debug
+
       - name: Keep the app's log and any crash report
         if: always()
         run: |
           mkdir -p out
           if [ -n "$UDID" ]; then
-            xcrun simctl spawn "$UDID" log show --last 5m --style compact \
+            xcrun simctl spawn "$UDID" log show --last 20m --style compact \
               --predicate 'subsystem == "com.facebook.react.log" OR process CONTAINS[c] "megy"' > out/app-log.txt 2>&1 || true
             grep -i -E "error|exception|fatal|unhandled" out/app-log.txt | head -40 || true
           fi
