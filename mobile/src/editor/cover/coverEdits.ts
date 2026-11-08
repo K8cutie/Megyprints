@@ -39,6 +39,7 @@ import { DEFAULT_TITLE_FONT } from '@web/pages/builder/fontCatalog';
 import { type WordArtCurve } from '@web/pages/builder/wordArtRules';
 import { wordsSafeArea } from '@web/pages/builder/freeWords';
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
+import type { ColorGradient } from '@web/pages/builder/colorGradients';
 import { outlineColourPatch, outlinePatch } from '../text/wordArtEdits';
 
 export type Align = 'left' | 'center' | 'right';
@@ -197,7 +198,11 @@ export function updateTitle(b: CoverBuilder, patch: TitlePatch): boolean {
 
 export const typeTitle = (b: CoverBuilder, text: string) => updateTitle(b, { text });
 export const setTitleFont = (b: CoverBuilder, fontFamily: string) => updateTitle(b, { fontFamily });
-export const setTitleColour = (b: CoverBuilder, color: string) => updateTitle(b, { color });
+/** A plain colour: the words in that one colour (a two-colour fill goes, as
+ *  the colour list now offers gradients beside the colours). */
+export const setTitleColour = (b: CoverBuilder, color: string) => updateTitle(b, { color, fillTo: undefined });
+/** A gradient from the colour list: the words fade from its top to its bottom. */
+export const setTitleGradient = (b: CoverBuilder, g: Pick<ColorGradient, 'top' | 'bottom'>) => updateTitle(b, { color: g.top, fillTo: g.bottom });
 export const setTitleAlignment = (b: CoverBuilder, alignment: Align) => updateTitle(b, { alignment });
 export const toggleTitleBold = (b: CoverBuilder) => updateTitle(b, { bold: !coverTitleOf(b.coverFront).bold });
 export const toggleTitleItalic = (b: CoverBuilder) => updateTitle(b, { italic: !coverTitleOf(b.coverFront).italic });

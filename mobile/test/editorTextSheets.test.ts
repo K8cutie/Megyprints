@@ -89,6 +89,7 @@ async function show<P>(Sheet: (p: SheetProps<P>) => ReactElement | null, platfor
 
 const all = (pred: (i: TestInstance) => boolean) => sheetRoot!.container.queryAll(pred);
 const has = (id: string) => all((i) => i.props.testID === id).length > 0;
+const byId = (id: string): TestInstance | undefined => all((i) => i.props.testID === id)[0];
 function textOf(node: TestInstance = sheetRoot!.container): string {
   return node.children.map((c) => (typeof c === 'string' ? c : textOf(c))).join('');
 }
@@ -275,6 +276,29 @@ describe('the text editor', () => {
     expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)).toMatchObject({
       text: 'Our first beach day', bold: true, fontSize: 30, color: '#1F3A5F', alignment: 'left', fontFamily: 'Georgia, "Times New Roman", serif',
     });
+  });
+
+  it('the colour list has the 12 gradients (owner, 2026-11-08): one gives the words its two colours; a plain colour takes them back to one', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const log = await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await type('text-editor-input', 'Summer');
+    await press('text-color-open');
+    expect(all((i) => i.props.testID?.startsWith?.('text-color-gradient-') && i.props.accessibilityRole === 'radio').length).toBe(12);
+    await press('text-color-gradient-peach-sunset');
+    expect(textOf(byId('text-color-name')!)).toBe('Peach sunset');
+    await press('text-editor-done');
+    expect(log.closed).toBe(1);
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)).toMatchObject({ text: 'Summer', color: '#F07F5F', fillTo: '#F48FB1' });
+
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await press('text-color-open');
+    expect(byId('text-color-gradient-peach-sunset')!.props.accessibilityState).toMatchObject({ checked: true });
+    await press('text-color-Navy');
+    await press('text-editor-done');
+    const t = builder().albumPages[4].textElements.find((x) => x.boxIndex === 0)!;
+    expect(t.color).toBe('#1F3A5F');
+    expect(t.fillTo).toBeUndefined();
   });
 
   it('✕ closes without saving', async () => {
@@ -640,7 +664,8 @@ describe('the page colour sheet', () => {
     const log = await show(PageColourSheet, platform, undefined);
     expect(textOf()).toContain(words.PAGE_COLOUR);
     expect(textOf()).toContain(words.PAGE_COLOUR_HINT);
-    expect(all((i) => i.props.testID?.startsWith?.('page-color-') && i.props.accessibilityRole === 'radio').length).toBe(9);
+    // the words' 28 colours and the 12 gradients (owner, 2026-11-08)
+    expect(all((i) => i.props.testID?.startsWith?.('page-color-') && i.props.accessibilityRole === 'radio').length).toBe(40);
     await press('page-color-Red');
     const red = PAGE_COLORS.find((c) => c.name === 'Red')!.hex;
     expect(builder().albumPages[2].background).toEqual({ type: 'solid', solid: red });
@@ -653,6 +678,23 @@ describe('the page colour sheet', () => {
     expect(log2.said).toEqual(['Every page is red now.']);
     expect(builder().albumPages.every((p) => p.background?.type === 'solid' && p.background.solid === red)).toBe(true);
     expect(log.closed).toBe(0);
+  });
+
+  it('a gradient colours the page top to bottom; "Use ocean on every page" colours them all and says so', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(2);
+    await show(PageColourSheet, platform, undefined);
+    await press('page-color-gradient-ocean');
+    const ocean = { type: 'gradient', gradient: { type: 'linear', angle: 180, stops: [{ offset: 0, color: '#6FA8DC' }, { offset: 1, color: '#1F3A5F' }] } };
+    expect(builder().albumPages[2].background).toEqual(ocean);
+    await act(async () => { sheetRoot!.unmount(); });
+    const log = await show(PageColourSheet, platform, undefined);
+    expect(textOf(byId('page-color-name')!)).toBe('Ocean');
+    expect(textOf()).toContain(words.useOnEveryPage('Ocean'));
+    await press('page-color-all');
+    expect(log.said).toEqual(['Every page is ocean now.']);
+    expect(builder().albumPages.every((p) => JSON.stringify(p.background) === JSON.stringify(ocean))).toBe(true);
+    expect(builder().coverFront.background).toEqual(ocean);
   });
 });
 

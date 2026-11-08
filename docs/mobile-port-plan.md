@@ -4272,6 +4272,44 @@ holes, torn paper), as before; changing them would move every printed page that 
 Oval and rounded masks still print as rectangles (known since the golden work). The Mask
 sheet is a long list now (46); no thumbnails in the app's list.
 
+## The words' colours and 12 gradients for pages and words (2026-11-08, `feat/port-colour-palettes`)
+
+Owner, on his phone (2.0, sideways): "The colors on the page color seem pretty plain.
+Could you make it have the same color palette as the fonts. The add gradients also." A
+sample (the 28 word colours in their families, 12 gradients from them, four pages) →
+"Ok i like this and i would like both page and font colors to have these paletes".
+Stacked on `feat/port-more-masks` (#277). Page colours were on the "discuss later" list of
+maybe-deprecated features: his own request settles that they are alive.
+
+**What changes.**
+- Page colour (the page sheet, the cover's Colour row; the website's picker too): the
+  words' 28 colours (`textColors.ts`), in the same six families, then 12 gradients
+  (`colorGradients.ts`: Cream to blush, Peach sunset, Gold glow, Terracotta, Sky, Ocean,
+  Lavender, Plum night, Sage, Forest, Teal sea, Charcoal), each fading top to bottom. "Use
+  <name> on every page" works for both, cover included. The bright Crayola 8 left the
+  list; a page already in one keeps it.
+- Words' colour (Edit text, the cover title): the 28 as before, plus the same 12
+  gradients, which set the words' colour and their two-colour fill (top to bottom, as
+  wordArt draws it). A plain colour now makes the words one colour (the fill goes). The
+  outline, two-colour and glow pickers in Effects have no gradients. The website's text
+  pickers are unchanged (the website has no WordArt buttons).
+
+**How.** A page choice is a key: a colour's hex, or `gradient:<id>`; the builder's
+`setPageColor` / `applyPageColorToAllPages` take the key, so no caller changed shape.
+`pageColors.ts`: `PAGE_COLORS` = the text colours, `PAGE_GRADIENTS`, `pageFillOf(Key)`,
+`gradientPage` (linear 180°, two stops: the renderers already draw it, spine and back in
+its top colour via `solidOf`), and `recolorPageTo`: each word judged on the colour right
+behind it (`colorAt`: a caption box's or photo frame's middle, a free text's x/y), a
+two-colour word kept only while both colours show, else one clean ink; quotes in photo
+frames are judged too now; words placed on a photo keep their colour. The app's gradient
+swatch is 12 bands of the blended colours in a circle (no drawing library).
+
+**Proof.** Website: `pageColors.spec.ts` (the list, gradients, keys, `colorAt`, words by
+where they sit, two-colour words), `dailyTest.spec.ts` (the tester lesson's colour now from
+the 28). App: the page sheet (40 swatches; a gradient on one page and every page), Edit
+text (a gradient, then a plain colour), the cover title. Golden page
+`palette-gradient-page` (app vs print 0.028%). Renderers unchanged.
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

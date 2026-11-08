@@ -199,13 +199,13 @@ describe('the cover screen', () => {
     // A colour: the photo goes, and so does Zoom; "Use blue on every page" shows.
     expect(has('cover-color-all')).toBe(false);
     await press('cover-color-Blue');
-    expect(builder().coverFront.background).toEqual({ type: 'solid', solid: '#1F75FE' });
+    expect(builder().coverFront.background).toEqual({ type: 'solid', solid: '#3A6EA5' });
     expect(has('cover-zoom')).toBe(false);
     expect(textOf(byId('cover-color-name')!)).toBe('Blue');
     expect(JSON.stringify(builder().albumPages)).toBe(pages);
     expect(textOf(byId('cover-color-all')!)).toBe('Use blue on every page');
     await press('cover-color-all');
-    expect(builder().albumPages.every((p) => p.background?.type === 'solid' && p.background.solid === '#1F75FE')).toBe(true);
+    expect(builder().albumPages.every((p) => p.background?.type === 'solid' && p.background.solid === '#3A6EA5')).toBe(true);
   });
 
   it('Text: the title, its font, colour (with the warning and its fix), alignment, Bold / Italic / Shadow, size, dragging it', async () => {
@@ -224,8 +224,13 @@ describe('the cover screen', () => {
     expect(has('cover-font-list')).toBe(false);
     expect(textOf(byId('cover-font')!)).toContain('Playfair');
 
+    // a gradient (owner, 2026-11-08): the title's two colours; a plain colour, one again
+    await press('cover-title-color-gradient-gold-glow');
+    expect(coverTitleOf(builder().coverFront)).toMatchObject({ color: '#F3E9DC', fillTo: '#C9A24B' });
+    expect(textOf(byId('cover-title-color-name')!)).toBe('Gold glow');
     await press('cover-title-color-Gold');
     expect(coverTitleOf(builder().coverFront).color).toBe('#C9A24B');
+    expect(coverTitleOf(builder().coverFront).fillTo).toBeUndefined();
     expect(textOf(byId('cover-title-color-name')!)).toBe('Gold');
 
     await press('cover-align-left');
@@ -355,7 +360,7 @@ describe('the cover screen', () => {
     try {
       await openCover();
       expect(textOf(byId('cover-not-drawn')!)).toBe(NOT_DRAWN_LINE);
-      await press('cover-color-Yellow');
+      await press('cover-color-Cream');
       await press('cover-tab-text');
       expect(has('cover-title-hard-to-see')).toBe(false);
       await press('cover-title-color-White');

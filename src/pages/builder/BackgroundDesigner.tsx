@@ -10,6 +10,7 @@ import { resolveBgImageSrc } from './types';
 import { toAlbumPhoto } from '../../lib/heicPhoto';
 import { TEXTURE_NAMES, TEXTURE_COLORS, DEFAULT_TEXTURE_COLORS, textureDataUri, TEXTURE_TILE_PX } from './textures';
 import PageColorPicker from './PageColorPicker';
+import { pageFillOfKey } from './pageColors';
 
 /* ─── Modes ───
    TEXTURES-ONLY by design (owner call 2026-08-06): solid/gradient/image page
@@ -215,7 +216,11 @@ export default function BackgroundDesigner({ background, onChange, photos = [], 
             {/* Plain colour — the page colours (pageColors.ts). */}
             <div>
               <p className="text-[10px] text-stone-400 mb-1.5 uppercase tracking-wider font-semibold">Plain colour</p>
-              <PageColorPicker background={background} onPick={(hex) => onChange({ type: 'solid', solid: hex, opacity: background.opacity ?? 100 })} />
+              <PageColorPicker background={background} onPick={(key) => {
+                // a colour or a gradient: its own background, at the page's opacity
+                const fill = pageFillOfKey(key);
+                if (fill) onChange({ ...fill.background, opacity: background.opacity ?? 100 });
+              }} />
             </div>
             {/* Material */}
             <div>

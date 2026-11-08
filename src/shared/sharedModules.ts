@@ -104,6 +104,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/canvasMeasurer.native.ts',
   'src/pages/builder/chooserFit.ts',
   'src/pages/builder/colorContrast.ts',
+  'src/pages/builder/colorGradients.ts',
   'src/pages/builder/coverGeometry.ts',
   'src/pages/builder/coverLayoutRules.ts',
   'src/pages/builder/coverPhoto.ts',

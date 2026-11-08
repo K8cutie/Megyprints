@@ -93,6 +93,8 @@ export const NOT_A_COLOR_CODE = 'That is not a color code. It looks like #3A6EA5
 /* ── PageColorPicker.tsx (PageColorSheet) and MobileReview.tsx ── */
 export const PAGE_COLOUR = 'Page colour';
 export const PAGE_COLOUR_LABEL = 'Page colour';
+/** The gradients' heading in the colour pickers (page and words). */
+export const GRADIENTS = 'Gradients';
 export const useOnEveryPage = (name: string) => `Use ${name.toLowerCase()} on every page`;
 export const PAGE_COLOUR_HINT = 'Tap a colour for this page. Words that wouldn\'t show on it switch to an ink that does.';
 /** MobileReview: the line said after "Use … on every page". */

@@ -36,6 +36,8 @@ import { generateAlbum } from '../../src/pages/builder/generateAlbum';
 import type { AlbumPage, AlbumSizePreset, TextElement, SlotText, CoverDesign, CoverType, MaterialType, QrFill, OrnamentFill, OrnamentTransform } from '../../src/pages/builder/types';
 import { COVERS } from '../../src/pages/builder/types';
 import { NEW_WORDS_LOOK } from '../../src/pages/builder/freeWords';
+import { recolorPage } from '../../src/pages/builder/pageColors';
+import { gradientById } from '../../src/pages/builder/colorGradients';
 import { mulberry32 } from '../../src/test/mulberry32';
 import { PHOTO_SIZES, P3_PHOTO, P3_PHOTO_IMAGE, BIG_PHOTO, BIG_PHOTO_IMAGE, CORNER_BASE } from './syntheticPhotos';
 
@@ -518,6 +520,14 @@ export function buildGoldenSet(): GoldenSet {
     b('artmask-64', '6x4', 23, '6x4, film strip and house on a full-bleed duo, a pan on the house', page('6x4', 't64-fb-duo-tall-gap', [1, 5], {
       slotMasks: ['film', 'house'], slotOffsetsY: [0, -30],
     })),
+    // The page and word palettes (owner, 2026-11-08: the words' colours and 12
+    // gradients for both): a page put in the Cream to blush gradient by the
+    // picker's own rule (recolorPage: each word judged where it sits), a
+    // caption in the Plum night gradient (colour + its two-colour fill),
+    // which shows there and so is kept.
+    b('palette-gradient-page', '8x8', 47, 'a page in the Cream to blush gradient (top to bottom) with a caption in the Plum night gradient, as the pickers make them', recolorPage(page('8x8', 't88-fb-solo-ls-twobox-above', [3], {
+      textElements: [caption(0, { text: 'Our summer', fontFamily: DM_SANS, fontSize: 44, bold: true, color: gradientById('plum-night')!.top, fillTo: gradientById('plum-night')!.bottom })],
+    }), 'gradient:cream-blush')),
   ];
 
   // ── The covers ──

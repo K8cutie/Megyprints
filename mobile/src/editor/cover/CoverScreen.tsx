@@ -64,7 +64,7 @@ import { colors, space } from '../../lib/theme';
 import { BLANK_COVER_MESSAGE, coverBlank, titleInkNeeded, titleTooLong } from './coverChecks';
 import {
   colourEveryPage, colourTheCover, coverCrop, coverHasPhoto, coverTitleOf, coverWithoutTitle, canRemoveCoverPhoto, editsTheCover, fitTitle, moveCoverTitle,
-  panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour, setTitleCurve, setTitleFillTo, setTitleFont,
+  panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour, setTitleCurve, setTitleFillTo, setTitleGradient, setTitleFont,
   setTitleGlow, setTitleOutline, setTitleOutlineColour, setTitleSize,
   titleBoxOf, titleMovable, TITLE_SIZE, toggleTitleBold, toggleTitleItalic, toggleTitleShadow, typeTitle,
   zoomCoverPhoto, ZOOM_RANGE, type Align,
@@ -515,7 +515,8 @@ export default function CoverScreen() {
             ) : null}
 
             <Text style={styles.label}>{W.COLOUR}</Text>
-            <TextColourPicker value={title.color} onChange={(hex) => setTitleColour(builder, hex)} testID="cover-title-color" />
+            <TextColourPicker value={title.color} fillTo={title.fillTo} onChange={(hex) => setTitleColour(builder, hex)}
+              onGradient={(g) => setTitleGradient(builder, g)} testID="cover-title-color" />
             {ink && (
               <View style={styles.warn} testID="cover-title-hard-to-see">
                 <Text style={styles.warnText}>{W.TITLE_HARD_TO_SEE}</Text>

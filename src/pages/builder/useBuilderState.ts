@@ -988,12 +988,13 @@ export interface BuilderActions {
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
-  /** The page in one of the page colours (pageColors.ts): a solid background,
-   *  with words that wouldn't show on it switched to an ink that does. Under
-   *  the cover scope it colours the cover. */
-  setPageColor: (hex: string) => void;
-  /** Every page in that colour — the cover too. */
-  applyPageColorToAllPages: (hex: string) => void;
+  /** The page in one of the page colours or gradients (pageColors.ts), named
+   *  by its key (a colour's hex, or 'gradient:<id>'), with words that wouldn't
+   *  show on it switched to an ink that does. Under the cover scope it colours
+   *  the cover. */
+  setPageColor: (key: string) => void;
+  /** Every page in that colour or gradient — the cover too. */
+  applyPageColorToAllPages: (key: string) => void;
   /** COVER: put a photo the customer picked on the cover. The file is kept in
    *  the device's photo store, so the cover still has it after the app is
    *  closed (coverPhoto). Resolves once it is on the cover. */

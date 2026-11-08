@@ -240,7 +240,9 @@ export function TextEditorSheet({ ctx, params, close }: SheetProps<TextEditorPar
         )}
         {colorOpen && (
           <ScrollView ref={colourList} onContentSizeChange={onColourListSize} style={[styles.panel, styles.colorPanel, { maxHeight: listH }]} testID="text-color-panel" keyboardShouldPersistTaps="handled">
-            <TextColourPicker value={s.color} onChange={(color) => set({ color })} />
+            {/* A plain colour: one colour (any two-colour fill goes); a gradient: both. */}
+            <TextColourPicker value={s.color} fillTo={s.fillTo} onChange={(color) => set({ color, fillTo: undefined })}
+              onGradient={(g) => set({ color: g.top, fillTo: g.bottom })} />
           </ScrollView>
         )}
         {effectsOpen && (

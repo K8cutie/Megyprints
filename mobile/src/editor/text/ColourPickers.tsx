@@ -7,59 +7,103 @@
      the phone's own picker (<input type="color">); here it opens a grid of
      shades and a colour code field (anyColour.ts), saved as a 6-digit hex
      the same way.
-   • PageColorPicker: the page colours (pageColors.ts, shared: White and the
-     Crayola 8), the chosen one ringed and ticked, its name under them, and
-     "Use <colour> on every page" once a swatch is chosen (never a button
-     that can't do anything). The cover editor uses both (its colour, its
-     title's colour), so the editor has one look for colours.
+   • PageColorPicker: the page colours (pageColors.ts, shared: the words' 28
+     colours in their families, then 12 gradients), the chosen one ringed and
+     ticked, its name under them, and "Use <colour> on every page" once a
+     swatch is chosen (never a button that can't do anything). The cover
+     editor uses both (its colour, its title's colour), so the editor has one
+     look for colours.
+   Owner, 2026-11-08: "i would like both page and font colors to have these
+   paletes": the text picker offers the same 12 gradients where it chooses the
+   words' own colour (a gradient = the colour and the two-colour fill; a plain
+   colour takes the fill away). Its other uses (an outline's, a glow's colour)
+   have no gradients.
+   A gradient's swatch is bands of its colours in a circle: plain views, so
+   no drawing library is needed and the tests can see it.
    Every swatch is a 48 dp target.
    ══════════════════════════════════════════════════════════════════════════ */
 import { useState } from 'react';
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { TEXT_COLORS, sameColor, textColorName } from '@web/pages/builder/textColors';
-import { inkOn, PAGE_COLORS, pageColorOf } from '@web/pages/builder/pageColors';
+import { COLOR_GRADIENTS, gradientOfColors, mixColors, type ColorGradient } from '@web/pages/builder/colorGradients';
+import { inkOn, PAGE_COLOR_GROUPS, PAGE_GRADIENTS, pageFillOf, type PageFill } from '@web/pages/builder/pageColors';
 import type { AlbumBackground } from '@web/pages/builder/types';
 import { colors, space } from '../../lib/theme';
 import { ANY_COLORS, parseColourCode, tickOn } from './anyColour';
 import {
-  ANY_COLOR, ANY_COLOR_HINT, COLOR_CODE, NOT_A_COLOR_CODE, PAGE_COLOUR_LABEL, TEXT_COLOR_LABEL,
+  ANY_COLOR, ANY_COLOR_HINT, COLOR_CODE, GRADIENTS, NOT_A_COLOR_CODE, PAGE_COLOUR_LABEL, TEXT_COLOR_LABEL,
   USE_THIS_COLOR, useOnEveryPage, YOUR_OWN_COLOR,
 } from './words';
 
 const RING = '#9A4A2C';
 const RAINBOW = ['#C62828', '#E8772E', '#D4A017', '#2E7D4A', '#3A6EA5', '#9B5DE5'];
+/** Bands in a gradient swatch: enough to read as smooth at its size. */
+const BANDS = 12;
 
-function Swatch({ hex, name, on, onPress, testID, size = 36 }: { hex: string; name: string; on: boolean; onPress: () => void; testID?: string; size?: number }) {
+/** A swatch's face: one colour, or a gradient's colours top to bottom. */
+function Face({ hex, gradient, size, on, testID }: { hex: string; gradient?: Pick<ColorGradient, 'top' | 'bottom'>; size: number; on: boolean; testID?: string }) {
+  const tickHex = gradient ? mixColors(gradient.top, gradient.bottom, 0.5) : hex;
+  return (
+    <View testID={testID} style={[styles.swatch, { width: size, height: size, borderRadius: size / 2, backgroundColor: hex, overflow: 'hidden' }]}>
+      {gradient && (
+        <View style={StyleSheet.absoluteFill}>
+          {/* each band overlaps the next by a point, so no seam shows between them */}
+          {Array.from({ length: BANDS }, (_, i) => (
+            <View key={i} style={{ position: 'absolute', left: 0, right: 0, top: (i * size) / BANDS, height: size / BANDS + 1, backgroundColor: mixColors(gradient.top, gradient.bottom, (i + 0.5) / BANDS) }} />
+          ))}
+        </View>
+      )}
+      {on && <Text style={[styles.tick, { color: tickOn(tickHex) }]}>✓</Text>}
+    </View>
+  );
+}
+
+function Swatch({ hex, gradient, name, on, onPress, testID, size = 36 }: { hex: string; gradient?: Pick<ColorGradient, 'top' | 'bottom'>; name: string; on: boolean; onPress: () => void; testID?: string; size?: number }) {
   return (
     <Pressable accessibilityRole="radio" accessibilityLabel={name} accessibilityState={{ checked: on }} onPress={onPress} testID={testID}
       style={({ pressed }) => [styles.hit, pressed && styles.pressed]}>
       <View style={[styles.ring, on && styles.ringOn]}>
-        <View style={[styles.swatch, { width: size, height: size, borderRadius: size / 2, backgroundColor: hex }]}>
-          {on && <Text style={[styles.tick, { color: tickOn(hex) }]}>✓</Text>}
-        </View>
+        <Face hex={gradient ? gradient.top : hex} gradient={gradient} size={size} on={on} testID={testID ? `${testID}-face` : undefined} />
       </View>
     </Pressable>
   );
 }
 
-/** TextColorPicker: the 28 swatches, "Any color", and the chosen colour's name. */
-export function TextColourPicker({ value, onChange, testID = 'text-color' }: {
+/** TextColorPicker: the 28 swatches, the 12 gradients (where the words' own
+ *  colour is chosen: `onGradient`), "Any color", and the chosen one's name. */
+export function TextColourPicker({ value, onChange, testID = 'text-color', fillTo, onGradient }: {
   value: string;
   onChange: (hex: string) => void;
   /** Its controls' test ids start with this (the cover title's: 'cover-title-color'). */
   testID?: string;
+  /** The words' second colour (their two-colour fill), to show a gradient as chosen. */
+  fillTo?: string;
+  /** Offers the gradients: picked, the words take its two colours. */
+  onGradient?: (g: ColorGradient) => void;
 }) {
-  const name = textColorName(value);
+  const gradient = onGradient ? gradientOfColors(value, fillTo) : null;
+  const name = gradient?.name ?? textColorName(value);
   const own = !name && !!value;
   const [any, setAny] = useState(false);
   return (
     <View testID={`${testID}-picker`}>
       <View accessibilityRole="radiogroup" accessibilityLabel={TEXT_COLOR_LABEL} style={styles.grid}>
         {TEXT_COLORS.map((c) => (
-          <Swatch key={c.hex} hex={c.hex} name={c.name} on={sameColor(c.hex, value)} testID={`${testID}-${c.name}`}
+          <Swatch key={c.hex} hex={c.hex} name={c.name} on={!gradient && sameColor(c.hex, value)} testID={`${testID}-${c.name}`}
             onPress={() => onChange(c.hex)} />
         ))}
       </View>
+      {onGradient && (
+        <>
+          <Text style={styles.family}>{GRADIENTS}</Text>
+          <View accessibilityRole="radiogroup" accessibilityLabel={GRADIENTS} style={styles.grid}>
+            {COLOR_GRADIENTS.map((g) => (
+              <Swatch key={g.id} hex={g.top} gradient={g} name={g.name} on={gradient?.id === g.id} testID={`${testID}-gradient-${g.id}`}
+                onPress={() => onGradient(g)} />
+            ))}
+          </View>
+        </>
+      )}
       <Pressable accessibilityRole="button" accessibilityLabel={ANY_COLOR} onPress={() => setAny((v) => !v)} testID={`${testID}-any`}
         style={({ pressed }) => [styles.anyRow, own && styles.anyRowOn, pressed && styles.pressed]}>
         <View style={styles.anyDot}>
@@ -114,40 +158,48 @@ function AnyColour({ value, onPick }: { value: string; onPick: (hex: string) => 
   );
 }
 
-/** PageColorPicker (grid): White and the Crayola 8, and "Use … on every page". */
+/** PageColorPicker (grid): the words' 28 colours in their families, the 12
+ *  gradients, and "Use … on every page". A swatch passes its key (a colour's
+ *  hex, or 'gradient:<id>') to onPick / onPickAll. */
 export function PageColourPicker({ background, onPick, onPickAll, testID = 'page-color' }: {
   background: AlbumBackground | undefined;
-  onPick: (hex: string) => void;
-  onPickAll?: (hex: string) => void;
+  onPick: (key: string) => void;
+  onPickAll?: (key: string) => void;
   /** Its controls' test ids start with this (the cover's: 'cover-color'). */
   testID?: string;
 }) {
-  const current = pageColorOf(background);
-  const rows = [PAGE_COLORS.slice(0, 5), PAGE_COLORS.slice(5)];
+  const current = pageFillOf(background);
+  const swatch = (f: PageFill, id: string) => {
+    const on = current?.key === f.key;
+    return (
+      <Pressable key={f.key} accessibilityRole="radio" accessibilityLabel={f.name} accessibilityState={{ checked: on }} onPress={() => onPick(f.key)} testID={`${testID}-${id}`}
+        style={({ pressed }) => [styles.hit, pressed && styles.pressed]}>
+        <View style={[styles.ring, on && styles.ringOn]}>
+          <Face hex={f.gradient ? f.gradient.top : f.swatch} gradient={f.gradient} size={38} on={false} testID={`${testID}-${id}-face`} />
+          {on && <View style={styles.tickOver} pointerEvents="none"><Text style={[styles.tick, { color: inkOn(f.middle) }]}>✓</Text></View>}
+        </View>
+      </Pressable>
+    );
+  };
   return (
     <View testID={`${testID}-picker`}>
       <View accessibilityRole="radiogroup" accessibilityLabel={PAGE_COLOUR_LABEL}>
-        {rows.map((row, r) => (
-          <View key={r} style={styles.pageRow}>
-            {row.map((c) => {
-              const on = current?.hex === c.hex;
-              return (
-                <Pressable key={c.hex} accessibilityRole="radio" accessibilityLabel={c.name} accessibilityState={{ checked: on }} onPress={() => onPick(c.hex)} testID={`${testID}-${c.name}`}
-                  style={({ pressed }) => [styles.hit, pressed && styles.pressed]}>
-                  <View style={[styles.ring, on && styles.ringOn]}>
-                    <View style={[styles.swatch, { width: 38, height: 38, borderRadius: 19, backgroundColor: c.hex }]}>
-                      {on && <Text style={[styles.tick, { color: inkOn(c.hex) }]}>✓</Text>}
-                    </View>
-                  </View>
-                </Pressable>
-              );
-            })}
+        {PAGE_COLOR_GROUPS.map((g) => (
+          <View key={g.group}>
+            <Text style={styles.family}>{g.group}</Text>
+            <View style={styles.pageRow}>
+              {g.colors.map((c) => swatch({ key: c.hex, name: c.name, background: { type: 'solid', solid: c.hex }, swatch: c.hex, middle: c.hex }, c.name))}
+            </View>
           </View>
         ))}
+        <Text style={styles.family}>{GRADIENTS}</Text>
+        <View style={styles.pageRow}>
+          {PAGE_GRADIENTS.map((f) => swatch(f, `gradient-${f.gradient!.id}`))}
+        </View>
       </View>
       <Text style={styles.name} testID={`${testID}-name`} accessibilityLiveRegion="polite">{current?.name ?? ''}</Text>
       {onPickAll && current && (
-        <Pressable accessibilityRole="button" accessibilityLabel={useOnEveryPage(current.name)} onPress={() => onPickAll(current.hex)} testID={`${testID}-all`}
+        <Pressable accessibilityRole="button" accessibilityLabel={useOnEveryPage(current.name)} onPress={() => onPickAll(current.key)} testID={`${testID}-all`}
           style={({ pressed }) => [styles.allButton, pressed && styles.pressed]}>
           <Text style={styles.allText}>{useOnEveryPage(current.name)}</Text>
         </Pressable>
@@ -183,7 +235,9 @@ const styles = StyleSheet.create({
   useText: { color: colors.accent, fontWeight: '700', fontSize: 14 },
   bad: { fontSize: 12, color: colors.bad, marginTop: 4 },
   name: { marginTop: 6, textAlign: 'center', fontSize: 12, color: colors.muted, minHeight: 16 },
-  pageRow: { flexDirection: 'row', justifyContent: 'center', gap: space.xs },
+  pageRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.xs },
+  family: { marginTop: space.sm, marginBottom: 2, textAlign: 'center', fontSize: 11, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase', color: colors.muted },
+  tickOver: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   allButton: { marginTop: space.sm, minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', paddingHorizontal: space.md },
   allText: { fontSize: 14, fontWeight: '700', color: colors.accent },
 });
