@@ -1,5 +1,6 @@
+import { AppleAuthenticationButton, AppleAuthenticationButtonStyle, AppleAuthenticationButtonType } from 'expo-apple-authentication';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
-import { openBrowserAsync } from 'expo-web-browser';
+import { openAuthSessionAsync, openBrowserAsync } from 'expo-web-browser';
 import { googleRefusedNotice } from '@web/lib/accountErrors';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -7,7 +8,8 @@ import { Button } from '../components/Button';
 import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { supabase, supabaseConfigured } from '../lib/supabase';
-import { startGoogleSignIn } from '../lib/googleSignIn';
+import { appleSignInHere, askApple, sha256Hex, signInWithApple } from '../lib/appleSignIn';
+import { openGoogleOnIphone, startGoogleSignIn } from '../lib/googleSignIn';
 import { GOOGLE_IN_PLAY_APP, GOOGLE_IN_PLAY_APP_SHORT, googleSignInHere } from '../lib/account/googleHere';
 import { nonceStore, randomHex } from '../lib/googleNonce';
 import { colors, space } from '../lib/theme';
@@ -67,12 +69,16 @@ export default function SignIn() {
     if (focused && session && googleStarted.current) { googleStarted.current = false; goOn(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, focused]);
+  // iPhone: Apple's sign-in window, whose answer goes to auth-return (googleSignIn.ts).
+  const openGoogle = (url: string) => (Platform.OS === 'ios'
+    ? openGoogleOnIphone(url, { openAuth: (u, back) => openAuthSessionAsync(u, back), goTo: (p) => router.push(p as never) })
+    : openBrowserAsync(url));
   const google = async () => {
     setError(null);
     setGoogleBusy(true);
     try {
       googleStarted.current = true;
-      await startGoogleSignIn({ client: supabase as never, store: nonceStore, open: (url) => openBrowserAsync(url), randomHex });
+      await startGoogleSignIn({ client: supabase as never, store: nonceStore, open: openGoogle, randomHex });
     } catch {
       googleStarted.current = false;
       setError(googleRefusedNotice('').text);
@@ -80,6 +86,34 @@ export default function SignIn() {
       setGoogleBusy(false);
     }
   };
+
+  // "Sign in with Apple" (iPhone, when the phone has it: lib/appleSignIn.ts).
+  const [appleHere, setAppleHere] = useState(false);
+  const [appleBusy, setAppleBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void appleSignInHere().then((here) => { if (live) setAppleHere(here); });
+    return () => { live = false; };
+  }, []);
+  const apple = async () => {
+    if (appleBusy) return;
+    setError(null);
+    setAppleBusy(true);
+    const r = await signInWithApple({ client: supabase as never, randomHex, sha256: sha256Hex, ask: askApple });
+    setAppleBusy(false);
+    if (r.ok) goOn();
+    else if (!r.cancelled) setError(r.error);
+  };
+  const appleButton = appleHere ? (
+    <AppleAuthenticationButton
+      buttonType={AppleAuthenticationButtonType.SIGN_IN}
+      buttonStyle={AppleAuthenticationButtonStyle.WHITE_OUTLINE}
+      cornerRadius={12}
+      onPress={() => { void apple(); }}
+      style={styles.apple}
+      testID="sign-in-apple"
+    />
+  ) : null;
 
   const sendLink = async () => {
     const problem = emailProblem(email);
@@ -211,6 +245,7 @@ export default function SignIn() {
 
         <Button label={busy ? 'Signing in' : 'Sign in'} busy={busy} onPress={submit} style={styles.button} testID="sign-in" />
 
+        {appleButton}
         {googleBlock(false)}
         {/* The website's line under Create Account: in the app, Sign in with
             Google is how a new account is made. */}
@@ -245,6 +280,8 @@ const styles = StyleSheet.create({
   eyeText: { fontSize: 15, fontWeight: '700', color: colors.accent },
   error: { color: colors.bad, fontSize: 15, lineHeight: 21, marginTop: space.md },
   button: { marginTop: space.lg },
+  // As tall as the app's own buttons, so Apple's sits level with Google's.
+  apple: { marginTop: space.lg, height: 52, width: '100%' },
   note: { fontSize: 14, color: colors.muted, marginTop: space.lg, lineHeight: 20 },
   agree: { marginTop: space.md },
 });

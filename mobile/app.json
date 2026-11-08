@@ -28,6 +28,7 @@
       "bundleIdentifier": "com.megyprints.app.dev",
       "buildNumber": "109",
       "supportsTablet": false,
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "BGTaskSchedulerPermittedIdentifiers": [
@@ -56,6 +57,7 @@
       ],
       "expo-image",
       "expo-asset",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {
