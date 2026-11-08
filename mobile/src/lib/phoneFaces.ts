@@ -138,6 +138,24 @@ export function toCheckFace(f: PhoneFace): CheckFace {
 const probability = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null);
 const point = (p: { x: number; y: number } | null | undefined) => (p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null);
 
+/** An eye aspect ratio on the website's scale → ML Kit's open chance: the
+ *  exact inverse of earFromOpenChance (EYE_CLOSED_EAR ↔ EYE_SHUT_BELOW),
+ *  held to 0–1. The iPhone's face finder (Apple Vision, ios/
+ *  PhotoPixelsModule.swift) gives no open chance, but measures each eye's
+ *  aspect ratio from its outline; this puts it on the scale the phone's
+ *  rules read, so earFromOpenChance gives that ratio back to the website's
+ *  rule. */
+export function openChanceFromEar(ear: number): number {
+  const quarter = EYE_CLOSED_EAR * 0.25;
+  if (ear < EYE_CLOSED_EAR) return Math.max(0, ((ear - quarter) / (EYE_CLOSED_EAR - quarter)) * EYE_SHUT_BELOW);
+  return Math.min(1, EYE_SHUT_BELOW + ((ear - EYE_CLOSED_EAR) * (1 - EYE_SHUT_BELOW)) / (OPEN_EAR - EYE_CLOSED_EAR));
+}
+
+/** ML Kit's open chance when it gave one (Android), else the chance from the
+ *  eye's measured aspect ratio (iPhone), else null. */
+const openChance = (open: number | null | undefined, ear: number | null | undefined) =>
+  probability(open) ?? (typeof ear === 'number' && Number.isFinite(ear) && ear >= 0 ? openChanceFromEar(ear) : null);
+
 /** The module's face, found on a copy `sx` × `sy` times the small copy (1
  *  when ML Kit looked at the small copy itself) → a PhoneFace in the small
  *  copy's pixels. */
@@ -147,8 +165,8 @@ export function fromNative(f: NativeFace, sx = 1, sy = sx): PhoneFace {
     box: { x: f.x / sx, y: f.y / sy, width: f.width / sx, height: f.height / sy },
     leftEye: back(point(f.leftEye)),
     rightEye: back(point(f.rightEye)),
-    leftEyeOpen: probability(f.leftEyeOpen),
-    rightEyeOpen: probability(f.rightEyeOpen),
+    leftEyeOpen: openChance(f.leftEyeOpen, f.leftEyeEar),
+    rightEyeOpen: openChance(f.rightEyeOpen, f.rightEyeEar),
     mlKitSidePx: Math.max(0, Math.min(f.width, f.height)),
   };
 }

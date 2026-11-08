@@ -30,9 +30,15 @@ export interface NativeFace {
    *  on the picture's left / right (tools/photo-check: 291 of 292 faces). */
   leftEye: Pt | null;
   rightEye: Pt | null;
-  /** ML Kit's chance each eye is open, 0–1; null when it could not tell. */
+  /** ML Kit's chance each eye is open, 0–1; null when it could not tell
+   *  (always null on iPhone: see leftEyeEar). */
   leftEyeOpen: number | null;
   rightEyeOpen: number | null;
+  /** iPhone only (ios/PhotoPixelsModule.swift, Apple Vision): each eye's
+   *  aspect ratio measured from its outline, the website's own measure; the
+   *  app puts it on ML Kit's scale (phoneFaces.ts openChanceFromEar). */
+  leftEyeEar?: number | null;
+  rightEyeEar?: number | null;
 }
 
 interface PhotoPixelsNative {

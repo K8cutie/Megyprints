@@ -77,20 +77,20 @@ enum PhotoFilesError: Error, LocalizedError {
 }
 
 /** What a photo's header says (ImageIO, from its bytes). */
-struct PhotoHeader {
+public struct PhotoHeader {
   /** As stored (before the EXIF turn). */
-  var width = 0
-  var height = 0
+  public var width = 0
+  public var height = 0
   /** EXIF orientation, 1–8. */
-  var orientation = 1
+  public var orientation = 1
   /** The ICC profile's name ("Display P3", "sRGB IEC61966-2.1"): what Android calls the colour space. */
-  var profile: String?
-  var takenAt: String?
-  var takenOffset: String?
+  public var profile: String?
+  public var takenAt: String?
+  public var takenOffset: String?
 
   /** Degrees the picture is turned to show upright, as Android's
    *  ExifInterface.getRotationDegrees counts them (mirrored ones included). */
-  var rotation: Int {
+  public var rotation: Int {
     switch orientation {
     case 6, 7: return 90
     case 3, 4: return 180
@@ -100,18 +100,20 @@ struct PhotoHeader {
   }
 
   /** Width and height as shown (turned photos swapped). */
-  var shown: (width: Int, height: Int) {
+  public var shown: (width: Int, height: Int) {
     rotation % 180 == 90 ? (width: height, height: width) : (width: width, height: height)
   }
 }
 
-enum PhotoFiles {
+/** Shared with modules/photo-pixels (its pod depends on this one): one
+ *  place that opens a photo, Photos (iCloud too) or file. */
+public enum PhotoFiles {
   static let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
 
   // MARK: where a photo is
 
   /** The Photos library photo behind "ph://<localIdentifier>". */
-  static func asset(_ address: String) -> PHAsset? {
+  public static func asset(_ address: String) -> PHAsset? {
     guard address.hasPrefix("ph://") else { return nil }
     let id = String(address.dropFirst("ph://".count))
     return PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
@@ -125,7 +127,7 @@ enum PhotoFiles {
 
   /** The photo's bytes: from Photos (edits applied; downloaded from iCloud
    *  when the phone has only a small copy), or from the file. */
-  static func bytes(_ address: String) async throws -> Data {
+  public static func bytes(_ address: String) async throws -> Data {
     if address.hasPrefix("ph://") {
       guard let a = asset(address) else { throw PhotoFilesError.notFound(address) }
       let options = PHImageRequestOptions()
@@ -158,14 +160,14 @@ enum PhotoFiles {
 
   // MARK: reading a header
 
-  static func source(_ data: Data, _ address: String) throws -> CGImageSource {
+  public static func source(_ data: Data, _ address: String) throws -> CGImageSource {
     guard let s = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(s) > 0 else {
       throw PhotoFilesError.unreadable(address)
     }
     return s
   }
 
-  static func header(_ s: CGImageSource) -> PhotoHeader {
+  public static func header(_ s: CGImageSource) -> PhotoHeader {
     var h = PhotoHeader()
     let p = CGImageSourceCopyPropertiesAtIndex(s, 0, nil) as? [CFString: Any] ?? [:]
     h.width = (p[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue ?? 0

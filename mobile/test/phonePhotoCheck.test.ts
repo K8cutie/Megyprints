@@ -6,7 +6,7 @@ import { basicCheck, checkCopySize, checkIsReady, EYE_CLOSED_EAR, faceVerdict, f
 import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import type { StoredPhoto } from '@web/shared/platform';
 import { createPhoneChecks, PHONE_CHECK_AT_ONCE, type PhoneCheckDevice } from '../src/lib/phonePhotoCheck';
-import { earFromOpenChance, EYE_SHUT_BELOW, eyesJudged, fromNative, MIN_EYE_FACE_PX, phoneEyesShut, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
+import { earFromOpenChance, EYE_SHUT_BELOW, eyesJudged, fromNative, MIN_EYE_FACE_PX, openChanceFromEar, phoneEyesShut, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
 import { FACE_COPY_SCALE, faceCopyScale } from '../src/lib/faceModel';
 
 jest.mock('expo', () => ({ requireOptionalNativeModule: () => null }));
@@ -122,6 +122,41 @@ describe("ML Kit's eye scores on the website's scale", () => {
     expect(middleOf(f.landmarks.slice(36, 42))).toBeCloseTo(100 + 200 * 0.3, 9); // the picture's left
     expect(middleOf(f.landmarks.slice(42, 48))).toBeCloseTo(100 + 200 * 0.7, 9);
     expect(faceVerdict([f], 600).eyesClosed).toBe(true);
+  });
+});
+
+/* iPhone (ios/PhotoPixelsModule.swift): Apple Vision gives no open chance,
+   but each eye's aspect ratio measured from its outline. openChanceFromEar
+   puts it on ML Kit's scale with the exact inverse of earFromOpenChance, so
+   the website's EYE_CLOSED_EAR line is where the phone's EYE_SHUT_BELOW is. */
+describe("the iPhone's eye shapes on ML Kit's scale", () => {
+  it('is the exact inverse of earFromOpenChance across the whole scale', () => {
+    for (let i = 0; i <= 100; i++) {
+      const p = i / 100;
+      expect(openChanceFromEar(earFromOpenChance(p))).toBeCloseTo(p, 12);
+    }
+  });
+
+  it("the website's closed-eye line is the phone's shut line; past the ends it holds at 0 and 1", () => {
+    expect(openChanceFromEar(EYE_CLOSED_EAR)).toBeCloseTo(EYE_SHUT_BELOW, 12);
+    expect(openChanceFromEar(EYE_CLOSED_EAR - 0.001)).toBeLessThan(EYE_SHUT_BELOW);
+    expect(openChanceFromEar(0)).toBe(0);
+    expect(openChanceFromEar(0.9)).toBe(1);
+  });
+
+  it("an iPhone report: eye shapes become open chances; ML Kit's own chance wins when there is one", () => {
+    const f = fromNative({
+      x: 0, y: 0, width: 120, height: 130, leftEye: { x: 40, y: 50 }, rightEye: { x: 80, y: 50 },
+      leftEyeOpen: null, rightEyeOpen: null, leftEyeEar: 0.05, rightEyeEar: 0.3,
+    });
+    expect(f.leftEyeOpen).toBeCloseTo(openChanceFromEar(0.05), 12);
+    expect(f.leftEyeOpen!).toBeLessThan(EYE_SHUT_BELOW);
+    // A typical open eye (the website's 0.3) is wide open on ML Kit's scale.
+    expect(f.rightEyeOpen).toBeCloseTo(1, 12);
+    // Both shut on the iPhone: the same rule as ML Kit's.
+    expect(phoneEyesShut(fromNative({ x: 0, y: 0, width: 120, height: 130, leftEye: null, rightEye: null, leftEyeOpen: null, rightEyeOpen: null, leftEyeEar: 0.04, rightEyeEar: 0.06 }))).toBe(true);
+    expect(fromNative({ x: 0, y: 0, width: 120, height: 130, leftEye: null, rightEye: null, leftEyeOpen: 0.5, rightEyeOpen: null, leftEyeEar: 0.01 }).leftEyeOpen).toBe(0.5);
+    expect(fromNative({ x: 0, y: 0, width: 120, height: 130, leftEye: null, rightEye: null, leftEyeOpen: null, rightEyeOpen: null, leftEyeEar: NaN, rightEyeEar: -1 })).toMatchObject({ leftEyeOpen: null, rightEyeOpen: null });
   });
 });
 
