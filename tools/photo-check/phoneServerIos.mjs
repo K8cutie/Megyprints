@@ -21,7 +21,7 @@
      4. saves a screenshot of the finished screen as out/phone-lab-1.png.
    Only made-up pictures and the website's sample photos are ever added.
    ══════════════════════════════════════════════════════════════════════════ */
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -104,6 +104,12 @@ const sample = (phase) => { const m = memoryNow(); if (m?.rss != null) memory.pu
 try { simctl('terminate', udid, APP); } catch { /* not running */ }
 started = Date.now();
 simctl('openurl', udid, 'megyprints-dev://photo-check-lab');
+// iPhone asks "Open in …?" before following the app's own link: Maestro
+// (installed by the workflow) taps Open (mobile/maestro/ios-open-link.yaml).
+// Not waited for: this server must answer the screen meanwhile.
+execFile('maestro', ['--device', udid, 'test', path.join(HERE, '..', '..', 'mobile', 'maestro', 'ios-open-link.yaml')], (e) => {
+  if (e) console.warn(`Tapping Open did not run (${e.message}); the screen may still be waiting for it.`);
+});
 let running = true;
 const poll = (async () => { while (running) { sample('checking'); await new Promise((r) => setTimeout(r, 2000)); } })();
 const report = await done;

@@ -1,0 +1,9 @@
+# iPhone asks "Open in "Megy Prints 2.0 (dev)"?" before it follows one of the
+# app's own links (simctl openurl megyprints-dev://…). The checks that open a
+# test screen by its link (ios-golden.yml, tools/photo-check/phoneServerIos.mjs)
+# run this right after, to tap Open. Nothing happens when iPhone did not ask.
+appId: com.megyprints.app.dev
+---
+- tapOn:
+    text: "Open"
+    optional: true

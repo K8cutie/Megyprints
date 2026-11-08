@@ -114,9 +114,13 @@ jobs:
           node makePictures.mjs
           node runWeb.mjs
 
+      # Maestro taps "Open" when iPhone asks before following the test screen's link.
       - name: The iPhone's answers (the app's test screen on the simulator)
         working-directory: tools/photo-check
-        run: node phoneServerIos.mjs --udid "$UDID" --minutes 60
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          export PATH="$PATH:$HOME/.maestro/bin"
+          node phoneServerIos.mjs --udid "$UDID" --minutes 60
 
       - name: iPhone vs website
         working-directory: tools/photo-check
