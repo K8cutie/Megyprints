@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { albumDataFromDraft, draftAlbumForAccount } from './draftAlbum';
 import { saveDraftToAccount } from './draftAccountSave';
+import { serializeAlbum } from './albumCloud';
 import { supabase } from './supabase';
 import { DRAFT_STORAGE_KEY } from './localDraft';
 
@@ -32,6 +33,17 @@ describe('albumDataFromDraft — the draft as the album row', () => {
     expect(a.pages).toHaveLength(40);
     expect(a.photos).toEqual([{ id: 'a', name: 'a.jpg', check: { v: 1, sharp: 5, hash: 'ff' }, kept: true, leftOut: true }, { id: 'b', name: 'b.jpg' }]);
     expect(JSON.stringify(a)).not.toContain('blob:');
+  });
+
+  it("a photo is looked at on the device only: the album row carries the check without the look", () => {
+    const look = 'L'.repeat(1280);
+    draft({ uploadedPhotos: [{ id: 'a', name: 'a.jpg', check: { v: 1, sharp: 5, hash: 'ff', look } }] });
+    const a = albumDataFromDraft(JSON.parse(localStorage.getItem(DRAFT_STORAGE_KEY)!), '');
+    expect(a.photos).toEqual([{ id: 'a', name: 'a.jpg', check: { v: 1, sharp: 5, hash: 'ff' } }]);
+    // And the row the builder itself saves (albumCloud), handed a check that still has its look.
+    const row = serializeAlbum({ ...a, photos: [{ id: 'a', name: 'a.jpg', check: { v: 1, sharp: 5, hash: 'ff', faces: null, eyesClosed: false, look } }] });
+    expect(JSON.stringify(row)).toContain('"sharp":5');
+    expect(JSON.stringify(row)).not.toContain('LLLL');
   });
 });
 

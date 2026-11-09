@@ -41,6 +41,7 @@ export const GENERATING_COPY: Record<GeneratingPhase, string> = {
   measuring: 'Looking at your photos',
   checking: 'Checking photos for blur',
   faces: 'Finding the faces',
+  places: 'Sorting by place',
   grouping: 'Grouping the moments',
   laying_out: 'Laying out the pages',
   quotes: 'Choosing the words',

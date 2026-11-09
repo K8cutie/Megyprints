@@ -33,7 +33,7 @@ import { initFaceApi, detectFaceCenter } from '../pages/builder/faceDetection';
 import { readCaptureTime, readCaptureLocation } from '../pages/builder/exif';
 import { toAlbumPhoto } from './heicPhoto';
 import { looksHeic, HEIC_CONVERTING_PREVIEW } from './heicRules';
-import { checkPhoto, facesForAllPhotos } from './photoCheckRunner';
+import { checkPhoto, facesForAllPhotos, looksForPhotos, lookOfPhoto } from './photoCheckRunner';
 import { defaultMeasurer } from '../pages/builder/canvasMeasurer';
 import { ensureThemeQuotes } from './quotes';
 import { announceAlbumTheme } from './albumTheme';
@@ -93,7 +93,12 @@ export const browserBuilderPlatform: BuilderPlatform = {
     available: () => typeof createImageBitmap === 'function',
     facesForAllPhotos: () => facesForAllPhotos(),
     readable: (photo) => !!blobOf(photo),
-    check: (photo, width, height, opts) => checkPhoto(blobOf(photo)!, width, height, opts),
+    check: (photo, width, height, opts) => checkPhoto(blobOf(photo)!, width, height, { faces: opts?.faces, ...(opts?.lookNext ? { lookId: photo.id } : {}) }),
+    looksForPhotos: () => looksForPhotos(),
+    look: (photo) => {
+      const blob = blobOf(photo);
+      return blob ? lookOfPhoto(photo.id, blob) : Promise.resolve(null);
+    },
   },
   lifecycle: {
     onLeave: (fn) => {

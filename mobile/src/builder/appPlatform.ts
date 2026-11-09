@@ -76,6 +76,8 @@ export function createAppPlatform(deps: AppPlatformDeps): AppPlatform {
       facesForAllPhotos: () => false,
       readable: () => false,
       check: async () => { throw new Error('The photo check is not in the app yet'); },
+      looksForPhotos: () => false,
+      look: async () => null,
     },
     lifecycle: {
       // The photo index is written when the app leaves, with the album.

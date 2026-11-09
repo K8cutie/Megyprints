@@ -4463,6 +4463,157 @@ with a +08:00 zone tag.
 (The line about the making screen's count was taken out after the 2026-11-09 walk: the
 count needs the phone's photo check, which is not in the app yet.)
 
+## Look scenes: a photo with no date goes next to the photos it looks like (2026-11-09, `feat/look-scene-grouping`)
+
+Owner, 2026-11-09, on his 196 Hong Kong photos downloaded from Facebook: "test it on this
+folder. This doesnt have metadata and the perfect time to use the other algos." Facebook and
+Messenger strip a photo's capture time and place, so the 5-minute scenes above can say
+nothing about it: all 196 were one scene, in file order. Stacked on #280 (the scenes).
+**On the website now; not in the app yet** (below: its builder has no photo check, and the
+phone no look model), so the app's albums are grouped by capture time alone, as in 2.1.0.
+
+**The look (`src/lib/photoLook.ts`, shared).** What a photo shows, as MobileNet v2's 1,280
+numbers (the layer before its labels). Two photos of one scene point the same way: their
+likeness (the cosine) is high. Kept on the photo as text, `PhotoCheck.look`: one letter a
+number, 64 steps on a square-root curve, 1,280 letters; likeness from the text is within
+0.01 of the model's own. **It stays on the device:** `checkForAccount` takes it off the
+check wherever an album row is built (`albumCloud`, `draftAlbumRow`, the builder's own
+row); and the device's draft is saved without the looks rather than not at all when the
+store is full (`saveState`).
+
+**The look pass (website: `photoCheckRunner.ts`, `lib/mobileNet.ts`).** A third pass of the
+photo check, after the blur check and the faces (`nextCheckJob` stage `'look'`,
+`PhotoChecker.looksForPhotos` / `look`). The 224 px copy the model reads is made while the
+800 px copy is open for the blur check and kept as a small JPEG (about 10 KB), so the photo
+is not decoded again. The model is the one Megy's "what is this album about?" guess already
+used (TensorFlow.js, lazy, off the main bundle); it comes from Google's public TensorFlow.js
+model store once (14 MB, `MOBILENET_URL`) and is then kept in the browser (IndexedDB), so a
+later visit downloads nothing. No server of ours is called and there is no bill.
+**The address matters:** the live site's Content-Security-Policy (`vercel.json`,
+`connect-src`) lists the hosts a page may reach. The mobilenet package's own address starts
+at tfhub.dev and is sent on to kaggle.com, and neither is on the list: checked in Chromium
+under that policy, the download is blocked before it starts. So on the live site the album
+guess never got its model (it failed quietly), and the look pass would have done nothing.
+`storage.googleapis.com` is on the list and holds the same model (the scenes below came out
+the same from both); `mobileNet.spec.ts` fails if the address leaves the policy. **It only runs where it is quick:** not without a fast
+graphics chip (the face pass's rule), not while the model has taken over 20 s to arrive
+(`LOOK_MODEL_WAIT_MS`), and it stops when its first five photos took over 300 ms each on
+average (`LOOK_GATE_MS`, `createLookGate`). Where it doesn't run, photos have no look and
+nothing below applies.
+
+**What the album does with it (`generateAlbum.ts` `planScenes`, see LOOKS there).**
+- *Photos with no capture time* are sorted so look-alikes sit together (`orderByLook`: the
+  two most alike groups joined, again and again, by their average likeness), and each group
+  at least `LOOK_ALIKE` (0.65) alike is a scene. A group that looks like a dated photo
+  (0.65 again) joins that photo's scene, right after it, instead of waiting at the end of
+  the album.
+- *A change of place splits a scene the clock did not:* where the last three shots and the
+  next three have nothing alike across them (every pair under `LOOK_APART`, 0.55) and each
+  side is a run of look-alikes. **Not** "the next shot looks different": any two photos of
+  one trip are only about 0.5 alike (measured below), so that alone would cut every burst
+  into single photos and the pages would stop ending at the real pauses. One odd shot, a
+  burst where every shot shows something else, and two-and-two never split.
+- *The budget holds, against the album made without looks:* never more pages, else the
+  scenes merge (the most alike first), then the look order gets three fresh deals, then it
+  is dropped. At a chosen photos-per-page the count is promised from each moment's photos,
+  so no photo changes moment there: the undated ones are sorted by look where they are.
+- Three things the first runs taught, all in LOOKS: a page holds one shape, so in a moment
+  sorted by look a page takes its shape's next photos from anywhere in it (the 13 upright
+  Hong Kong photos sat together in file order; by look they were scattered among 183 squares
+  and each took a page); a photo that joined a dated scene does not count toward the
+  12-photo reach there; and once some have joined, the ones left close the last dated
+  moment instead of making a tiny moment of their own (two photos left behind took a page
+  each). Full pages (opening, video memories) go back by the look order too.
+
+**The making screen.** A new step with its own real count, after the faces: "Sorting by
+place. 37 of 200" (`GeneratingPhase` `'places'`, `GENERATING_COPY`, mirrored in
+`albumFlow.ts`, `albumWords.test.ts`). Generate waits for the look pass as it waits for the
+blur check and the faces, inside the same 2-minute cap, and never for a pass that stopped.
+
+**Measured on the Hong Kong folder** (196 photos: 0 with a capture time, 183 square; the
+website's own code in headless Chromium 1228 on this PC's graphics chip, AMD Radeon through
+ANGLE, the page under the live site's Content-Security-Policy;
+`node tools/look-scenes/lookAlbum.mjs <folder>` writes the numbers and a picture page of
+the album's pages next to the photos):
+- The look pass read 196 of 196. About 20 ms a photo for the look itself (4 to 5 s for the
+  folder), every one from its kept 224 px copy; the first five took 21 to 127 ms. The model,
+  under the live site's policy: 5 s the first time (5 requests, all to
+  storage.googleapis.com), 0.4 s on the next visit (no request at all).
+- Any two photos of the trip: likeness median 0.51, nine in ten under 0.61. A photo and its
+  closest other: median 0.81, lowest 0.54; 174 of the 196 have another at least 0.65 alike.
+- **Scenes: 1 → 77.** 42 scenes of two or more hold 161 of the 196 photos (18, 11, 9, 8,
+  6, 6, 6, 6, 5, 5, 5, 4, 4, 4, eight of 3, twenty of 2); 35 photos look like no other.
+  By eye they are scenes: the Ocean Park gate, the castle selfies, the night castle, the
+  Ocean Park sign, the bronze statues. `planScenes` takes 35 ms.
+- **The album** (12 seeded albums a row; without looks → with):
+
+  | Album | Pages | Photos right after a look-alike | Look-alike on the same page (of 174) | ...or the next page | Pages of 2+ holding one scene |
+  |---|---|---|---|---|---|
+  | 8x8 Surprise | 72.4 → 71.3 | 10 → 112 | 5 → 82 | 15 → 135 | 1 → 20 of 51 |
+  | 8x8, 4 per page | 58 → 58 | 12 → 117 | 8 → 104 | 20 → 147 | 0 → 17 of 48 |
+  | 6x6 Surprise | 75.3 → 73.1 | 10 → 116 | 4 → 86 | 15 → 140 | 1 → 22 of 52 |
+  | 6x8 Surprise | 73.3 → 73.3 | 9 → 109 | 6 → 81 | 11 → 131 | 1 → 25 of 61 |
+  | 6x8, 4 per page | 57 → 57 | 10 → 117 | 4 → 110 | 14 → 147 | 0 → 15 of 47 |
+  | 8x6 Surprise | 73.4 → 73.3 | 10 → 118 | 6 → 96 | 14 → 146 | 1 → 31 of 62 |
+  | 11.5x8 Surprise | 67.8 → 66.6 | 11 → 121 | 6 → 94 | 15 → 150 | 2 → 27 of 55 |
+  | 8.5x11 Surprise | 113.4 → 112.6 | 11 → 116 | 4 → 54 | 8 → 136 | 2 → 45 of 78 |
+  | 6x4 Surprise | 99 → 99 | 12 → 121 | 2 → 76 | 11 → 148 | 4 → 63 of 97 |
+
+  Over all 7 sizes, Surprise and "4 per page", 168 albums: never more pages; the look order
+  was dropped once (6x8 Surprise, 1 of 12). A whole album is made in 20 to 60 ms.
+- **A customer's walk on the website** (name, occasion, 8x8, the 196 photos, a cover, Make
+  my album tapped a second after the upload, so every pass was still to do; walked three
+  times, the last on the built site under the live site's policy): "Checking photos for
+  blur" to 3 to 7 s, "Finding the faces. 0 … 194 of 196" to 31 to 42 s, "Sorting by
+  place. 0 … 195 of 196" to 49 to 60 s (about 100 different counts shown), then "Laying
+  out the pages", "Grouping the moments", "Almost done" in 0.1 s. 70 to 72 pages, 107
+  photos right after one of their scene. On the built site the page reached only the fonts,
+  jsDelivr (the face models) and storage.googleapis.com (5 requests: the model); nothing
+  was blocked. The device's draft was 345 KB with the album and the 196 looks (the looks
+  are 251 KB of it).
+- **Slower in the builder than alone:** the look pass took 17 to 18 s there, not 5, on the
+  dev server and the built site alike. Each look is stored on its photo, and the whole
+  builder is redrawn for every photo (as it is for every blur and face answer). Drawing
+  once for several looks is the next speed-up; it is not a one-line change, because the
+  builder's photo list is copied from the drawn state on every draw, so looks waiting to
+  be drawn need a place of their own.
+
+**Specs.** `photoLook.spec.ts` (the text, the order: equal to the textbook way on random
+looks, the gate), `lookScenes.spec.ts` next to `scenes.spec.ts` with made-up looks placed
+where the real ones were measured (`test/madeUpLooks.ts`): an undated photo lands next to
+its look-alike, a forwarded photo joins its dated scene, a place change splits a scene, the
+odd shot and the mixed burst do not, never more pages at every size, a chosen count still
+the estimate. `photoCheck.spec.ts` (the third pass, `checkForAccount`),
+`builderPlatform.spec.ts` (the real builder: the pass through the device's pieces, the draft
+keeps the look and the account never gets it, Make my album waits and says `places` with a
+count, a stopped pass never holds it back, a full store), `draftAlbum.spec.ts`.
+
+**The app (2.0): no look pass yet, and two things stand before it.** First, the app's
+builder has no photo check at all (`appPlatform.ts` `photoCheck.available: () => false`,
+see the emulator walk above: the phone's check is only on the dev lab screen), so there
+is no pass for a look to ride in. Second, the phone has no look model. What is done and
+tested here is the JavaScript half of the second (`phonePhotoCheck.ts`: a device that
+hands back the 1,280 numbers, `PhoneCheckDevice.looks`, gets them kept as the same
+`PhotoCheck.look`, behind the same speed gate; `nativeDevice.looks` is `null`). The
+native half is its own piece of work, not done here because it needs a build and a
+phone, and the build folder (`C:\megy2`) was in use for 2.1.0 with the disk at 98 %:
+0. Wire the phone's photo check into the app's builder (`createPhoneChecks` in
+   `appPlatform.ts`); the making screen's counted steps then show in the app too.
+1. MobileNet v2 1.0 224 as a TFLite file in `modules/photo-pixels` (float, about 14 MB, the
+   same numbers as the website's; the 8-bit one is 3.4 MB but its numbers differ, so
+   `LOOK_ALIKE` / `LOOK_APART` must be measured again on it), and the TFLite runtime.
+2. Kotlin: the whole frame squeezed to 224 × 224 (as `keepSmallCopy` does), the model on a
+   background thread, the 1,280 floats back; `nativeDevice.looks = { init, read }`.
+3. Run `tools/look-scenes` numbers again through the phone (the Hong Kong folder) and
+   compare the scenes with the table above before turning it on.
+4. Check what the album draft weighs on the phone with looks in it (1.3 KB a photo).
+
+**Not done, said plainly.** The thresholds come from one folder (the owner's), and the
+place-change split has only been tried on made-up looks: no folder here has both capture
+times and a known change of place. It is written to fire rarely (three look-alikes each
+side); the first real camera-roll album with looks is the time to look at where it fired.
+
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

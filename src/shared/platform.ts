@@ -179,8 +179,18 @@ export interface PhotoChecker {
   facesForAllPhotos(): boolean;
   /** Whether this stored photo's picture can be read for a check. */
   readable(photo: StoredPhoto): boolean;
-  /** Check one stored photo. `width`/`height` are its measured size. */
-  check(photo: StoredPhoto, width: number, height: number, opts?: { faces?: boolean }): Promise<PhotoCheck>;
+  /** Check one stored photo. `width`/`height` are its measured size.
+   *  `lookNext`: its look is still to be read, so the checker may keep what
+   *  the look pass needs from this decode. */
+  check(photo: StoredPhoto, width: number, height: number, opts?: { faces?: boolean; lookNext?: boolean }): Promise<PhotoCheck>;
+  /** The look pass runs on this device now (what each photo shows, so
+   *  photos with no capture time are put with the photos they belong with:
+   *  lib/photoLook). False where it would be slow, or its model is not
+   *  here: the album is then grouped by capture time alone. */
+  looksForPhotos(): boolean;
+  /** One stored photo's look (PhotoCheck.look), or null when it can't be
+   *  read. Never rejects. */
+  look(photo: StoredPhoto, width: number, height: number): Promise<string | null>;
 }
 
 /** The app going to the background and coming back. */

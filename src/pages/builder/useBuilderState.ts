@@ -57,7 +57,7 @@ import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fontCatalog';
 import { readAlbumThemeFrom, writeAlbumThemeTo } from '../../lib/albumThemeRules';
-import { nextCheckJob, checkIsReady, checkProgress, faceCheckProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
+import { nextCheckJob, checkIsReady, checkProgress, faceCheckProgress, lookProgress, checkForAccount, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -569,7 +569,15 @@ function saveState(store: KeyValueStore, state: SerializedState) {
   try {
     store.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
-    // Storage full — silently fail
+    // Storage full. The photos' looks (PhotoCheck.look, 1,280 letters each)
+    // are the one big thing here that the device can make again: the draft
+    // is saved without them rather than not at all.
+    try {
+      const photos = (state.uploadedPhotos ?? []).map((p) => (p.check?.look ? { ...p, check: checkForAccount(p.check) } : p));
+      store.setItem(STORAGE_KEY, JSON.stringify({ ...state, uploadedPhotos: photos }));
+    } catch {
+      // Still full — silently fail
+    }
   }
 }
 
@@ -736,15 +744,15 @@ function getInitialState({ deviceStore, sessionStore }: Pick<BuilderPlatform, 'd
 /** The steps of making an album, as the "Making your album" screen names
  *  them (GENERATING_COPY). Owner (2026-11-09): a wait is fine when the screen
  *  says what the phone is doing, with a real count, so the work on the
- *  photos (the blur check, the face pass) is waited for and counted here
- *  instead of being left half done. */
-export type GeneratingPhase = 'measuring' | 'checking' | 'faces' | 'grouping' | 'laying_out' | 'quotes' | 'finishing';
+ *  photos (the blur check, the face pass, the look pass) is waited for and
+ *  counted here instead of being left half done. */
+export type GeneratingPhase = 'measuring' | 'checking' | 'faces' | 'places' | 'grouping' | 'laying_out' | 'quotes' | 'finishing';
 /** How far the step on screen is, when it counts photos. */
 export interface GeneratingCount { done: number; total: number }
-/** The longest Generate waits for the photo check (the blur check, then the
- *  face pass) before laying out the album from what was checked: a slow
- *  phone is never stuck on it. 200 photos take about a minute on a phone
- *  that finds faces fast. */
+/** The longest Generate waits for the photo check (the blur check, the face
+ *  pass, then the look pass) before laying out the album from what was
+ *  checked: a slow phone is never stuck on it. 200 photos take about a
+ *  minute on a phone that finds faces fast. */
 export const CHECK_WAIT_MS = 120_000;
 
 /** What generateAlbum did, and (for a new size) the memories' plan. */
@@ -1412,7 +1420,8 @@ export function useBuilderState(): BuilderActions {
         ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
         ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
         // No cloudUrl, no storagePath — all local-only now.
-        ...(p.check ? { check: p.check } : {}),
+        // The check without the photo's look, which stays on this device.
+        ...(p.check ? { check: checkForAccount(p.check) } : {}),
         ...(p.kept ? { kept: true } : {}),
         ...(p.leftOut ? { leftOut: true } : {}),
       })),
@@ -2075,30 +2084,47 @@ export function useBuilderState(): BuilderActions {
   /* ── Megy's free photo check (lib/photoCheck) ──
      One photo at a time, in the background, on the phone: blur + fingerprint
      for every photo first (~20 ms each), then the face pass (closed eyes) —
-     repeats first. Reads the bytes from the photo store, so it also picks up
-     photos from an older draft. Each result is stored on the photo, so a photo
-     is checked once. `checkTriedRef` keeps a failed photo from looping. */
+     repeats first — then the look pass (what each photo shows, so photos
+     with no capture time are put with the photos they belong with), where
+     the device does it. Reads the bytes from the photo store, so it also
+     picks up photos from an older draft. Each result is stored on the photo,
+     so a photo is checked once. `checkTriedRef` keeps a failed photo from
+     looping. */
   const checkTriedRef = useRef<Set<string>>(new Set());
   const checkRunningRef = useRef(false);
   useEffect(() => {
     // A browser that can't decode a small copy (no createImageBitmap) skips the check.
     if (!checker.available()) return;
-    if (checkRunningRef.current || !nextCheckJob(uploadedPhotos, checkTriedRef.current, checker.facesForAllPhotos())) return;
+    if (checkRunningRef.current || !nextCheckJob(uploadedPhotos, checkTriedRef.current, checker.facesForAllPhotos(), checker.looksForPhotos())) return;
     checkRunningRef.current = true;
     void (async () => {
       try {
         for (;;) {
-          const job = nextCheckJob(uploadedPhotosRef.current, checkTriedRef.current, checker.facesForAllPhotos());
+          const job = nextCheckJob(uploadedPhotosRef.current, checkTriedRef.current, checker.facesForAllPhotos(), checker.looksForPhotos());
           if (!job) break;
           checkTriedRef.current.add(`${job.stage}:${job.id}`);
           const photo = uploadedPhotosRef.current.find((p) => p.id === job.id);
           const stored = photo ? await idbPhotos.get(job.id) : null;
           if (!photo || !stored || !checker.readable(stored)) continue;
           try {
-            const res = await checker.check(stored, photo.width, photo.height, { faces: job.stage === 'faces' });
-            const merge = (p: UploadedPhoto): UploadedPhoto => job.stage === 'basic'
-              ? { ...p, check: { ...res, faces: null, facesTried: false } }
-              : { ...p, check: p.check ? { ...p.check, faces: res.faces, eyesClosed: res.eyesClosed, facesTried: true } : p.check };
+            let merge: (p: UploadedPhoto) => UploadedPhoto;
+            if (job.stage === 'look') {
+              // The look pass: a photo it can't read just has no look. One
+              // that got none because the pass itself stopped meanwhile (its
+              // model still on the way) is asked again if the pass comes back.
+              const look = await checker.look(stored, photo.width, photo.height);
+              if (!look) {
+                if (!checker.looksForPhotos()) checkTriedRef.current.delete(`look:${job.id}`);
+                continue;
+              }
+              merge = (p) => (p.check ? { ...p, check: { ...p.check, look } } : p);
+            } else {
+              const res = await checker.check(stored, photo.width, photo.height,
+                { faces: job.stage === 'faces', lookNext: !photo.check?.look && checker.looksForPhotos() });
+              merge = (p) => job.stage === 'basic'
+                ? { ...p, check: { ...res, faces: null, facesTried: false } }
+                : { ...p, check: p.check ? { ...p.check, faces: res.faces, eyesClosed: res.eyesClosed, facesTried: true } : p.check };
+            }
             uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === job.id ? merge(p) : p));
             setUploadedPhotos((prev) => prev.map((p) => (p.id === job.id ? merge(p) : p)));
           } catch { /* an unreadable photo is just not checked */ }
@@ -2273,24 +2299,28 @@ export function useBuilderState(): BuilderActions {
    *  2026-11-09): the blur check and the face pass run in the background
    *  while photos are picked, and Generate used to lay out whatever was
    *  done. Now it waits for them with the count on screen ("Checking photos
-   *  for blur 37 of 200", then "Finding the faces"), so the full pages pick
-   *  sharp, eyes-open shots and the repeats are known — never past
-   *  CHECK_WAIT_MS, and never for a check that isn't running: a slow phone
-   *  gets its album from what was checked. */
+   *  for blur 37 of 200", then "Finding the faces", then "Sorting by
+   *  place"), so the full pages pick sharp, eyes-open shots, the repeats are
+   *  known and photos with no capture time have their look — never past
+   *  CHECK_WAIT_MS (one cap for all three), and never for a check that
+   *  isn't running: a slow phone gets its album from what was checked. */
   const whenPhotosChecked = useCallback(async () => {
     if (!checker.available()) return;
     const deadline = Date.now() + CHECK_WAIT_MS;
     let idle = 0;
     for (;;) {
       const photos = uploadedPhotosRef.current;
-      const job = nextCheckJob(photos, checkTriedRef.current, checker.facesForAllPhotos());
+      const job = nextCheckJob(photos, checkTriedRef.current, checker.facesForAllPhotos(), checker.looksForPhotos());
       if (!job) break;
       if (job.stage === 'basic') {
         setGenerating('checking');
         setGeneratingCount(checkProgress(photos));
-      } else {
+      } else if (job.stage === 'faces') {
         setGenerating('faces');
         setGeneratingCount(faceCheckProgress(photos, checker.facesForAllPhotos()));
+      } else {
+        setGenerating('places');
+        setGeneratingCount(lookProgress(photos));
       }
       if (Date.now() > deadline) break;
       // The check loop starts from an effect; give it a moment, then stop
@@ -2403,6 +2433,9 @@ export function useBuilderState(): BuilderActions {
     }
     // SCENES (owner, 2026-11-09): photos taken within 5 minutes are one
     // scene, and a page never holds two scenes (generateAlbum SCENE_GAP_MS).
+    // With the photos' looks (the look pass above), photos with no capture
+    // time are put with the photos they look like, and a change of place
+    // splits a scene the clock didn't.
     setGenerating('grouping');
     await paintFrame();
     const scenes = planScenes(pool);

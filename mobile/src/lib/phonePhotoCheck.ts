@@ -32,6 +32,17 @@
    A failed face pass never fails the check: the photo just has no eye test
    (faces stays null), as on the website.
 
+   THE LOOK PASS (what each photo shows, so photos with no capture time are
+   put with the photos they belong with: @web/lib/photoLook) is the
+   website's only, for now: the app has no picture model for it yet
+   (nativeDevice.looks is null), so looksForPhotos is false, photos get no
+   look, and the app's albums are grouped by capture time alone. Everything
+   on this side is ready for one: a device that hands back MobileNet v2's
+   1,280 numbers for a photo (PhoneCheckDevice.looks) gets them kept as the
+   shared PhotoCheck.look, behind the website's own speed gate. The plan
+   for the native half (docs/mobile-port-plan.md, "Look scenes"): the model
+   as a TFLite file in modules/photo-pixels, run on a native thread.
+
    Work is not repeated: the builder checks each photo twice (blur first,
    faces later) and centres faces when it makes the album, so the blur
    answer and the faces found are kept per photo (a few numbers each) for
@@ -43,6 +54,7 @@ import type { FaceFinder, PhotoChecker, StoredPhoto } from '@web/shared/platform
 import { checkCopySize, checkFrom, dHash, faceVerdict, grayscale, tileSharpness, type PhotoCheck } from '@web/lib/photoCheck';
 import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import { createLimiter } from '@web/lib/limit';
+import { createLookGate, encodeLook } from '@web/lib/photoLook';
 import { photoPixelsAvailable, pictureSize, smallCopyPixels } from '../../modules/photo-pixels';
 import { faceCopyScale, faceModelAvailable, findFacesIn, initFaceModel } from './faceModel';
 import { toCheckFace, type PhoneFace } from './phoneFaces';
@@ -58,6 +70,10 @@ export interface PhoneCheckDevice {
   /** ML Kit on a copy `scale` times the photo's w × h small copy (faces
    *  given in the small copy's pixels), or null where it is missing. */
   faces: { init(): Promise<boolean>; find(uri: string, w: number, h: number, scale: number): Promise<PhoneFace[]> } | null;
+  /** The look model: MobileNet v2's 1,280 numbers for the photo (its
+   *  whole frame squeezed to the model's 224 px square), or null or absent
+   *  where the app has none. */
+  looks?: { init(): Promise<boolean>; read(uri: string): Promise<ArrayLike<number>> } | null;
 }
 
 export const nativeDevice: PhoneCheckDevice = {
@@ -65,6 +81,8 @@ export const nativeDevice: PhoneCheckDevice = {
   size: pictureSize,
   pixels: smallCopyPixels,
   faces: faceModelAvailable ? { init: initFaceModel, find: findFacesIn } : null,
+  // No look model in the app yet (see the top).
+  looks: null,
 };
 
 /** Photos asked of the phone at once (the native module decodes one whole photo at a time). */
@@ -98,6 +116,10 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
   const limit = createLimiter(PHONE_CHECK_AT_ONCE);
   const basics = keepLast<PhotoCheck>(KEEP);
   const found = keepLast<FoundFaces>(KEEP);
+  /** The look pass stops for this run of the app when it is slow here (the
+   *  website's gate) or its model can't start. */
+  const lookGate = createLookGate();
+  let lookFailed = false;
 
   /** ML Kit for the photo (`photoWidth` wide as shown) with a w × h small
    *  copy: on a copy faceCopyScale times that (kept per photo and size). */
@@ -151,6 +173,21 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
         }
       }
       return result;
+    },
+    looksForPhotos: () => !!device.looks && !lookFailed && !lookGate.off,
+    // A photo whose look can't be read just has none (never a rejection).
+    async look(photo) {
+      const model = device.looks;
+      if (!model || lookFailed || lookGate.off || !checkable(photo.url)) return null;
+      try {
+        if (!(await model.init())) { lookFailed = true; return null; }
+        const started = Date.now();
+        const values = await limit(() => model.read(photo.url));
+        lookGate.took(Date.now() - started);
+        return encodeLook(values);
+      } catch {
+        return null;
+      }
     },
   };
 

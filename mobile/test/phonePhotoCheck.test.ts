@@ -5,7 +5,8 @@
 import { basicCheck, checkCopySize, checkIsReady, EYE_CLOSED_EAR, faceVerdict, findRepeats, MIN_FACE_SHARE } from '@web/lib/photoCheck';
 import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import type { StoredPhoto } from '@web/shared/platform';
-import { createPhoneChecks, PHONE_CHECK_AT_ONCE, type PhoneCheckDevice } from '../src/lib/phonePhotoCheck';
+import { decodeLook, likeness, LOOK_DIMS, LOOK_GATE_MS, LOOK_GATE_PHOTOS } from '@web/lib/photoLook';
+import { createPhoneChecks, nativeDevice, PHONE_CHECK_AT_ONCE, type PhoneCheckDevice } from '../src/lib/phonePhotoCheck';
 import { earFromOpenChance, EYE_SHUT_BELOW, eyesJudged, fromNative, MIN_EYE_FACE_PX, phoneEyesShut, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
 import { FACE_COPY_SCALE, faceCopyScale } from '../src/lib/faceModel';
 
@@ -312,6 +313,76 @@ describe('the photo check on the phone', () => {
     expect(photoCheck.readable(photo(4, { url: 'https://example.com/a.jpg' }))).toBe(false);
     expect(photoCheck.available()).toBe(true);
     expect(createPhoneChecks(fakePhone({ canDecode: false }).device).photoCheck.available()).toBe(false);
+  });
+});
+
+/* ── The look pass (what a photo shows: @web/lib/photoLook) ───────────── */
+
+/** A made-up look model: 1,280 numbers that depend on the photo's address
+ *  alone, so two reads of a photo agree and two photos differ. */
+function numbersFor(uri: string): Float32Array {
+  const seed = [...uri].reduce((s, c) => s + c.charCodeAt(0), 0);
+  return Float32Array.from({ length: LOOK_DIMS }, (_, i) => ((i * 31 + seed * 17) % 97) / 97 + ((i + seed) % 5 === 0 ? 2 : 0));
+}
+
+describe('the look pass on the phone', () => {
+  it('the app has no look model yet: no look pass, no look, and the album is grouped by capture time alone', async () => {
+    expect(nativeDevice.looks).toBeNull();
+    const { photoCheck } = createPhoneChecks(fakePhone().device);
+    expect(photoCheck.looksForPhotos()).toBe(false);
+    expect(await photoCheck.look(photo(1), 4032, 3024)).toBeNull();
+  });
+
+  it('a phone with a look model: its 1,280 numbers are kept as the shared look text', async () => {
+    const read: string[] = [];
+    const { device } = fakePhone({ looks: { init: async () => true, read: async (uri) => { read.push(uri); return numbersFor(uri); } } });
+    const { photoCheck } = createPhoneChecks(device);
+    expect(photoCheck.looksForPhotos()).toBe(true);
+    const a = await photoCheck.look(photo(1), 4032, 3024);
+    const b = await photoCheck.look(photo(2), 4032, 3024);
+    expect(read).toEqual([photo(1).url, photo(2).url]);
+    expect(a).toHaveLength(LOOK_DIMS);
+    // The same photo again reads alike; another photo reads less alike.
+    const again = await photoCheck.look(photo(1), 4032, 3024);
+    expect(likeness(decodeLook(a)!, decodeLook(again)!)).toBeCloseTo(1, 5);
+    expect(likeness(decodeLook(a)!, decodeLook(b)!)).toBeLessThan(0.999);
+    // Only the phone's own photos are read.
+    expect(await photoCheck.look(photo(3, { url: 'https://example.com/a.jpg' }), 4032, 3024)).toBeNull();
+  });
+
+  it('a look that can not be read is no look, never an error; a model that will not start turns the pass off', async () => {
+    const failing = createPhoneChecks(fakePhone({ looks: { init: async () => true, read: async () => { throw new Error('out of memory'); } } }).device).photoCheck;
+    expect(await failing.look(photo(1), 4032, 3024)).toBeNull();
+    expect(failing.looksForPhotos()).toBe(true); // the next photo may still be read
+    const wrong = createPhoneChecks(fakePhone({ looks: { init: async () => true, read: async () => new Float32Array(7) } }).device).photoCheck;
+    expect(await wrong.look(photo(1), 4032, 3024)).toBeNull(); // not 1,280 numbers
+    const noModel = createPhoneChecks(fakePhone({ looks: { init: async () => false, read: async () => numbersFor('x') } }).device).photoCheck;
+    expect(noModel.looksForPhotos()).toBe(true);
+    expect(await noModel.look(photo(1), 4032, 3024)).toBeNull();
+    expect(noModel.looksForPhotos()).toBe(false);
+  });
+
+  it('a slow phone: the pass stops after its first photos (the website\'s gate), so making the album never waits on it', async () => {
+    const now = jest.spyOn(Date, 'now');
+    let clock = 1_000_000;
+    now.mockImplementation(() => clock);
+    try {
+      const slow = { init: async () => true, read: async (uri: string) => { clock += LOOK_GATE_MS + 50; return numbersFor(uri); } };
+      const { photoCheck } = createPhoneChecks(fakePhone({ looks: slow }).device);
+      for (let n = 1; n <= LOOK_GATE_PHOTOS; n++) {
+        expect(photoCheck.looksForPhotos()).toBe(true);
+        expect(await photoCheck.look(photo(n), 4032, 3024)).toHaveLength(LOOK_DIMS); // the first few are still kept
+      }
+      expect(photoCheck.looksForPhotos()).toBe(false);
+      expect(await photoCheck.look(photo(99), 4032, 3024)).toBeNull();
+      // A quick phone keeps going.
+      const quick = { init: async () => true, read: async (uri: string) => { clock += 40; return numbersFor(uri); } };
+      const fast = createPhoneChecks(fakePhone({ looks: quick }).device).photoCheck;
+      for (let n = 1; n <= LOOK_GATE_PHOTOS + 3; n++) expect(await fast.look(photo(n), 4032, 3024)).toHaveLength(LOOK_DIMS);
+      expect(fast.looksForPhotos()).toBe(true);
+    } finally {
+      now.mockRestore();
+    }
   });
 });
 

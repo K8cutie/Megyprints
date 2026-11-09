@@ -66,6 +66,7 @@ import { BuilderPlatformContext, type BuilderPlatform, type KeyValueStore, type 
 import { heicConverters } from '../../lib/heicPhoto';
 import { DRAFT_STORAGE_KEY } from '../../lib/localDraft';
 import { ALBUM_THEME_KEY } from '../../lib/albumTheme';
+import { encodeLook, LOOK_DIMS } from '../../lib/photoLook';
 import type { AlbumPage, UploadedPhoto } from './types';
 
 function memoryStore(): KeyValueStore & { data: Map<string, string> } {
@@ -78,6 +79,9 @@ function memoryStore(): KeyValueStore & { data: Map<string, string> } {
   };
 }
 
+/** The look this made-up device reads for every photo (lib/photoLook's text). */
+const DEVICE_LOOK = encodeLook(Float32Array.from({ length: LOOK_DIMS }, (_, i) => (i % 7) / 7))!;
+
 /** When every photo on the made-up device was taken (2026-09-12, noon UTC). */
 const TAKEN_AT = Date.UTC(2026, 8, 12, 12);
 
@@ -86,7 +90,11 @@ const TAKEN_AT = Date.UTC(2026, 8, 12, 12);
  *  what a pick showed (like a picker's URI, it may be gone next time). */
 function makeDevice() {
   const kept = new Map<string, StoredPhoto>();
-  const calls = { faces: [] as string[], sizes: [] as string[], checks: [] as string[], converted: [] as string[], released: [] as string[], dated: [] as string[], init: 0, fonts: [] as string[], occasions: [] as string[] };
+  const calls = { faces: [] as string[], sizes: [] as string[], checks: [] as string[], looks: [] as string[], lookNext: [] as boolean[], converted: [] as string[], released: [] as string[], dated: [] as string[], init: 0, fonts: [] as string[], occasions: [] as string[] };
+  /** This device reads looks only when a test turns its look pass on. */
+  let looksOn = false;
+  /** A test may hold the look pass (a slow phone) and let it go later. */
+  let lookHeld: Promise<void> | null = null;
   /** This device measures words its own way: every letter three times as
    *  wide as the font is tall (so a long caption must shrink to fit), and it
    *  says which fonts it was asked for. */
@@ -155,12 +163,15 @@ function makeDevice() {
       available: () => true,
       facesForAllPhotos: () => false,
       readable: (photo) => photo.url.startsWith('mem://kept/'),
-      check: async (photo) => {
+      check: async (photo, _w, _h, opts) => {
         // Two different fingerprints, so the two test photos are not repeats.
         const hash = (calls.checks.length % 2 ? 'f' : '0').repeat(16);
         calls.checks.push(photo.id);
+        calls.lookNext.push(!!opts?.lookNext);
         return { v: 1, sharp: 50, hash, faces: null, eyesClosed: false };
       },
+      looksForPhotos: () => looksOn,
+      look: async (photo) => { calls.looks.push(photo.id); await lookHeld; return DEVICE_LOOK; },
     },
     lifecycle: {
       onLeave: (fn) => { leave = fn; return () => { leave = null; }; },
@@ -181,6 +192,10 @@ function makeDevice() {
     platform, kept, calls, convertNow: () => convertNow(), leave: () => leave?.(), listening: () => ({ leave: !!leave, back: !!back }),
     store: platform.deviceStore as ReturnType<typeof memoryStore>, session: platform.sessionStore as ReturnType<typeof memoryStore>,
     cantMeasure: () => { measures = false; },
+    readLooks: () => { looksOn = true; },
+    /** Holds every look until the returned function is called. */
+    holdLooks: () => { let go!: () => void; lookHeld = new Promise<void>((r) => { go = r; }); return () => { lookHeld = null; go(); }; },
+    stopLooks: () => { looksOn = false; },
     comeBack: () => back?.(),
   };
 }
@@ -305,6 +320,100 @@ describe('the album builder on a device of its own (no browser pieces)', () => {
     expect(native).not.toHaveBeenCalled();
     expect(libheif).not.toHaveBeenCalled();
     expect(touched).toEqual([]);
+  });
+
+  it('the look pass: the device reads each photo\'s look, this device\'s draft keeps it, the account never gets it', async () => {
+    device.readLooks();
+    cloud.signedIn = 'user-1';
+    await open();
+    await act(async () => { builder.addPhotos([file('beach.jpg'), file('party.jpg')]); });
+    await settle();
+    await settle();
+    const [beach, party] = builder.uploadedPhotos;
+    // The blur check told the device a look pass follows; then each photo's look was read, once.
+    expect(device.calls.lookNext).toEqual([true, true]);
+    expect(device.calls.looks.sort()).toEqual([beach.id, party.id].sort());
+    expect(builder.uploadedPhotos.map((p) => p.check?.look)).toEqual([DEVICE_LOOK, DEVICE_LOOK]);
+    expect(builder.uploadedPhotos.every((p) => p.check?.sharp === 50)).toBe(true);
+    // On this device: the draft keeps the looks, so they are not read again next time.
+    await act(async () => { device.leave(); });
+    const kept = JSON.parse(device.store.getItem(DRAFT_STORAGE_KEY)!) as { uploadedPhotos: UploadedPhoto[] };
+    expect(kept.uploadedPhotos.map((p) => p.check?.look)).toEqual([DEVICE_LOOK, DEVICE_LOOK]);
+    // To the account (a new album puts this one away and saves it): the check, without the look.
+    await act(async () => { builder.reset(); });
+    await settle();
+    const sent = cloud.saved.at(-1)!.data as { photos?: { check?: Record<string, unknown> }[] };
+    expect(sent.photos).toHaveLength(2);
+    expect(sent.photos!.every((p) => p.check?.sharp === 50 && !('look' in p.check!))).toBe(true);
+    expect(JSON.stringify(cloud.saved)).not.toContain(DEVICE_LOOK);
+    expect(touched).toEqual([]);
+  });
+
+  it('Make my album waits for the look pass, and says "places" with a real count while it does', async () => {
+    device.readLooks();
+    const letGo = device.holdLooks();
+    await open();
+    await act(async () => { builder.addPhotos([file('beach.jpg'), file('party.jpg'), file('cake.jpg')]); });
+    await settle();
+    // Blur checks done; the first look is being read (held).
+    expect(builder.uploadedPhotos.every((p) => p.check?.sharp === 50)).toBe(true);
+    expect(device.calls.looks).toHaveLength(1);
+    let made!: Awaited<ReturnType<BuilderActions['generateAlbum']>>;
+    let done = false;
+    let making!: Promise<void>;
+    await act(async () => { making = builder.generateAlbum().then((r) => { made = r; done = true; }); });
+    await settle();
+    // Still making: the screen names the step and counts the photos read.
+    expect(done).toBe(false);
+    expect(builder.generating).toBe('places');
+    expect(builder.generatingCount).toEqual({ done: 0, total: 3 });
+    await act(async () => { letGo(); await making; });
+    await settle();
+    expect(made.made).toBe(true);
+    expect(builder.generating).toBeNull();
+    expect(builder.uploadedPhotos.map((p) => p.check?.look)).toEqual([DEVICE_LOOK, DEVICE_LOOK, DEVICE_LOOK]);
+    expect(builder.albumPages.length).toBeGreaterThan(0);
+  });
+
+  it('a look pass that stops (too slow on this device) never holds Make my album back', async () => {
+    device.readLooks();
+    const letGo = device.holdLooks();
+    await open();
+    await act(async () => { builder.addPhotos([file('beach.jpg'), file('party.jpg'), file('cake.jpg')]); });
+    await settle();
+    // The device gives the look pass up while the first look is still being read.
+    device.stopLooks();
+    let made!: Awaited<ReturnType<BuilderActions['generateAlbum']>>;
+    await act(async () => { made = await builder.generateAlbum(); });
+    expect(made.made).toBe(true);
+    expect(builder.albumPages.length).toBeGreaterThan(0);
+    letGo();
+    await settle();
+  });
+
+  it('a device that reads no looks is never asked for one', async () => {
+    await open();
+    await act(async () => { builder.addPhotos([file('beach.jpg')]); });
+    await settle();
+    expect(device.calls.lookNext).toEqual([false]);
+    expect(device.calls.looks).toEqual([]);
+    expect(builder.uploadedPhotos[0].check?.look).toBeUndefined();
+  });
+
+  it('a full device store: the draft is saved without the looks rather than not at all', async () => {
+    device.readLooks();
+    await open();
+    await act(async () => { builder.addPhotos([file('beach.jpg'), file('party.jpg')]); });
+    await settle();
+    await settle();
+    expect(builder.uploadedPhotos.every((p) => p.check?.look === DEVICE_LOOK)).toBe(true);
+    // The store now refuses anything that holds a look (as a full one would).
+    const write = device.store.setItem;
+    device.store.setItem = (k, v) => { if (v.includes(DEVICE_LOOK)) throw new Error('QuotaExceededError'); write(k, v); };
+    await act(async () => { device.leave(); });
+    const kept = JSON.parse(device.store.getItem(DRAFT_STORAGE_KEY)!) as { uploadedPhotos: UploadedPhoto[] };
+    expect(kept.uploadedPhotos).toHaveLength(2);
+    expect(kept.uploadedPhotos.every((p) => p.check?.sharp === 50 && p.check.look === undefined)).toBe(true);
   });
 
   it('removing a photo lets go of its picture on the device', async () => {

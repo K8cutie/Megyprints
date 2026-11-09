@@ -10,6 +10,7 @@
 
 import type { AlbumData } from './albumCloud';
 import { albumNameToSave } from './albumName';
+import { checkForAccount, type PhotoCheck } from './photoCheck';
 import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from '../pages/builder/retiredSizes';
 
 export interface StoredDraft {
@@ -40,7 +41,8 @@ export function albumDataFromDraft(stored: StoredDraft, occasion: string): Album
       ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
       id: p.id,
       name: p.name,
-      ...(p.check ? { check: p.check as NonNullable<AlbumData['photos']>[number]['check'] } : {}),
+      // The check without the photo's look, which stays on the device.
+      ...(p.check ? { check: checkForAccount(p.check as PhotoCheck) } : {}),
       ...(p.kept ? { kept: true } : {}),
       ...(p.leftOut ? { leftOut: true } : {}),
     })),

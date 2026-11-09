@@ -7,8 +7,8 @@
     mapped to occasion themes and scored. Returns the best-fit suggestion.
 
     tfjs + the model are loaded LAZILY (dynamic import) so they stay out of the
-    main bundle and only download when the user asks for a suggestion. The model
-    weights download once from the Google CDN on first use.
+    main bundle. The model is the one the photo check's look pass uses
+    (lib/mobileNet): one copy, downloaded once and kept in the browser.
 
     NOTE: content classification reliably maps OCCASION/SCENE themes (travel,
     graduation, baptism, birthday, wedding, baby). Stylistic themes (family,
@@ -17,6 +17,7 @@
     ══════════════════════════════════════════════════════════════════════════ */
 
 import type { UploadedPhoto, TemplateType } from './types';
+import { loadMobileNet } from '../../lib/mobileNet';
 
 export interface ThemeSuggestion {
   theme: TemplateType;
@@ -41,30 +42,11 @@ const THEME_KEYWORDS: { theme: TemplateType; words: string[] }[] = [
 ];
 
 type Classifier = { classify: (img: HTMLImageElement, topk?: number) => Promise<{ className: string; probability: number }[]> };
-let modelPromise: Promise<Classifier> | null = null;
 
-/** Load (and cache) the MobileNet model + a tfjs backend. Lazy + dynamic. */
+/** The MobileNet model + a tfjs backend (lib/mobileNet: lazy, loaded once,
+ *  WebGL when there is one, else the CPU so the guess still runs). */
 async function getModel(): Promise<Classifier> {
-  if (!modelPromise) {
-    modelPromise = (async () => {
-      const tf = await import('@tensorflow/tfjs');
-      // Prefer the fast WebGL backend; fall back to CPU when WebGL is
-      // unavailable (some browsers / headless), so analysis still runs.
-      let ready = false;
-      for (const backend of ['webgl', 'cpu']) {
-        try {
-          if (await tf.setBackend(backend)) { await tf.ready(); ready = true; break; }
-        } catch { /* try next backend */ }
-      }
-      if (!ready) throw new Error('no tfjs backend available');
-      const mobilenet = await import('@tensorflow-models/mobilenet');
-      return (await mobilenet.load({ version: 2, alpha: 1.0 })) as Classifier;
-    })().catch((err) => {
-      modelPromise = null; // allow a later retry instead of caching the failure
-      throw err;
-    });
-  }
-  return modelPromise;
+  return (await loadMobileNet()).net;
 }
 
 function loadImage(url: string): Promise<HTMLImageElement> {
