@@ -155,7 +155,9 @@ jobs:
         run: |
           xcrun simctl addmedia "$UDID" public/sample-photos/*.jpg
           xcrun simctl privacy "$UDID" grant photos "$BUNDLE"
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          # Maestro's download site can answer 504: retried, and the step stops at once without it.
+          for t in 1 2 3; do curl -fsSL --retry 5 --retry-delay 15 --retry-all-errors "https://get.maestro.mobile.dev" | bash && [ -x "$HOME/.maestro/bin/maestro" ] && break; sleep 20; done
+          [ -x "$HOME/.maestro/bin/maestro" ] || { echo "::error::Maestro could not be installed"; exit 1; }
           export PATH="$PATH:$HOME/.maestro/bin"
           maestro --version
           mkdir -p out/screens

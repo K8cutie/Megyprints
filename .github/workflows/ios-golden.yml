@@ -175,7 +175,9 @@ jobs:
           # by its link makes iPhone ask "Open in …?", which could not be
           # answered reliably. Its iPhone helper needs minutes to start the
           # first time on a fresh simulator.
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          # Maestro's download site can answer 504: retried, and the step stops at once without it.
+          for t in 1 2 3; do curl -fsSL --retry 5 --retry-delay 15 --retry-all-errors "https://get.maestro.mobile.dev" | bash && [ -x "$HOME/.maestro/bin/maestro" ] && break; sleep 20; done
+          [ -x "$HOME/.maestro/bin/maestro" ] || { echo "::error::Maestro could not be installed"; exit 1; }
           export PATH="$PATH:$HOME/.maestro/bin"
           export MAESTRO_DRIVER_STARTUP_TIMEOUT=300000
           maestro --device "$UDID" test mobile/maestro/ios-golden-run.yaml

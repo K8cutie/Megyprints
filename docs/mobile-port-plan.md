@@ -4382,6 +4382,20 @@ album code and the Skia renderer carry over unchanged. What iPhone needed:
   letters run a little heavy. Not loosened (the bars stay); to fix before any iPhone order.
 - The whole golden run (108 pages and covers, the texture tiles, the timing pass and the
   light-letter trials) took 131 s on the simulator (report.json totalMs).
+- Photo check vs the website (`tools/photo-check`, 138 test pictures; the iPhone side through
+  `phoneServerIos.mjs`, which maps the pictures to the names iPhone gives them in Photos,
+  `pc-scene-01.jpg` → `IMG_0010.JPG`): sharpness within 1.3 % on every picture (median ratio
+  0.999), blur verdicts the same in all three albums, repeats identical on the sample photos and
+  99.8 % of pairs on the made-up ones, leave-out 32 vs 32, faces found 88 % of the website's.
+  Two findings, both fixed: **face centring found nothing** on iPhone (0 to the website's 71):
+  `checkable()` accepted only `content://` and `file://`, so an iPhone album (`ph://`) had no
+  photo check and no centring at all; and **Apple Vision's eye outline is not reliable for shut
+  eyes** (8 pictures "shut", none of the website's 2 nor Android ML Kit's 10; open eyes read as
+  shut; no single correction fits, ratio 1.0-2.8 face by face), so `IPHONE_EYES_JUDGED = false`:
+  iPhone faces count, their eyes are not judged, until a better reading is proven here.
+- The test screens open through the app (Home → Shared code check), not by link: iPhone asks
+  "Open in …?" before following the app's own link, which the checks could not answer reliably.
+  The photo check test screen is on in test builds (Release too), off in store builds.
 
 **The owner's steps before a real iPhone build** (none needed for the simulator checks):
 1. An Apple Developer account ($99 a year; a company account needs a D-U-N-S number first).

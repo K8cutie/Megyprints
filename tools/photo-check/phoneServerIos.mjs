@@ -89,7 +89,10 @@ const backToOwnNames = (v) => (typeof v === 'string' ? (ownName.get(v) ?? v)
   : v);
 const shot = (name) => { try { simctl('io', udid, 'screenshot', path.join(OUT, name)); } catch { /* none */ } };
 
+/** Stops the wait at once (the test screen could not be opened). */
+let giveUp = (_why) => {};
 const done = new Promise((resolve, reject) => {
+  giveUp = (why) => { shot('phone-lab-not-opened.png'); reject(new Error(why)); };
   const server = http.createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/manifest') {
       console.log('The test screen asked for the pictures.');
@@ -144,7 +147,8 @@ execFile('maestro', ['--device', udid, 'test', path.join(HERE, '..', '..', 'mobi
   { env: { ...process.env, MAESTRO_DRIVER_STARTUP_TIMEOUT: process.env.MAESTRO_DRIVER_STARTUP_TIMEOUT ?? '300000' } },
   (e, out) => {
     process.stdout.write(out ?? '');
-    if (e) console.warn(`Opening the test screen did not run (${e.message}); the screen may still be waiting for it.`);
+    // Without the screen there will be no answers: stop now, not after the whole wait.
+    if (e) giveUp(`Could not open the test screen: ${e.message}`);
   });
 let running = true;
 // The screen every 2 minutes (its status line says what it is doing, or why it stopped).
