@@ -19,6 +19,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { findRepeats, isBlurry, medianSharpness, suggestLeaveOut, type CheckablePhoto, type PhotoCheck } from '@web/lib/photoCheck';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
+import { buildKind } from '../lib/buildKind';
 import { checkPhotoAccess, loadGalleryPage, NEXT_PAGE, photosForAlbum, type GalleryPhoto } from '../lib/gallery';
 import { createPhoneChecks, nativeDevice, type PhoneCheckDevice } from '../lib/phonePhotoCheck';
 import { FACE_COPY_SCALE, FACE_MODEL, faceModelAvailable } from '../lib/faceModel';
@@ -118,6 +119,11 @@ function galleryWatch() {
     return { reads: s.length, p50: s[Math.floor(s.length * 0.5)] ?? 0, p95: s[Math.floor(s.length * 0.95)] ?? 0, max: s[s.length - 1] ?? 0 };
   };
 }
+
+/** A test tool for the test app only: a store build has nothing here. The
+ *  test app's Release build has it too (the iPhone check runs one, with no
+ *  computer serving its code: .github/workflows/ios-photo-check.yml). */
+const labOn = () => __DEV__ || buildKind() !== 'play';
 
 export default function PhotoCheckLab() {
   const [status, setStatus] = useState('Ready.');
@@ -259,14 +265,13 @@ export default function PhotoCheckLab() {
   // Starts on its own when opened (the PC tool is waiting). A remount
   // before it starts (React's dev double-mount) just starts it once, later.
   useEffect(() => {
-    if (!__DEV__) return;
+    if (!labOn()) return;
     const t = setTimeout(() => { void run(); }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A test tool for the dev app only: a store build has nothing here.
-  if (!__DEV__) {
+  if (!labOn()) {
     return (
       <ScrollView style={styles.page} contentContainerStyle={styles.content}>
         <Text style={styles.lead}>Nothing here.</Text>
