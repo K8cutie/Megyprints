@@ -13,6 +13,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 // animation): the page renderer needs only the Skia API object.
 import '@shopify/react-native-skia/lib/commonjs/skia/NativeSetup';
 import { Skia } from '@shopify/react-native-skia/lib/commonjs/skia/Skia';
+import { phoneLightWeightPx } from '../render/pageText';
 import { Button } from '../components/Button';
 import { goldenBundle } from '../dev/goldenBundle';
 import { runGoldenPages, type PhoneReport, type ToSrgb } from '../dev/goldenRun';
@@ -60,6 +61,8 @@ export default function GoldenPages() {
       const writer = { write: async (name: string, content: Uint8Array | string) => new File(out, name).write(content) };
       const report = await runGoldenPages(Skia, goldenBundle, writer, {
         toSrgb: phoneToSrgb,
+        // The hairline this phone's album pages get (pageText phoneLightWeightPx).
+        phoneLightWeightPx: phoneLightWeightPx(Platform.OS),
         device: {
           os: Platform.OS,
           version: Platform.Version,

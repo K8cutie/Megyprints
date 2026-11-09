@@ -1,0 +1,115 @@
+# Make an album on an iPhone (simulator), signed out, the way a new customer
+# does: Start Creating → name → size → photos (Select all, the 78 sample
+# album photos the workflow puts in the simulator's Photos) → cover → Make
+# my album → the Preview book. A picture of every step goes in out/screens.
+#
+# Run by .github/workflows/ios-simulator.yml (Maestro, open source), from the
+# repository's root, after Photos access was given with simctl.
+appId: com.megyprints.app.dev
+---
+- launchApp:
+    clearState: true
+    permissions:
+      photos: allow
+- extendedWaitUntil:
+    visible:
+      id: make-album
+    timeout: 60000
+- takeScreenshot: out/screens/walk-01-home
+- tapOn:
+    id: make-album
+
+# Name
+- extendedWaitUntil:
+    visible:
+      id: album-name
+    timeout: 30000
+# iPhone's keyboard slides up first: typing at once can lose letters, so the
+# name is typed after it settles and checked (typed again if it came out short).
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: album-name
+      - waitForAnimationToEnd:
+          timeout: 5000
+      - eraseText: 30
+      - inputText: iPhone test
+      - assertVisible: iPhone test
+- hideKeyboard
+# The occasion can't be skipped (Megy writes the quotes to match it).
+- tapOn:
+    id: occasion-Vacation
+- takeScreenshot: out/screens/walk-02-name
+- tapOn:
+    id: name-next
+
+# Size (the first size is chosen already)
+- extendedWaitUntil:
+    visible:
+      id: size-next
+    timeout: 30000
+- takeScreenshot: out/screens/walk-03-size
+- tapOn:
+    id: size-next
+
+# Photos: open the photo grid, Select all, add them
+- extendedWaitUntil:
+    visible:
+      id: photos-main
+    timeout: 30000
+- takeScreenshot: out/screens/walk-04-photos
+- tapOn:
+    id: photos-main
+- extendedWaitUntil:
+    visible:
+      id: select-all
+    timeout: 60000
+- takeScreenshot: out/screens/walk-05-grid
+- tapOn:
+    id: select-all
+- takeScreenshot: out/screens/walk-06-all-picked
+- tapOn:
+    id: add-photos
+- extendedWaitUntil:
+    visible:
+      id: photos-main
+    timeout: 180000
+- takeScreenshot: out/screens/walk-07-photos-in
+- tapOn:
+    id: photos-main
+
+# Cover, then Make my album
+- extendedWaitUntil:
+    visible:
+      id: cover-next
+    timeout: 60000
+- takeScreenshot: out/screens/walk-08-cover
+# The first photo on the front cover: drawn from the photo module's small
+# sRGB copy (drawableCopy), the iPhone half's own work.
+- tapOn:
+    id: "cover-photo-.*"
+    index: 0
+- waitForAnimationToEnd:
+    timeout: 15000
+- takeScreenshot: out/screens/walk-08b-cover-photo
+- tapOn:
+    id: cover-next
+- extendedWaitUntil:
+    visible:
+      id: preview-book
+    timeout: 300000
+- waitForAnimationToEnd:
+    timeout: 15000
+- takeScreenshot: out/screens/walk-09-preview
+# Open the book on page 1, then the next spread: pages drawn with photos.
+- tapOn:
+    id: preview-next
+- waitForAnimationToEnd:
+    timeout: 20000
+- takeScreenshot: out/screens/walk-10-page-1
+- tapOn:
+    id: preview-next
+- waitForAnimationToEnd:
+    timeout: 20000
+- takeScreenshot: out/screens/walk-11-pages-2-3

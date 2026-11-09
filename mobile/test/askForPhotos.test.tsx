@@ -19,7 +19,8 @@
 import { AppState, type AppStateStatus } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { AskForPhotos, forgetWontAsk, QUESTION_SHOWN_MS, WONT_ASK_LINE } from '../src/components/AskForPhotos';
-import { SETTINGS_HOW } from '../src/lib/pickWords';
+import { FILES_OFFERED } from '../src/lib/filePhotos';
+import { FILES_WORKS, SETTINGS_HOW } from '../src/lib/pickWords';
 
 /** What the app hears while it asks: Android's permission screen puts it in
  *  the background, for `ms`. The phone's clock, moved by hand. */
@@ -122,5 +123,45 @@ describe('the other ways in, as before', () => {
     expect(screen.getByText('Photo access was not allowed')).toBeOnTheScreen();
     expect(screen.getByTestId('ask-again')).toBeOnTheScreen();
     expect(screen.queryByTestId('open-settings')).toBeNull();
+  });
+});
+
+/* iPhone: no "Choose from Files" (a Files pick's address stops working once
+   the app closes; photos live in Photos). Settings, in iPhone's own words,
+   is the way forward, and the first button is the filled one. Jest runs as
+   iOS (jest-expo), so these are the iPhone words. */
+describe('iPhone: no Files, Settings is the way', () => {
+  const firstButton = () => screen.getAllByRole('button')[0]?.props.testID as string | undefined;
+
+  it('Files is not offered on iPhone', () => {
+    expect(FILES_OFFERED).toBe(false);
+  });
+
+  it('never asked: only Allow access to photos, nothing about Files', async () => {
+    await render(<AskForPhotos access={{ canAskAgain: true, refused: false }} onAsk={jest.fn(async () => {})} />);
+    expect(screen.getByTestId('allow-photos')).toBeOnTheScreen();
+    expect(screen.queryByTestId('files-instead')).toBeNull();
+    expect(screen.queryByText(FILES_WORKS)).toBeNull();
+  });
+
+  it('not allowed and the phone won\'t ask: Open Settings first, ask again second, no Files', async () => {
+    await render(<AskForPhotos access={OFF} onAsk={jest.fn(async () => {})} />);
+    expect(firstButton()).toBe('open-settings');
+    expect(screen.getByTestId('ask-again')).toBeOnTheScreen();
+    expect(screen.queryByTestId('files-main')).toBeNull();
+  });
+
+  it('once the phone has said it won\'t ask: Open Settings alone, with iPhone\'s Settings words', async () => {
+    await render(<AskForPhotos access={OFF} onAsk={jest.fn(async () => { noQuestion(); })} />);
+    await fireEvent.press(screen.getByTestId('ask-again'));
+    await waitFor(() => expect(screen.queryByTestId('ask-again')).toBeNull());
+    expect(screen.getAllByRole('button').map((b) => b.props.testID)).toEqual(['open-settings']);
+    expect(SETTINGS_HOW).toBe('To turn it on: open Settings, then Photos, then tap Full Access.');
+    expect(screen.getByText(SETTINGS_HOW)).toBeOnTheScreen();
+  });
+
+  it('"Don\'t allow" once while the phone can still ask: ask again is the one button', async () => {
+    await render(<AskForPhotos access={{ canAskAgain: true, refused: true }} onAsk={jest.fn(async () => {})} />);
+    expect(screen.getAllByRole('button').map((b) => b.props.testID)).toEqual(['ask-again']);
   });
 });

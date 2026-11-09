@@ -40,10 +40,19 @@ describe('photo access set-up', () => {
     ]));
   });
 
-  it('the app\'s own Files module is an Android Expo module autolinking finds', () => {
-    const cfg = JSON.parse(readFileSync(path.join(root, 'modules', 'photo-files', 'expo-module.config.json'), 'utf8')) as { platforms: string[]; android: { modules: string[] } };
-    expect(cfg.platforms).toEqual(['android']);
+  it('the app\'s own Files module is an Android and iPhone Expo module autolinking finds', () => {
+    const cfg = JSON.parse(readFileSync(path.join(root, 'modules', 'photo-files', 'expo-module.config.json'), 'utf8')) as { platforms: string[]; android: { modules: string[] }; ios: { modules: string[] } };
+    expect(cfg.platforms).toEqual(['android', 'ios']);
     expect(cfg.android.modules).toEqual(['expo.modules.megyphotofiles.PhotoFilesModule']);
+    expect(cfg.ios.modules).toEqual(['PhotoFilesModule']);
+    // The iPhone half: the same name and functions, Photos photos by their ph:// address.
+    const swift = readFileSync(path.join(root, 'modules', 'photo-files', 'ios', 'PhotoFilesModule.swift'), 'utf8');
+    expect(swift).toMatch(/Name\("MegyPhotoFiles"\)/);
+    for (const fn of ['describe', 'release', 'srgbCopy', 'inspect', 'drawableCopy']) expect(swift).toContain(`AsyncFunction("${fn}")`);
+    expect(swift).toMatch(/Function\("keptCount"\)/);
+    expect(swift).toMatch(/hasPrefix\("ph:\/\/"\)/);
+    expect(swift).toMatch(/isNetworkAccessAllowed = true/); // a photo kept only in iCloud is downloaded
+    expect(readFileSync(path.join(root, 'modules', 'photo-files', 'ios', 'MegyPhotoFiles.podspec'), 'utf8')).toMatch(/s\.name\s+=\s+'MegyPhotoFiles'/);
     const kt = readFileSync(path.join(root, 'modules', 'photo-files', 'android', 'src', 'main', 'java', 'expo', 'modules', 'megyphotofiles', 'PhotoFilesModule.kt'), 'utf8');
     expect(kt).toMatch(/Name\("MegyPhotoFiles"\)/);
     expect(kt).toMatch(/takePersistableUriPermission/);

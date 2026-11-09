@@ -14,8 +14,12 @@ import { AppRegistry } from 'react-native';
 
 /** The native half (OrderKeeperModule.kt). */
 export interface OrderKeeperNative {
-  /** Notifications are on for the app (Android settings). */
+  /** Notifications are on for the app (Android settings; iPhone: as last read). */
   notificationsAllowed(): boolean;
+  /** iPhone only (ios/OrderKeeperModule.swift): asks iPhone's question
+   *  before the app may show notifications; true when allowed. Android asks
+   *  through PermissionsAndroid (backgroundSend.askToNotify). */
+  requestNotifications?(): Promise<boolean>;
   /** Starts the service and the headless task; says which started. */
   start(title: string, text: string): Promise<{ service: boolean; task: boolean }>;
   /** The notification's words and bar (0–100; below 0: a moving bar). */
@@ -41,6 +45,9 @@ if (native) {
 export const orderKeeper: OrderKeeperNative | null = native
   ? {
       notificationsAllowed: () => native.notificationsAllowed(),
+      ...(typeof native.requestNotifications === 'function'
+        ? { requestNotifications: () => native.requestNotifications!() }
+        : {}),
       start: async (title, text) => {
         running = new Promise<void>((r) => { release = r; });
         try {

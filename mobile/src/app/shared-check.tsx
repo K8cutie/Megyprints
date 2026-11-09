@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { priceOf, type PriceSchedule } from '@web/lib/pricing';
 import { Button } from '../components/Button';
 import { goldenBundle } from '../dev/goldenBundle';
+import { buildKind } from '../lib/buildKind';
 import { compareWithExpected, runSharedChecks, type SharedCheckReport } from '../lib/sharedCheck';
 import { SHARED_CHECK_EXPECTED } from '../lib/sharedCheckExpected';
 import { supabase, supabaseConfigured, supabaseHost } from '../lib/supabase';
@@ -116,6 +117,17 @@ export default function SharedCheck() {
           <Text style={styles.lineLabel}>Golden pages (test build)</Text>
           <Text style={styles.small}>Draw the {goldenBundle.cases.length} test pages with this phone&apos;s Skia, for the computer to compare with the website&apos;s print files.</Text>
           <Button label="Open golden pages" kind="plain" onPress={() => router.push('/golden-pages')} style={styles.liveButton} testID="open-golden" />
+        </View>
+      )}
+
+      {buildKind() !== 'play' && (
+        // Test builds only. The way in for tools/photo-check on an iPhone
+        // simulator: iPhone asks "Open in …?" before following the app's own
+        // link, a question the checks could not answer reliably.
+        <View style={styles.liveBox}>
+          <Text style={styles.lineLabel}>Photo check test (test build)</Text>
+          <Text style={styles.small}>Runs the photo check on the test pictures and sends the answers to the comparison tool on the computer (tools/photo-check).</Text>
+          <Button label="Open the photo check test" kind="plain" onPress={() => router.push('/photo-check-lab')} style={styles.liveButton} testID="open-photo-check-lab" />
         </View>
       )}
     </ScrollView>

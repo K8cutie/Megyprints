@@ -47,8 +47,27 @@ export function parseAuthReturn(url: string): URLSearchParams | null {
   return p;
 }
 
+/** The scheme the website's page hands the answer to (public/auth-native.js). */
+export const APP_RETURN = 'megyprints://auth';
+
+/** iPhone: Google opens in Apple's sign-in window (ASWebAuthenticationSession),
+ *  which catches the website's megyprints://auth?… link itself and gives it
+ *  only to this app (so the test app gets it too); the answer then goes to
+ *  the same auth-return screen as Android's link. Closed without signing in:
+ *  nothing happens. */
+export async function openGoogleOnIphone(
+  url: string,
+  o: { openAuth: (url: string, returnUrl: string) => Promise<{ type: string; url?: string }>; goTo: (path: string) => void },
+): Promise<void> {
+  const r = await o.openAuth(url, APP_RETURN);
+  if (r.type !== 'success' || !r.url) return;
+  const p = parseAuthReturn(r.url);
+  if (p) o.goTo(`/auth-return?${p.toString()}`);
+}
+
 /** "Sign in with Google": a new one-time code kept, Supabase asked for
- *  Google's page (the website's call), the page opened in a Chrome tab. */
+ *  Google's page (the website's call), the page opened in a Chrome tab
+ *  (iPhone: openGoogleOnIphone). */
 export async function startGoogleSignIn(o: { client: OAuthClient; store: NonceStore; open: (url: string) => Promise<unknown>; randomHex: () => string }): Promise<void> {
   const nonce = o.randomHex();
   await o.store.set(nonce);

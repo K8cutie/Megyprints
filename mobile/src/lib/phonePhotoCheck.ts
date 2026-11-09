@@ -72,8 +72,11 @@ export const PHONE_CHECK_AT_ONCE = 2;
 /** Photos whose answers are kept for reuse (a few numbers each). */
 const KEEP = 1000;
 
-/** The phone's own photo addresses: what the album keeps (content://) or a file. */
-export const checkable = (url: string) => /^(content|file):\/\//.test(url);
+/** The phone's own photo addresses: what the album keeps (Android's
+ *  content://, iPhone's Photos ph://) or a file. Without ph:// an iPhone
+ *  album had no photo check and no face centring at all (the iPhone
+ *  comparison, 2026-11-09: centring found on 0 pictures to the website's 71). */
+export const checkable = (url: string) => /^(content|file|ph):\/\//.test(url);
 
 /** Lets the screen draw before a stretch of JavaScript work. */
 const breathe = () => new Promise<void>((r) => setTimeout(r, 0));

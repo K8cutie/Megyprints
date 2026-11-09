@@ -4326,6 +4326,99 @@ Owner: "once done lets release it as part of 2.0.9". In it: the 20 more masks (a
 
 297 characters.
 
+## iPhone (2026-11-09, `feat/port-ios`)
+
+Owner: "a month from now apple port can it be made with our stack now?" → yes (Expo builds iPhone
+from the same code) → "Yes, go". The iPhone app is the SAME 2.0 app: every screen, the shared
+album code and the Skia renderer carry over unchanged. What iPhone needed:
+
+- **Settings** (`app.json` `ios`): `com.megyprints.app.dev` for the test app (as Android's), build
+  number = versionCode, phone only, the Photos question's words, no "save photos" permission,
+  `BGTaskSchedulerPermittedIdentifiers` for Place order, Sign in with Apple.
+- **The app's own native modules, iPhone halves** (Swift, `modules/*/ios`, same names and calls as
+  the Kotlin halves; `test/iphoneModules.test.ts` holds them together):
+  - `photo-files`: Photos photos by `ph://` (iCloud downloaded when the pixels are needed, never by
+    `inspect`), small and print copies turned upright and into sRGB (almost every iPhone photo is
+    Display P3).
+  - `photo-pixels`: the small copy by the Android half's exact Chrome-resize steps; faces by
+    **Apple Vision**, not ML Kit (ML Kit has no build for the Apple-chip simulators the app is checked
+    on; Vision sends nothing and adds nothing). Vision gives no "eye open" chance, so each eye's
+    aspect ratio is measured from its outline the website's way and put on ML Kit's scale
+    (`phoneFaces.ts openChanceFromEar`, the exact inverse of `earFromOpenChance`).
+  - `video-shrink`: AVFoundation, the website's H.264/AAC targets.
+  - `order-keeper`: iOS 26's continued-processing task (iOS's own progress bar) keeps Place order
+    going in other apps; older iPhones get ~30 s and the screen keeps "Keep this screen open"; the
+    "done" notification as on Android.
+- **Photos only**: "Choose from Files" stays Android-only (`filePhotos FILES_OFFERED`): on iPhone a
+  Files pick's address stops working once the app closes. Settings directions in iPhone's words.
+- **Updates**: the App Store installs them; the app only says "A new version of Megy Prints is
+  ready." with Update in App Store / Later (`lib/appStoreUpdate.ts`, Android's rules).
+- **Sign-in**: Sign in with Apple (App Review rule 4.8); Google through Apple's sign-in window
+  (`openGoogleOnIphone`), so the iPhone test app has Google too; `public/auth-native.js` hands an
+  iPhone the `megyprints://auth` link (Android's pinned `intent://` link unchanged).
+
+**How it is checked without a Mac** (GitHub's Mac machines, free for a public repository; no EAS):
+- `.github/workflows/ios-simulator.yml`: builds, opens it on an iPhone simulator and walks Make an
+  album signed out with the 78 sample photos (Maestro, `mobile/maestro/ios-make-album.yaml`),
+  screenshots of every step.
+- `.github/workflows/ios-golden.yml`: the golden pages drawn by the iPhone's Skia (Windows makes the
+  data where the bars were measured); then on a Windows PC
+  `GOLDEN_PHONE_DIR=<artifact folder> npm run golden:phone`.
+- `.github/workflows/ios-photo-check.yml`: `tools/photo-check` on the simulator
+  (`phoneServerIos.mjs`) against the website, same test pictures.
+
+**Results so far (iPhone 17 Pro simulator, iOS 26.5):**
+- Album walk signed out: 84 photos → Select all → cover photo → Make my album → Preview "Page 2
+  of 45" with the photos drawn (photo-files' drawableCopy); the sign-in screen with Sign in with
+  Apple and Google. Seen and fixed: the back button after Home said "index" (Home had no title).
+- Print check (golden pages drawn by iPhone's Skia, compared on Windows): first run 214 / 224;
+  every failure a cover with light letters, 7-18 % heavier ink than the website's. Android's
+  0.2 px light-letter hairline was the cause: on iPhone every light text is within the 6 % bar
+  with none (worst 5.1 %), so iPhone gets 0 (`pageText.ts phoneLightWeightPx`). Second run
+  **223 / 224**. The Display P3 photo passes after the Swift srgbCopy and fails without it (as it
+  must). `cover-86-old-form`, Android's known failure, passes on iPhone.
+- **Open:** `cover-wordart-two-colour-shadow` text 4, the back cover's grey Megy Prints mark:
+  ink 9.0 % off (bar 6 %); the same mark is 4-5 % on the other covers, so iPhone's mid-grey
+  letters run a little heavy. Not loosened (the bars stay); to fix before any iPhone order.
+- The whole golden run (108 pages and covers, the texture tiles, the timing pass and the
+  light-letter trials) took 131 s on the simulator (report.json totalMs).
+- Photo check vs the website (`tools/photo-check`, 138 test pictures; the iPhone side through
+  `phoneServerIos.mjs`, which maps the pictures to the names iPhone gives them in Photos,
+  `pc-scene-01.jpg` → `IMG_0010.JPG`): sharpness within 1.3 % on every picture (median ratio
+  0.999), blur verdicts the same in all three albums, repeats identical on the sample photos and
+  99.8 % of pairs on the made-up ones, leave-out 32 vs 32, faces found 88 % of the website's.
+  Two findings, both fixed: **face centring found nothing** on iPhone (0 to the website's 71):
+  `checkable()` accepted only `content://` and `file://`, so an iPhone album (`ph://`) had no
+  photo check and no centring at all; and **Apple Vision's eye outline is not reliable for shut
+  eyes** (8 pictures "shut", none of the website's 2 nor Android ML Kit's 10; open eyes read as
+  shut; no single correction fits, ratio 1.0-2.8 face by face), so `IPHONE_EYES_JUDGED = false`:
+  iPhone faces count, their eyes are not judged, until a better reading is proven here.
+  After both fixes (run 42577613889): face centring found on 66 pictures with the website
+  (5 website only, 21 iPhone only), the same "face or no face" decision on **81 %** (Android
+  ML Kit: 78 %), centres a median **0.037** of the picture apart (Android: 0.05), 59 % within
+  0.05, 70 % within 0.1; eyes: 0 pictures "shut" (website 2), the same verdict on 98.6 %.
+  Simulator memory at the most: 590 MB (ps RSS; a real iPhone differs).
+- The test screens open through the app (Home → Shared code check), not by link: iPhone asks
+  "Open in …?" before following the app's own link, which the checks could not answer reliably.
+  The photo check test screen is on in test builds (Release too), off in store builds.
+
+**The owner's steps before a real iPhone build** (none needed for the simulator checks):
+1. An Apple Developer account ($99 a year; a company account needs a D-U-N-S number first).
+2. In it: the app id `com.megyprints.app` with Sign in with Apple switched on.
+3. Supabase → Auth → Providers → Apple: switch it on, client ids `com.megyprints.app` and
+   `com.megyprints.app.dev` (the native sign-in needs no secret).
+
+**Before the App Store release** (must, not nice-to-have):
+- Google's way back on iPhone moves to a verified `https` link (Associated Domains with the owner's
+  Apple team id, an `apple-app-site-association` file on the website): iOS link schemes are not
+  pinned to one app the way Android's `intent://…package=` is.
+- Deleting an account made with Sign in with Apple must revoke Apple's token (Apple's rule): the
+  website's `/api/delete-account` calls Apple's revoke endpoint with a key from the Apple account.
+- Video years bought apart from an album order would be a digital purchase under Apple's rules: on
+  iPhone they come only with an album order.
+- A real iPhone walk (TestFlight), the App Store listing, privacy answers (Apple Vision sends
+  nothing; no ML Kit on iPhone).
+
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
 Every non-test `.ts` file in `src/pages/builder` and `src/lib` was checked.

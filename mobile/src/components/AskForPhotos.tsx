@@ -36,7 +36,9 @@ let wontAskKnown = false;
 /** Access changed (or a test starts): Android may ask again. */
 export function forgetWontAsk(): void { wontAskKnown = false; }
 
-export function AskForPhotos({ access, onAsk, onFiles }: { access: { canAskAgain: boolean; refused: boolean }; onAsk: () => Promise<void>; onFiles: () => Promise<void> }) {
+/** `onFiles`: "Choose from Files", where the phone offers it (Android; not
+ *  iPhone, see pickWords FILES_OFFERED). Without it, Settings is the way. */
+export function AskForPhotos({ access, onAsk, onFiles }: { access: { canAskAgain: boolean; refused: boolean }; onAsk: () => Promise<void>; onFiles?: () => Promise<void> }) {
   const blocked = !access.canAskAgain;
   const [wontAsk, setWontAsk] = useState(() => blocked && wontAskKnown);
   useEffect(() => { if (!blocked) forgetWontAsk(); }, [blocked]);
@@ -63,19 +65,28 @@ export function AskForPhotos({ access, onAsk, onFiles }: { access: { canAskAgain
         <Text style={styles.body}>{ASK_LINE}</Text>
         {off && <Text style={styles.body}>{WONT_ASK_LINE}</Text>}
         {off && <Text style={styles.body}>{SETTINGS_HOW}</Text>}
-        <Text style={styles.small}>{FILES_WORKS}</Text>
+        {onFiles && <Text style={styles.small}>{FILES_WORKS}</Text>}
       </View>
       <View style={styles.askButtons}>
-        {off || refused ? (
+        {(off || refused) && onFiles ? (
           <>
             <Button label={FILES} onPress={() => { void onFiles(); }} testID="files-main" />
             {!off && <Button label="Ask for photo access again" kind="plain" onPress={() => { void askAgain(); }} testID="ask-again" />}
             {blocked && <Button label="Open Settings" kind="plain" onPress={() => { void Linking.openSettings(); }} testID="open-settings" />}
           </>
+        ) : off || refused ? (
+          // No Files on this phone: Settings is the one way forward (filled),
+          // or asking again while the phone still can.
+          <>
+            {blocked
+              ? <Button label="Open Settings" onPress={() => { void Linking.openSettings(); }} testID="open-settings" />
+              : <Button label="Ask for photo access again" onPress={() => { void askAgain(); }} testID="ask-again" />}
+            {blocked && !off && <Button label="Ask for photo access again" kind="plain" onPress={() => { void askAgain(); }} testID="ask-again" />}
+          </>
         ) : (
           <>
             <Button label={ALLOW_PHOTOS} onPress={() => { void onAsk(); }} testID="allow-photos" />
-            <Button label={FILES_INSTEAD} kind="plain" onPress={() => { void onFiles(); }} testID="files-instead" />
+            {onFiles && <Button label={FILES_INSTEAD} kind="plain" onPress={() => { void onFiles(); }} testID="files-instead" />}
           </>
         )}
       </View>

@@ -24,6 +24,18 @@
         "android.permission.RECORD_AUDIO"
       ]
     },
+    "ios": {
+      "bundleIdentifier": "com.megyprints.app.dev",
+      "buildNumber": "109",
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "$(PRODUCT_BUNDLE_IDENTIFIER).order.*"
+        ]
+      }
+    },
     "web": {
       "favicon": "./assets/favicon.png"
     },
@@ -37,11 +49,15 @@
           "granularPermissions": [
             "photo"
           ],
-          "isAccessMediaLocationEnabled": false
+          "isAccessMediaLocationEnabled": false,
+          "photosPermission": "Megy Prints shows your photos so you can pick the ones for your album.",
+          "savePhotosPermission": false,
+          "preventAutomaticLimitedAccessAlert": true
         }
       ],
       "expo-image",
       "expo-asset",
+      "expo-apple-authentication",
       [
         "expo-image-picker",
         {

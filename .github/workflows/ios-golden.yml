@@ -1,0 +1,219 @@
+# The print check on an iPhone: the golden pages and covers drawn by the
+# iPhone's own Skia, to be held to the website's print pictures.
+#
+# The same check the Android phone has (mobile/test/goldenPhone.check.ts,
+# "Page renderer on the phone" in docs/mobile-port-plan.md), in two jobs:
+#   1. Windows (where the golden bars were measured): the website pictures
+#      (tools/golden/renderWeb.mjs, headless Chromium) and from them the test
+#      build's data, mobile/golden-phone/bundle.json
+#      (scripts/golden-phone-assets.cjs: the pages exactly as the website
+#      drew them, the test photos, the font files);
+#   2. Mac: the iPhone test build with that data (MEGY_GOLDEN_PAGES=1, never
+#      a customer build), opened on an iPhone simulator at
+#      megyprints-dev://golden-pages?run=1, which draws every page into the
+#      app's Documents/golden-phone (src/dev/goldenRun.ts). That folder is
+#      kept as the artifact ios-golden-phone.
+# Then, on a Windows PC, from mobile/:
+#   GOLDEN_PHONE_DIR=<the downloaded folder> npm run golden:phone
+# compares every picture with the website's, with the same bars.
+#
+# Free: the repository is public (no EAS, mobile/AGENTS.md).
+
+name: 2.0 iPhone print check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feat/port-ios**']
+    paths:
+      - 'mobile/src/render/**'
+      - 'mobile/src/dev/**'
+      - 'mobile/src/app/golden-pages.tsx'
+      - 'mobile/modules/photo-files/**'
+      - 'tools/golden/**'
+      - '.github/workflows/ios-golden.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-golden-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bundle:
+    name: Golden pages data (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+            tools/golden/package-lock.json
+
+      # renderWeb.mjs builds the website's own print code (../src), and the
+      # data carries the app's font files (mobile/node_modules).
+      - name: Install website, app and golden-tool packages
+        shell: bash
+        run: |
+          npm ci
+          (cd mobile && npm ci)
+          cd tools/golden
+          npm ci
+          npx --no-install playwright-core install chromium-headless-shell
+
+      - name: The website pictures (Windows Chromium)
+        shell: bash
+        run: node -e "require('./mobile/test/golden/webPictures.cjs').ensureWebPictures()"
+
+      - name: The test build's data
+        working-directory: mobile
+        run: node scripts/golden-phone-assets.cjs
+
+      - name: Keep it for the Mac
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-bundle
+          path: mobile/golden-phone/bundle.json
+          retention-days: 3
+
+  iphone:
+    name: Golden pages on an iPhone simulator
+    needs: bundle
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_*.app | grep -v -i -E 'beta|release_candidate|_rc' | sort -V | tail -1)
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install the app's packages
+        working-directory: mobile
+        run: npm ci
+
+      - name: The golden pages data from Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: golden-bundle
+          path: mobile/golden-phone
+
+      - name: Make the iPhone project (expo prebuild)
+        working-directory: mobile
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install the iPhone libraries (CocoaPods)
+        working-directory: mobile/ios
+        run: pod install
+
+      # MEGY_GOLDEN_PAGES=1: Metro puts the golden pages in this TEST build
+      # (goldenPages.js). The bundling step inside xcodebuild reads it.
+      - name: Build the golden test build for the simulator
+        working-directory: mobile/ios
+        env:
+          MEGY_GOLDEN_PAGES: '1'
+        run: |
+          mkdir -p ../../out
+          WS=$(ls -d *.xcworkspace | head -1)
+          SCHEME=$(basename "$WS" .xcworkspace)
+          if ! xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
+               -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+               -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+               build > ../../out/xcodebuild.log 2>&1; then
+            echo "::error::The iPhone build failed. First errors:"
+            grep -n -E "error:|❌" ../../out/xcodebuild.log | head -60
+            tail -80 ../../out/xcodebuild.log
+            exit 1
+          fi
+          tail -3 ../../out/xcodebuild.log
+
+      - name: Draw the golden pages on an iPhone simulator
+        run: |
+          APP=$(find mobile/ios/build/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          BUNDLE=$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$APP/Info.plist")
+          UDID=$(xcrun simctl list -j | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)
+          ios = [r for r in d["runtimes"] if r.get("platform") == "iOS" and r.get("isAvailable")]
+          ios.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          for r in reversed(ios):
+              phones = [x for x in d["devices"].get(r["identifier"], []) if x.get("isAvailable") and x["name"].startswith("iPhone")]
+              plain = [x for x in phones if re.fullmatch(r"iPhone \d+( Pro)?", x["name"])]
+              pick = (plain or phones)
+              if pick:
+                  print(pick[0]["udid"]); sys.stderr.write("simulator: %s, iOS %s\n" % (pick[0]["name"], r["version"])); break
+          ')
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+          # Maestro starts the golden pages through the app (Home's test card →
+          # Shared code check → Open golden pages → Draw): opening the screen
+          # by its link makes iPhone ask "Open in …?", which could not be
+          # answered reliably. Its iPhone helper needs minutes to start the
+          # first time on a fresh simulator.
+          # Maestro's download site can answer 504: retried, and the step stops at once without it.
+          for t in 1 2 3; do curl -fsSL --retry 5 --retry-delay 15 --retry-all-errors "https://get.maestro.mobile.dev" | bash && [ -x "$HOME/.maestro/bin/maestro" ] && break; sleep 20; done
+          [ -x "$HOME/.maestro/bin/maestro" ] || { echo "::error::Maestro could not be installed"; exit 1; }
+          export PATH="$PATH:$HOME/.maestro/bin"
+          export MAESTRO_DRIVER_STARTUP_TIMEOUT=300000
+          maestro --device "$UDID" test mobile/maestro/ios-golden-run.yaml
+          DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
+          OUTDIR="$DATA/Documents/golden-phone"
+          mkdir -p out/screens
+          xcrun simctl io "$UDID" screenshot out/screens/golden-start.png
+          START=$SECONDS
+          LAST=0
+          while [ $((SECONDS - START)) -lt 2400 ]; do
+            if [ -f "$OUTDIR/report.json" ]; then echo "report.json written after $((SECONDS - START)) s"; break; fi
+            if [ $((SECONDS - LAST)) -ge 60 ]; then
+              LAST=$SECONDS
+              echo "$((SECONDS - START)) s: $(ls "$OUTDIR" 2>/dev/null | wc -l | tr -d ' ') files so far"
+            fi
+            sleep 10
+          done
+          xcrun simctl io "$UDID" screenshot out/screens/golden-end.png
+          test -f "$OUTDIR/report.json" || { echo "::error::No report.json after 40 minutes"; exit 1; }
+          mkdir -p out/golden-phone
+          cp -R "$OUTDIR/." out/golden-phone/
+          ls out/golden-phone | wc -l
+
+      - name: Keep the app's log
+        if: always()
+        run: |
+          mkdir -p out
+          [ -n "$UDID" ] && xcrun simctl spawn "$UDID" log show --last 60m --style compact \
+            --predicate 'subsystem == "com.facebook.react.log" OR process CONTAINS[c] "megy"' > out/app-log.txt 2>&1 || true
+          grep -i -E "\[golden\]|error|exception" out/app-log.txt | tail -40 || true
+
+      - name: Keep the iPhone's pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-golden-phone
+          path: out/
+          retention-days: 14
+          if-no-files-found: ignore

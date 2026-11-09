@@ -1,0 +1,151 @@
+# The photo check on an iPhone, compared with the website's on the same test
+# pictures (tools/photo-check: blur, repeats, eyes shut, leave-out
+# suggestions, faces and face centring). The Android phone's comparison run,
+# for the iPhone simulator, all on one Mac:
+#   makePictures.mjs  the 60 made-up pictures + the website's sample photos
+#                     (headless Chromium; no personal photos, ever)
+#   runWeb.mjs        the website's own check and centring, in Chromium
+#   phoneServerIos.mjs the iPhone app's test screen (photo-check-lab) on the
+#                     simulator: Apple Vision for faces (ios/PhotoPixelsModule.swift)
+#   compare.mjs       out/report.json and out/report.html
+# The artifact ios-photo-check keeps out/ without the pictures.
+#
+# Free: the repository is public (no EAS, mobile/AGENTS.md).
+
+name: 2.0 iPhone photo check
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['feat/port-ios**']
+    paths:
+      - 'mobile/modules/photo-pixels/**'
+      - 'mobile/src/lib/phonePhotoCheck.ts'
+      - 'mobile/src/lib/phoneFaces.ts'
+      - 'mobile/src/app/photo-check-lab.tsx'
+      - 'tools/photo-check/**'
+      - '.github/workflows/ios-photo-check.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-photo-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: iPhone photo check vs the website
+    runs-on: macos-latest
+    timeout-minutes: 150
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Newest Xcode
+        run: |
+          X=$(ls -d /Applications/Xcode_*.app | grep -v -i -E 'beta|release_candidate|_rc' | sort -V | tail -1)
+          sudo xcode-select -s "$X/Contents/Developer"
+          xcodebuild -version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            mobile/package-lock.json
+            tools/photo-check/package-lock.json
+
+      - name: Install website, app and comparison-tool packages
+        run: |
+          npm ci
+          (cd mobile && npm ci)
+          cd tools/photo-check
+          npm ci
+          npx --no-install playwright-core install chromium-headless-shell
+
+      - name: Make the iPhone project and its libraries
+        working-directory: mobile
+        run: |
+          npx expo prebuild --platform ios --no-install
+          cd ios && pod install
+
+      - name: Build the test app for the simulator
+        working-directory: mobile/ios
+        run: |
+          mkdir -p ../../out
+          WS=$(ls -d *.xcworkspace | head -1)
+          SCHEME=$(basename "$WS" .xcworkspace)
+          if ! xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release \
+               -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+               -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+               build > ../../out/xcodebuild.log 2>&1; then
+            grep -n -E "error:|❌" ../../out/xcodebuild.log | head -60
+            exit 1
+          fi
+
+      - name: A fresh iPhone simulator with the app
+        run: |
+          APP=$(find mobile/ios/build/Build/Products/Release-iphonesimulator -maxdepth 1 -name '*.app' | head -1)
+          UDID=$(xcrun simctl list -j | python3 -c '
+          import json, re, sys
+          d = json.load(sys.stdin)
+          ios = [r for r in d["runtimes"] if r.get("platform") == "iOS" and r.get("isAvailable")]
+          ios.sort(key=lambda r: [int(x) for x in r["version"].split(".")])
+          for r in reversed(ios):
+              phones = [x for x in d["devices"].get(r["identifier"], []) if x.get("isAvailable") and x["name"].startswith("iPhone")]
+              plain = [x for x in phones if re.fullmatch(r"iPhone \d+( Pro)?", x["name"])]
+              pick = (plain or phones)
+              if pick:
+                  print(pick[0]["udid"]); sys.stderr.write("simulator: %s, iOS %s\n" % (pick[0]["name"], r["version"])); break
+          ')
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" "$APP"
+
+      - name: The test pictures, and the website's answers (Chromium)
+        working-directory: tools/photo-check
+        run: |
+          node makePictures.mjs
+          node runWeb.mjs
+
+      # Maestro taps "Open" when iPhone asks before following the test screen's link.
+      - name: The iPhone's answers (the app's test screen on the simulator)
+        working-directory: tools/photo-check
+        run: |
+          # Maestro's download site can answer 504: retried, and the step stops at once without it.
+          for t in 1 2 3; do curl -fsSL --retry 5 --retry-delay 15 --retry-all-errors "https://get.maestro.mobile.dev" | bash && [ -x "$HOME/.maestro/bin/maestro" ] && break; sleep 20; done
+          [ -x "$HOME/.maestro/bin/maestro" ] || { echo "::error::Maestro could not be installed"; exit 1; }
+          export PATH="$PATH:$HOME/.maestro/bin"
+          node phoneServerIos.mjs --udid "$UDID" --minutes 60
+
+      - name: iPhone vs website
+        working-directory: tools/photo-check
+        run: |
+          node compare.mjs | tee out/compare.txt
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -60 out/compare.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the app's log
+        if: always()
+        run: |
+          [ -n "$UDID" ] && xcrun simctl spawn "$UDID" log show --last 90m --style compact \
+            --predicate 'subsystem == "com.facebook.react.log" OR process CONTAINS[c] "megy"' > tools/photo-check/out/app-log.txt 2>&1 || true
+
+      - name: Keep the comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-photo-check
+          path: |
+            tools/photo-check/out/
+            !tools/photo-check/out/pictures/
+            out/xcodebuild.log
+          retention-days: 14
+          if-no-files-found: ignore

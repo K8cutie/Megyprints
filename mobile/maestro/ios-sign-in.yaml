@@ -1,0 +1,21 @@
+# The sign-in screen on an iPhone (simulator): Sign in with Apple (App Review
+# rule 4.8) and Sign in with Google (through Apple's sign-in window) are both
+# there in the test app. Nothing is signed in: no account is used.
+# Run by .github/workflows/ios-simulator.yml after the album walk.
+appId: com.megyprints.app.dev
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: go-sign-in
+    timeout: 60000
+- tapOn:
+    id: go-sign-in
+- extendedWaitUntil:
+    visible:
+      id: sign-in-apple
+    timeout: 30000
+- assertVisible:
+    id: sign-in-google
+- takeScreenshot: out/screens/walk-20-sign-in

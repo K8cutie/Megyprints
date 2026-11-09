@@ -138,6 +138,38 @@ export function toCheckFace(f: PhoneFace): CheckFace {
 const probability = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null);
 const point = (p: { x: number; y: number } | null | undefined) => (p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null);
 
+/** An eye aspect ratio on the website's scale → ML Kit's open chance: the
+ *  exact inverse of earFromOpenChance (EYE_CLOSED_EAR ↔ EYE_SHUT_BELOW),
+ *  held to 0–1. The iPhone's face finder (Apple Vision, ios/
+ *  PhotoPixelsModule.swift) gives no open chance, but measures each eye's
+ *  aspect ratio from its outline; this puts it on the scale the phone's
+ *  rules read, so earFromOpenChance gives that ratio back to the website's
+ *  rule. */
+export function openChanceFromEar(ear: number): number {
+  const quarter = EYE_CLOSED_EAR * 0.25;
+  if (ear < EYE_CLOSED_EAR) return Math.max(0, ((ear - quarter) / (EYE_CLOSED_EAR - quarter)) * EYE_SHUT_BELOW);
+  return Math.min(1, EYE_SHUT_BELOW + ((ear - EYE_CLOSED_EAR) * (1 - EYE_SHUT_BELOW)) / (OPEN_EAR - EYE_CLOSED_EAR));
+}
+
+/** Are the iPhone's eye shapes (Apple Vision's eye outline) used to judge
+ *  shut eyes? Not yet. The iPhone comparison (tools/photo-check on the
+ *  simulator, 2026-11-09): Vision's outline put 8 test pictures "eyes shut",
+ *  none of them the website's 2 nor Android ML Kit's 10 (which ARE shut:
+ *  laughing, looking down), and read open eyes as shut (megy-sample-04: the
+ *  website measures 0.25 and 0.29). Its ratio to the website's measure ran
+ *  from 1.0 to 2.8 face by face, so no single correction fits. A wrong
+ *  "shut" gives a good photo a smaller place and loses it the cover; a
+ *  missed one is how the website mostly behaves. So iPhone faces count as
+ *  faces (blur, repeats, centring, the face share) with their eyes not
+ *  judged, until a better eye reading is proven on the same comparison. */
+export const IPHONE_EYES_JUDGED = false;
+
+/** ML Kit's open chance when it gave one (Android); the chance from the
+ *  eye's measured aspect ratio only if IPHONE_EYES_JUDGED; else null (not
+ *  judged). */
+const openChance = (open: number | null | undefined, ear: number | null | undefined) =>
+  probability(open) ?? (IPHONE_EYES_JUDGED && typeof ear === 'number' && Number.isFinite(ear) && ear >= 0 ? openChanceFromEar(ear) : null);
+
 /** The module's face, found on a copy `sx` × `sy` times the small copy (1
  *  when ML Kit looked at the small copy itself) → a PhoneFace in the small
  *  copy's pixels. */
@@ -147,8 +179,8 @@ export function fromNative(f: NativeFace, sx = 1, sy = sx): PhoneFace {
     box: { x: f.x / sx, y: f.y / sy, width: f.width / sx, height: f.height / sy },
     leftEye: back(point(f.leftEye)),
     rightEye: back(point(f.rightEye)),
-    leftEyeOpen: probability(f.leftEyeOpen),
-    rightEyeOpen: probability(f.rightEyeOpen),
+    leftEyeOpen: openChance(f.leftEyeOpen, f.leftEyeEar),
+    rightEyeOpen: openChance(f.rightEyeOpen, f.rightEyeEar),
     mlKitSidePx: Math.max(0, Math.min(f.width, f.height)),
   };
 }
