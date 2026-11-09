@@ -4393,6 +4393,11 @@ album code and the Skia renderer carry over unchanged. What iPhone needed:
   eyes** (8 pictures "shut", none of the website's 2 nor Android ML Kit's 10; open eyes read as
   shut; no single correction fits, ratio 1.0-2.8 face by face), so `IPHONE_EYES_JUDGED = false`:
   iPhone faces count, their eyes are not judged, until a better reading is proven here.
+  After both fixes (run 42577613889): face centring found on 66 pictures with the website
+  (5 website only, 21 iPhone only), the same "face or no face" decision on **81 %** (Android
+  ML Kit: 78 %), centres a median **0.037** of the picture apart (Android: 0.05), 59 % within
+  0.05, 70 % within 0.1; eyes: 0 pictures "shut" (website 2), the same verdict on 98.6 %.
+  Simulator memory at the most: 590 MB (ps RSS; a real iPhone differs).
 - The test screens open through the app (Home → Shared code check), not by link: iPhone asks
   "Open in …?" before following the app's own link, which the checks could not answer reliably.
   The photo check test screen is on in test builds (Release too), off in store builds.
