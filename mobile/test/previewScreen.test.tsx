@@ -18,7 +18,7 @@
        the pages, the spine, and a page turn that bends and throws a shadow.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ComponentType, type ReactElement } from 'react';
-import { Animated, Dimensions, type GestureResponderEvent } from 'react-native';
+import { Animated, Dimensions, ScrollView, type GestureResponderEvent } from 'react-native';
 import { SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
@@ -28,6 +28,10 @@ import { act, builder, madeAlbum, settle, useEditorBench } from './editorHarness
 const mockNav = { push: jest.fn(), replace: jest.fn(), dismissAll: jest.fn() };
 const mockSeen = {
   focused: true,
+  /** Run useFocusEffect as the screen comes on top (off: most tests press at once). */
+  focusRuns: false,
+  /** Moved by hand: the screen comes on top again (the screen on top of it left). */
+  focusTick: 0,
   header: [] as { headerShown?: boolean }[],
   /** The status bars on screen (React Native keeps a stack: the latest one mounted wins). */
   statusBars: new Set<{ hidden?: boolean }>(),
@@ -38,6 +42,16 @@ const mockSeen = {
   /** What saving the album to the account answers (Order this album). */
   save: jest.fn(async () => true),
   conflict: null as { updatedAt: string } | null,
+  /** The album's photos are not on this phone (opened from My albums on another phone). */
+  photosGone: false,
+  /** What the app keeps on the phone (the page-flip switch). */
+  store: new Map<string, string>(),
+};
+/** The album's photos as the phone finds them: none, while photosGone (one list per album's list). */
+const goneLists = new WeakMap<object, unknown[]>();
+const goneFrom = (photos: { previewUrl: string }[]) => {
+  if (!goneLists.has(photos)) goneLists.set(photos, photos.map((p) => ({ ...p, previewUrl: '' })));
+  return goneLists.get(photos);
 };
 
 jest.mock('expo-router', () => ({
@@ -47,7 +61,7 @@ jest.mock('expo-router', () => ({
   },
   Stack: { Screen: ({ options }: { options: { headerShown?: boolean } }) => { mockSeen.header.push(options); return null; } },
   useIsFocused: () => mockSeen.focused,
-  useFocusEffect: () => {},
+  useFocusEffect: (fn: () => void) => { if (mockSeen.focusRuns) jest.requireActual<typeof import('react')>('react').useEffect(() => fn(), [mockSeen.focusTick]); },
 }));
 jest.mock('expo-status-bar', () => {
   const React = jest.requireActual<typeof import('react')>('react');
@@ -72,13 +86,23 @@ jest.mock('../src/builder/BuilderProvider', () => ({
     const b = jest.requireActual('./editorHarness').builder();
     // The real builder, but saving to the account answers what the test says.
     const builder = new Proxy(b, {
-      get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict : t[k]),
+      get: (t, k) => (k === 'manualSave' ? mockSeen.save : k === 'getCloudConflict' ? () => mockSeen.conflict
+        : k === 'uploadedPhotos' && mockSeen.photosGone ? goneFrom(t.uploadedPhotos) : t[k]),
     });
-    return { builder, platform: { deviceStore: { getItem: () => null, setItem: () => {} }, textMeasurer: () => null }, text: null };
+    const deviceStore = { getItem: (k: string) => mockSeen.store.get(k) ?? null, setItem: (k: string, v: string) => { mockSeen.store.set(k, v); } };
+    return { builder, platform: { deviceStore, textMeasurer: () => null }, text: null };
   },
 }));
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockSeen.session }) }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ clear: () => {} }) }));
+// The Preview's buttons pressed as a person presses them, after the screen is
+// up: the once-per-visit guard ignores a press in its first 0.5 s, so a test
+// pressing right after the first render passed or failed by the runner's speed
+// (CI, "Edit pages" on its side). The guard has its own tests (wizardDoubleTap).
+jest.mock('../src/lib/useOncePerVisit', () => ({
+  ...jest.requireActual<typeof import('../src/lib/useOncePerVisit')>('../src/lib/useOncePerVisit'),
+  useOncePerVisit: () => (go: () => unknown) => () => { go(); },
+}));
 jest.mock('../src/builder/usePagePicture', () => ({
   usePagePicture: (_text: unknown, req: { width: number; pageIndex: number; coverMode?: boolean } | null) => {
     if (req) mockSeen.pictureWidths.push(req.width);
@@ -94,6 +118,9 @@ import Preview from '../src/app/preview';
 import { BOOK_DRESS_X, sidewaysBook, uprightBook, UPRIGHT_EDGE } from '../src/builder/previewLayout';
 import { edgeThickness } from '../src/builder/bookLook';
 import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
+import { ARRIVING_MS } from '../src/lib/useOncePerVisit';
+import { PAGE_FLIP_KEY, PAGE_FLIP_LABEL } from '../src/lib/pageFlip';
+import { askPreviewAtCover } from '../src/builder/previewCover';
 const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
 const DEFAULT = 0;
@@ -191,6 +218,7 @@ beforeEach(() => {
   mockSeen.session = null;
   mockSeen.save = jest.fn(async () => true);
   mockSeen.conflict = null;
+  mockSeen.store.clear();
   setScreen(UPRIGHT, UPRIGHT_INSETS);
 });
 afterEach(async () => {
@@ -251,6 +279,25 @@ describe('upright: the book as big as the screen allows', () => {
     expect(all('preview-open-book')).toHaveLength(1);
     expect(textOnScreen('or turn your phone sideways')).toBe(true);
     expect(onBook('preview-page-1')).toHaveLength(1);
+  });
+
+  it('a double tap on "Make my album" opens it on the cover: the Preview just on top ignores "Next page" for a moment (round 3)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.focusRuns = true;
+    let clock = Date.now();
+    const spy = jest.spyOn(Date, 'now').mockImplementation(() => clock);
+    try {
+      await open();
+      // The second tap of the double tap lands on "Next page ›", in the same spot.
+      await press('preview-next');
+      expect(textOf('preview-caption')).toBe('Front cover');
+      clock += ARRIVING_MS;
+      await press('preview-next');
+      expect(textOf('preview-caption')).toBe(`Page 1 of ${builder().albumPages.length}`);
+    } finally {
+      spy.mockRestore();
+      mockSeen.focusRuns = false;
+    }
   });
 });
 
@@ -539,8 +586,9 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     await press('preview-next');
     await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
     await refresh();
-    // Signed in, the Preview saves a newly made album once on opening
-    // (accountSave.ts): only the saves "Order this album" makes count here.
+    // Signed in, a newly made album is saved once by the whole app
+    // (accountSave.ts useAccountSave): only the saves "Order this album"
+    // makes count here.
     mockSeen.save.mockClear();
   }
   /** Taps Order; a warning (an empty caption box in a made album) is answered "Order anyway". */
@@ -609,6 +657,42 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     expect(mockSeen.save).not.toHaveBeenCalled();
     await press('preview-order-back-to-pages');
     expect(mockNav.push).toHaveBeenCalledWith('/edit-pages');
+  });
+
+  it('the answer to "Order this album" is scrolled into view (it came below the buttons: the tap looked dead, round 3)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    const i = builder().albumPages.findIndex((p) => (p.slotFills ?? []).some((f) => typeof f === 'number'));
+    const slot = (builder().albumPages[i].slotFills ?? []).findIndex((f) => typeof f === 'number');
+    await act(async () => { builder().goToPage(i); });
+    await act(async () => { builder().clearSlot(slot); });
+    await act(async () => { builder().goToPage(0); });
+    await open();
+    await toTheEnd();
+    const toEnd = (ScrollView as unknown as { prototype: { scrollToEnd: jest.Mock } }).prototype.scrollToEnd;
+    toEnd.mockClear();
+    await press('preview-order');
+    expect(textOf('preview-order-ask')).toMatch(/^Your album has 39 photos/);
+    expect(toEnd).toHaveBeenCalled();
+  });
+
+  it('photos not on this phone: "Order this album" says so once, not a second copy of the note above it (round 4)', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    mockSeen.photosGone = true;
+    try {
+      await open();
+      await toTheEnd();
+      expect(all('preview-missing-photos')).toHaveLength(1);
+      await press('preview-order');
+      expect(textOf('preview-order-ask')).toMatch(/aren't on this phone/);
+      // The answer takes the note's place: one message, one "Add the photos".
+      expect(all('preview-missing-photos')).toHaveLength(0);
+      expect(all('preview-order-add-photos')).toHaveLength(1);
+      expect(mockSeen.save).not.toHaveBeenCalled();
+    } finally {
+      mockSeen.photosGone = false;
+    }
   });
 
   it('on its side, the last pages: a round "Order" button where › was', async () => {
@@ -711,3 +795,129 @@ async function swipe(dx: number) {
   });
   await refresh();
 }
+
+describe('the page flip can be turned off (owner, 2026-11-04: "add a button to turn it off. On by default")', () => {
+  it('on by default: the switch says On, and Next turns the leaf over', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    expect(textOf('preview-page-flip')).toBe(`${PAGE_FLIP_LABEL}On`);
+    const land = holdTurns();
+    await press('preview-next');
+    expect(all('preview-page-turn')).toHaveLength(1);
+    await land();
+  });
+
+  it('off: Next shows the next page at once, with no leaf turning, and the phone remembers it', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await press('preview-page-flip');
+    expect(textOf('preview-page-flip')).toBe(`${PAGE_FLIP_LABEL}Off`);
+    const land = holdTurns();
+    await press('preview-next'); // the cover opens
+    expect(all('preview-page-turn')).toHaveLength(0);
+    await press('preview-next');
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-caption')).toMatch(/^Page 2 of \d+$/);
+    await land();
+    // Another visit to the Preview: still off.
+    await act(async () => { screen!.unmount(); });
+    await open();
+    expect(textOf('preview-page-flip')).toBe(`${PAGE_FLIP_LABEL}Off`);
+    // On again: the leaf turns again.
+    await press('preview-page-flip');
+    const land2 = holdTurns();
+    await press('preview-next');
+    expect(all('preview-page-turn')).toHaveLength(1);
+    await land2();
+  });
+
+  it('off: a finger swipe turns the page at once, with no leaf following the finger (on its side too)', async () => {
+    mockSeen.store.set(PAGE_FLIP_KEY, 'off');
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    await turn(TURNED, TURNED_INSETS);
+    const land = holdTurns();
+    await press('preview-next');
+    await press('preview-next');
+    const total = builder().albumPages.length;
+    expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
+    const up = await finger([-20, -100], { lift: false });
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-counter')).toBe(`2-3 / ${total}`);
+    await up();
+    await refresh();
+    expect(all('preview-page-turn')).toHaveLength(0);
+    expect(textOf('preview-counter')).toBe(`4-5 / ${total}`);
+    await land();
+  });
+});
+
+describe('"Done — Preview my album" opens the album on its cover (owner, 2026-11-04: "the beginning of preview my album is the last page")', () => {
+  afterEach(() => { mockSeen.focusRuns = false; });
+
+  /** The Preview on a page deep in the album, the way it stays under the editor. */
+  async function deepIn() {
+    await madeAlbum(SCENARIOS[0]);
+    await open();
+    mockSeen.store.set(PAGE_FLIP_KEY, 'off');
+    await act(async () => { builder().goToPage(builder().albumPages.length - 1); });
+    await refresh();
+    await act(async () => { screen!.unmount(); });
+    mockSeen.focusRuns = true;
+    await open();
+    expect(textOf('preview-caption')).toMatch(/^Page \d+ of \d+$/);
+    expect(builder().currentPageIndex).toBe(builder().albumPages.length - 1);
+  }
+
+  it('asked to, it comes back on the Front cover, from the last page of the album', async () => {
+    await deepIn();
+    askPreviewAtCover();
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    await refresh(); // the builder's page change reaches the screen
+    expect(textOf('preview-caption')).toBe('Front cover');
+    expect(builder().currentPageIndex).toBe(0);
+  });
+
+  it('not asked ("Back to preview"): it comes back on the page it was on', async () => {
+    await deepIn();
+    const page = textOf('preview-caption');
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    expect(textOf('preview-caption')).toBe(page);
+  });
+
+  it('asked once, it does it once: the next time it comes on top, it stays where it is', async () => {
+    await deepIn();
+    askPreviewAtCover();
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    await refresh(); // the builder's page change reaches the screen
+    await act(async () => { builder().goToPage(4); });
+    await refresh();
+    const page = textOf('preview-caption');
+    await act(async () => { mockSeen.focusTick++; });
+    await refresh();
+    expect(textOf('preview-caption')).toBe(page);
+  });
+});
+
+describe('every way into the Preview asks for its cover', () => {
+  const read = (f: string) => jest.requireActual<typeof import('node:fs')>('node:fs').readFileSync(jest.requireActual<typeof import('node:path')>('node:path').join(__dirname, '..', f), 'utf8').split(String.fromCharCode(13)).join('');
+
+  it('"Done — Preview my album" in the editor; "Back to preview" stays the way back to the same page', () => {
+    const editor = read('src/editor/EditPagesScreen.tsx');
+    expect(editor).toContain('const doneEditing = () => { askPreviewAtCover(); backToPreview(); };');
+    expect(editor).toContain('<Button label={DONE_PREVIEW} onPress={turn(doneEditing)}');
+    expect(editor).toContain('accessibilityLabel={BACK_TO_PREVIEW} onPress={turn(backToPreview)}');
+  });
+
+  it('a step going to the Preview (useGoToPreview: Photos, Cover, the making screen)', () => {
+    expect(read('src/builder/useGoToPreview.ts')).toContain('askPreviewAtCover();');
+  });
+
+  it('"Continue my album" and My albums: on page 1 before the screen opens, so its first picture is the cover', () => {
+    expect(read('src/app/index.tsx')).toMatch(/builder\.goToPage\(0\);\s+go\(resumeRoute\(builder, platform\.deviceStore\)\);/);
+    expect(read('src/app/albums.tsx')).toMatch(/builder\.goToPage\(0\);\s+router\.push\(resumeRoute\(builder, platform\.deviceStore\)\);/);
+  });
+});

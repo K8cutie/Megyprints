@@ -51,15 +51,19 @@ describe('the frame and the fit are the renderer\'s, on every layout of every si
             slotScales: t.slots.map((_s, i) => 1 + (i % 3) * 0.4),
             slotOffsetsX: t.slots.map((_s, i) => (i % 2 ? -1 : 1) * 37.5),
             slotOffsetsY: t.slots.map((_s, i) => (i % 2 ? 1 : -1) * 21.25),
-            // A moved frame and a mask on the first one (the Studio's).
+            // A moved frame and a mask on the first one (the Studio's), and
+            // masks that paint on the next ones: the photo is fitted to their
+            // window (planPage's art.photo, where drawPage draws it).
             slotGeometries: n ? [{ x: 0.1, y: 0.1, width: 0.5, height: 0.45 }] : [],
-            slotMasks: n ? ['circle'] : [],
+            slotMasks: ['circle', 'film', 'taped', 'balloon'].slice(0, n),
           });
           const plan = planPage({ page, albumSize: size, pageIndex, photoCount: PHOTOS });
           for (const item of plan.items.filter((i): i is PhotoItem => i.kind === 'photo')) {
             const cell = frameCell(page, item.slotIndex, size, pageIndex)!;
             expect(cell).not.toBeNull();
-            expect(sameRect(cell.box, item.box)).toBe(true);
+            const drawnIn = item.art ? item.art.photo : item.box;
+            if (item.slotIndex > 0 && item.slotIndex < 4) expect(item.art).toBeDefined();
+            expect(sameRect(cell.box, drawnIn)).toBe(true);
             expect(cell.rotation).toBe(item.slot.rotation ?? 0);
             expect(cell.k).toEqual({ x: W / ui.width, y: H / ui.height });
             const f = storedFraming(page, item.slotIndex, cell);
@@ -67,8 +71,8 @@ describe('the frame and the fit are the renderer\'s, on every layout of every si
             expect(near(f.pan.y, item.pan.y)).toBe(true);
             expect(f.zoom).toBeCloseTo(item.zoom ?? 1, 9);
             for (const img of [portrait, landscape]) {
-              // drawPage: slotPhotoRect(img, { w: sw, h: sh }, item.zoom, item.pan).
-              const drawn = slotPhotoRect(img, { w: item.box.w, h: item.box.h }, item.zoom, item.pan);
+              // drawPage: slotPhotoRect(img, { w: sw, h: sh }, item.zoom, item.pan) (art: its window).
+              const drawn = slotPhotoRect(img, { w: drawnIn.w, h: drawnIn.h }, item.zoom, item.pan);
               expect(sameRect(photoRect(img, cell, f), drawn)).toBe(true);
             }
             checked++;

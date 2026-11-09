@@ -77,23 +77,32 @@ async function recordingWords<T>(draw: () => Promise<T>): Promise<{ result: T; l
   const realFill = proto.fillText;
   const realStroke = proto.strokeText;
   const lines: DrawnLine[] = [];
-  let pendingOutline: { text: string; shadow: string | null } | null = null;
+  // The outlines waiting for their fill, by what and where: curved words stroke
+  // all their letters, then fill them. A letter stroked twice keeps the shadow
+  // the first stroke cast.
+  const pendingOutlines = new Map<string, { shadow: string | null }>();
+  const placeOf = (ctx: CanvasRenderingContext2D, text: string, x: number, y: number) => {
+    const t = ctx.getTransform();
+    return [String(text), x, y, t.a, t.b, t.c, t.d, t.e, t.f].join('|');
+  };
   const shadowOf = (ctx: CanvasRenderingContext2D): string | null =>
     ctx.shadowColor && ctx.shadowColor !== 'rgba(0, 0, 0, 0)' && (ctx.shadowBlur || ctx.shadowOffsetX || ctx.shadowOffsetY)
       ? `${ctx.shadowColor} ${ctx.shadowOffsetX} ${ctx.shadowOffsetY} ${ctx.shadowBlur}`
       : null;
   proto.strokeText = function (this: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth?: number) {
-    pendingOutline = { text: String(text), shadow: shadowOf(this) };
+    const place = placeOf(this, text, x, y);
+    pendingOutlines.set(place, { shadow: pendingOutlines.get(place)?.shadow ?? shadowOf(this) });
     return maxWidth === undefined ? realStroke.call(this, text, x, y) : realStroke.call(this, text, x, y, maxWidth);
   };
   proto.fillText = function (this: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth?: number) {
     const t = this.getTransform();
-    const outline = pendingOutline && pendingOutline.text === String(text) ? pendingOutline : null;
-    pendingOutline = null;
+    const place = placeOf(this, text, x, y);
+    const outline = pendingOutlines.get(place) ?? null;
+    pendingOutlines.delete(place);
     lines.push({
       text: String(text), x, y, width: this.measureText(String(text)).width,
       font: this.font, align: this.textAlign, baseline: this.textBaseline,
-      color: String(this.fillStyle), alpha: this.globalAlpha,
+      color: typeof this.fillStyle === 'string' ? this.fillStyle : 'gradient', alpha: this.globalAlpha,
       m: [t.a, t.b, t.c, t.d, t.e, t.f],
       outlined: !!outline, shadow: outline ? outline.shadow : shadowOf(this),
       canvas: [this.canvas.width, this.canvas.height],

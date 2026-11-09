@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as wizardSteps from '@web/assistant/wizardSteps';
 import { remakeLosesMessage } from '@web/assistant/rebuildQuestion';
-import { YOUR_PHOTOS } from '../src/editor/cover/words';
+import { WEBSITE_YOUR_PHOTOS } from '../src/editor/cover/words';
 import { COVER_TO_PAGES, COVER_TO_PHOTOS, GENERATING_COPY, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MAKE_ALBUM, remakeQuestion, REMAKE_ALBUM, SIZE_LINE, startNewNote, TO_COVER } from '../src/builder/albumFlow';
 
 const REPO = path.resolve(__dirname, '..', '..');
@@ -74,9 +74,17 @@ describe("the app's album steps use the website's words", () => {
 
   it('"Making your album" (GeneratingOverlay.tsx)', () => {
     for (const w of Object.values(GENERATING_COPY)) expect(web.making).toContain(`'${w}'`);
-    for (const w of ['Making your album', 'Please stand by while Megy does the magic. This takes a few seconds.']) {
+    for (const w of ['Making your album']) {
       expect(web.making).toContain(w);
       expect(app.making).toContain(w);
+    }
+    // The same promise, said for the device each one runs on.
+    expect(web.making).toContain('Your photos stay on this device.');
+    expect(app.making).toContain('Your photos stay on your phone.');
+    // The count line and the photos line are built the same way.
+    for (const w of ['. ${count.done} of ${count.total}', "photo${n === 1 ? '' : 's'}"]) {
+      expect(web.making).toContain(w);
+      expect(read('mobile/src/builder/albumFlow.ts')).toContain(w);
     }
   });
 
@@ -95,9 +103,9 @@ describe("the app's album steps use the website's words", () => {
   });
 
   it('the cover (CoverEditor.tsx)', () => {
-    // The photos: one row above the cover (CoverPhotoRow, the website's since #235), its words the row's own.
-    expect(web.cover).toContain(YOUR_PHOTOS);
-    expect(app.cover).toContain('<CoverPhotoRow');
+    // The photos: above the cover (the app's a grid, CoverPhotoGrid; the website's a row since #235), its words its own.
+    expect(web.cover).toContain(WEBSITE_YOUR_PHOTOS);
+    expect(app.cover).toContain('<CoverPhotoGrid');
     for (const w of ['Design your cover', 'Pick 1 photo for the front cover', 'Cover title', 'e.g. The Cruz Family',
       'Too long for the front cover: part of it will be cut off in print. Shorten it', ', or make the text smaller', 'Make it fit (size ']) {
       expect(web.cover).toContain(w);

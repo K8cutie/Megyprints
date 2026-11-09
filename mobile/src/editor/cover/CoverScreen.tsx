@@ -3,8 +3,8 @@
    the "Cover" tile before page 1 in the Edit pages strip.
 
    The FRONT cover only (the spine follows the title, the back is Megy's): the
-   website's two tabs, then (Background) the album's photos in one row you
-   swipe, best first, ABOVE the cover (CoverPhotoRow; the website's order
+   website's two tabs, then (Background) the album's photos in a grid you
+   scroll down, best first, ABOVE the cover (CoverPhotoGrid; the website's order
    since #235), then the cover as print draws it (the page renderer,
    coverMode), then the tab's controls:
      • Background: the cover's colours and "Use <colour> on every page"; with
@@ -12,8 +12,14 @@
        photo in its frame;
      • Text: the cover title, too long → "Make it fit"; its font (the 74),
        colour (the 28 and "Any color"), alignment, Bold, Italic, Shadow, and
-       size (16 to 96); dragging the title on the cover moves it, kept on
-       the cover.
+       size (16 to 96); dragging the title on the cover moves it, kept in
+       the safe print area (0.25" in from the trim: freeWords.wordsSafeArea);
+     • More words (owner, 2026-11-07: "Add text" on the cover photo too):
+       "+ Add text" (on both tabs once there is a photo) opens the words
+       part's Edit text over the cover for words placed by hand, with the
+       same WordArt as a page's words; each has a row that opens it, a tap on
+       them on the cover opens them, and a drag moves them, stopped at the
+       safe area's dotted line.
    The colours and the font list are the words part's own (text/ColourPickers,
    text/FontPicker), so the editor has one look and one way for them: a font
    from the internet is fetched before the title uses it, and the cover's
@@ -41,15 +47,15 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fontName } from '@web/pages/builder/fontCatalog';
 import { textColorName } from '@web/pages/builder/textColors';
 import { ALBUM_SIZES, bgCoverFit, type AlbumPage } from '@web/pages/builder/types';
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
-import { WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
+import { curveGlyphs, WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
 import { Button } from '../../components/Button';
-import { CoverPhotoRow } from '../../components/CoverPhotoRow';
+import { CoverPhotoGrid } from '../../components/CoverPhotoGrid';
 import { useBuilder } from '../../builder/BuilderProvider';
 import { coverPhotoId, coverPhotos } from '../../builder/albumFlow';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../../builder/screenWords';
@@ -57,17 +63,27 @@ import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { colors, space } from '../../lib/theme';
 import { BLANK_COVER_MESSAGE, coverBlank, titleInkNeeded, titleTooLong } from './coverChecks';
 import {
-  colourEveryPage, colourTheCover, coverCrop, coverHasPhoto, coverTitleOf, coverWithoutTitle, canRemoveCoverPhoto, fitTitle, moveCoverTitle,
-  panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour, setTitleFont, setTitleSize,
+  colourEveryPage, colourTheCover, coverCrop, coverHasPhoto, coverTitleOf, coverWithoutTitle, canRemoveCoverPhoto, editsTheCover, fitTitle, moveCoverTitle,
+  panCoverPhoto, putPhotoOnCover, removeCoverPhoto, resetCoverCrop, setTitleAlignment, setTitleColour, setTitleCurve, setTitleFillTo, setTitleGradient, setTitleFont,
+  setTitleGlow, setTitleOutline, setTitleOutlineColour, setTitleSize,
   titleBoxOf, titleMovable, TITLE_SIZE, toggleTitleBold, toggleTitleItalic, toggleTitleShadow, typeTitle,
   zoomCoverPhoto, ZOOM_RANGE, type Align,
 } from './coverEdits';
+import { clampWords, isPlacedWords, wordsInk, wordsSafeArea } from '@web/pages/builder/freeWords';
+import type { TextElement } from '@web/pages/builder/types';
 import { coverChanged } from '../undoBar';
-import { CoverStage, type DragPhase, type DragWhat, type LiveCover } from './CoverStage';
+import type { EditorContext } from '../registry';
+import { CoverStage, type DragPhase, type DragWhat, type LiveCover, type WordsRect } from './CoverStage';
 import { PageColourPicker, TextColourPicker } from '../text/ColourPickers';
 import { FontListSheet } from '../text/FontPicker';
 import { fontStore } from '../text/fonts/appFonts';
 import { catalogFace } from '../text/fonts/fontSources';
+import { LiveWords } from '../text/LiveWords';
+import { TextEditorSheet } from '../text/TextEditorSheet';
+import { WordArtControls, type WordArtChange } from '../text/WordArtControls';
+import { pageWithoutWords } from '../text/WordsDragOverlay';
+import { newWordsId, type WordsTarget } from '../text/wordsFlow';
+import { SAFE_LINE } from '../text/words';
 import { Slider } from './Slider';
 import * as W from './words';
 
@@ -99,6 +115,10 @@ const HEADER = { title: W.DESIGN_YOUR_COVER };
 
 /** How long after the last key the typed title goes to the album. */
 const TYPING_MS = 400;
+/** A finger moving less than this (screen px) on words is a tap. */
+const TAP_SLOP = 10;
+/** How long a line under the cover stays. */
+const NOTE_MS = 3500;
 
 /** The cover title box. What is typed goes to the album once typing pauses
  *  (and at once when the box is left or the screen closes), not on every key:
@@ -147,6 +167,9 @@ function Toggle({ label, on, onPress, a11y, testID }: { label: string; on: boole
 export default function CoverScreen() {
   const { builder, platform, text } = useBuilder();
   const { width: screenW, height: screenH } = useWindowDimensions();
+  // An effect's panel opens under the fold of the controls: it is brought into view.
+  const controls = useRef<ScrollViewInstance>(null);
+  const effectsY = useRef(0);
   const latest = useRef(builder);
   latest.current = builder;
 
@@ -196,33 +219,93 @@ export default function CoverScreen() {
   if (picture.uri) lastUri.current = picture.uri;
   const shownUri = picture.uri ?? lastUri.current;
 
-  // ── Dragging on the cover: the title, or the photo in its frame ──
+  // ── Words placed by hand on the cover (owner, 2026-11-07: "Add text"):
+  //    opened in Edit text, kept in the safe print area ──
+  const measurer = platform.textMeasurer();
+  const { width: uiW, height: uiH } = getCanvasDimensions(builder.albumSize);
+  const safeArea = wordsSafeArea(builder.albumSize, 0, true);
+  const placed = (cover.textElements ?? []).filter(isPlacedWords);
+  const [editing, setEditing] = useState<WordsTarget | null>(null);
+  const [coverNote, setCoverNote] = useState<string | null>(null);
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sayOnCover = (message: string) => {
+    setCoverNote(message);
+    if (noteTimer.current) clearTimeout(noteTimer.current);
+    noteTimer.current = setTimeout(() => setCoverNote(null), NOTE_MS);
+  };
+  useEffect(() => () => { if (noteTimer.current) clearTimeout(noteTimer.current); }, []);
+  const addWords = () => setEditing({ kind: 'newWords', textId: newWordsId(), cx: uiW / 2, cy: uiH / 2 });
+  /** Where words the finger moved (dx, dy: fractions of the cover) go, kept in the safe area. */
+  const wordsMovedTo = (el: TextElement, from: { x: number; y: number }, dx: number, dy: number) =>
+    clampWords({ ...el, x: from.x + dx * uiW, y: from.y + dy * uiH }, measurer, safeArea);
+  const toldLine = useRef(false);
+
+  // ── Dragging on the cover: words placed by hand, the title, or the photo in its frame ──
   // Nothing goes to the album while the finger moves (CoverStage draws it
   // live); one change when it lets go. `uri` is the picture on show then: the
   // live view steps aside once a newer one is.
-  type From = { offsetX: number; offsetY: number; focusX: number; focusY: number };
+  type From = { offsetX: number; offsetY: number; focusX: number; focusY: number; x: number; y: number };
   const drag = useRef<{ what: DragWhat; from: From } | null>(null);
   const [live, setLive] = useState<{ what: DragWhat; dx: number; dy: number; from: From; settling: string | null } | null>(null);
+  const wordsIdOf = (what: DragWhat | undefined) => (what?.startsWith('words:') ? what.slice('words:'.length) : null);
   const onDrag = (what: DragWhat, phase: DragPhase, dx: number, dy: number) => {
     if (phase === 'start') {
       const t = coverTitleOf(latest.current.coverFront);
       const c = coverCrop(latest.current.coverFront);
-      const from = { offsetX: t.offsetX, offsetY: t.offsetY, focusX: c.focusX, focusY: c.focusY };
+      const el = (latest.current.coverFront.textElements ?? []).find((w) => w.id === wordsIdOf(what));
+      const from = { offsetX: t.offsetX, offsetY: t.offsetY, focusX: c.focusX, focusY: c.focusY, x: el?.x ?? 0, y: el?.y ?? 0 };
       drag.current = { what, from };
+      toldLine.current = false;
       setLive({ what, dx: 0, dy: 0, from, settling: null });
       return;
     }
     const d = drag.current;
     if (!d) return;
-    if (phase === 'move') { setLive({ what, dx, dy, from: d.from, settling: null }); return; }
+    const id = wordsIdOf(what);
+    const el = id ? (latest.current.coverFront.textElements ?? []).find((w) => w.id === id) : undefined;
+    if (phase === 'move') {
+      if (el) {
+        const want = { x: d.from.x + dx * uiW, y: d.from.y + dy * uiH };
+        const kept = wordsMovedTo(el, d.from, dx, dy);
+        if ((kept.x !== want.x || kept.y !== want.y) && !toldLine.current) { toldLine.current = true; sayOnCover(SAFE_LINE); }
+      }
+      setLive({ what, dx, dy, from: d.from, settling: null });
+      return;
+    }
     drag.current = null;
+    if (id) {
+      // A tap on words opens them; a drag moves them.
+      if (Math.abs(dx * coverW) < TAP_SLOP && Math.abs(dy * coverH) < TAP_SLOP) { setLive(null); if (el) setEditing({ kind: 'free', textId: id }); return; }
+      const to = el ? wordsMovedTo(el, d.from, dx, dy) : null;
+      const sent = !!to && editsTheCover(latest.current) && (to.x !== el!.x || to.y !== el!.y);
+      if (sent) latest.current.updateTextElement(id, { x: to!.x, y: to!.y });
+      setLive(sent ? { what, dx, dy, from: d.from, settling: shownUri ?? '' } : null);
+      return;
+    }
     const moved = Math.abs(dx) > 1e-4 || Math.abs(dy) > 1e-4;
     const sent = moved && (what === 'title' ? moveCoverTitle(latest.current, d.from, dx, dy) : panCoverPhoto(latest.current, d.from, dx, dy));
     setLive(sent ? { what, dx, dy, from: d.from, settling: shownUri ?? '' } : null);
   };
 
+  // Words placed by hand: where their letters are (fractions of the cover),
+  // the moving ones where the finger has them.
+  const movingId = wordsIdOf(live?.what);
+  const wordsAt = (t: TextElement) => (t.id === movingId && live ? wordsMovedTo(t, live.from, live.dx, live.dy) : t);
+  const wordsRects: WordsRect[] = placed.map((t) => {
+    const at = wordsAt(t);
+    const ink = wordsInk(t, measurer);
+    return { id: t.id, rect: { x: (at.x + ink.left) / uiW, y: (at.y + ink.top) / uiH, w: (ink.right - ink.left) / uiW, h: (ink.bottom - ink.top) / uiH } };
+  });
+  // The cover without the words a finger may take, made ahead (the last placed).
+  const armedWords = movingId ?? placed[placed.length - 1]?.id ?? null;
+  const bareOfWords = useMemo(() => (armedWords ? pageWithoutWords(drawn, armedWords) : null), [drawn, armedWords]);
+  const bareWords = usePagePicture(text, bareOfWords ? {
+    page: bareOfWords, pageIndex: 0, albumSize: builder.albumSize, photos: builder.uploadedPhotos,
+    width: Math.min(1400, Math.round(coverW * PixelRatio.get())), coverMode: true,
+  } : null, movingId ? PRIORITY.editing : PRIORITY.ahead);
+
   // The title's box on the cover: where it is, or where the finger has it.
-  const box = titleBoxOf(cover);
+  const box = titleBoxOf(cover, builder.albumSize);
   const movable = titleMovable(cover);
   const titleRect = box && movable ? (() => {
     const from = live?.what === 'title' ? live.from : null;
@@ -240,7 +323,35 @@ export default function CoverScreen() {
     page: bareCover, pageIndex: 0, albumSize: builder.albumSize, photos: builder.uploadedPhotos,
     width: Math.min(1400, Math.round(coverW * PixelRatio.get())), coverMode: true,
   } : null, PRIORITY.ahead);
-  const stageUri = live?.what === 'title' && bare.uri ? bare.uri : shownUri;
+  const stageUri = live?.what === 'title' && bare.uri ? bare.uri : movingId && bareWords.uri ? bareWords.uri : shownUri;
+
+  // While words or the title move: the safe print area's line, and moving words where the finger has them.
+  const k = coverW / uiW;
+  const movingWords = movingId ? placed.find((t) => t.id === movingId) : undefined;
+  const stageOver = live && (movingWords || live.what === 'title') ? (
+    <>
+      {live.settling == null && (
+        <View pointerEvents="none" testID="cover-safe-line"
+          style={[styles.safeLine, { left: safeArea.x * k, top: safeArea.y * k, width: safeArea.w * k, height: safeArea.h * k }]} />
+      )}
+      {movingWords && (() => { const at = wordsAt(movingWords); return <LiveWords words={movingWords} x={at.x} y={at.y} k={k} text={text} onCover testID="cover-live-words" />; })()}
+    </>
+  ) : null;
+
+  // Edit text, over the cover, for words placed by hand (the words part's own sheet).
+  const coverCtx: EditorContext = {
+    builder, platform, text, pageIndex: 0, page: cover, targets: [], selected: null,
+    select: () => {}, openSheet: () => {}, closeSheet: () => {}, say: sayOnCover,
+  };
+
+  // The title's WordArt buttons (the words part's own, one source).
+  const titleEffects: WordArtChange = {
+    outline: (w) => { setTitleOutline(builder, w); },
+    outlineColour: (hex) => { setTitleOutlineColour(builder, hex); },
+    fillTo: (hex) => { setTitleFillTo(builder, hex); },
+    glow: (hex) => { setTitleGlow(builder, hex); },
+    curve: (c) => { setTitleCurve(builder, c); },
+  };
 
   // ── The album's photos for the cover, best first ──
   const photos = useMemo(() => coverPhotos(builder.uploadedPhotos).filter((p) => !!p.previewUrl), [builder.uploadedPhotos]);
@@ -288,8 +399,14 @@ export default function CoverScreen() {
     const rect = titleRect ?? (box ? { x: box.baseX + title.offsetX, y: box.baseY + title.offsetY, w: box.w, h: box.h } : null);
     const k = coverW / getCanvasDimensions(builder.albumSize).width;
     const ui = fontStore.uiFont(title.fontFamily, title.bold, title.italic);
+    const shownSize = Math.max(6, title.fontSize * k);
+    // Words on a curve follow the finger on their curve, letter by letter.
+    const curved = title.curve && text
+      ? curveGlyphs(title.text, text.measurer({ family: title.fontFamily, size: shownSize, bold: title.bold, italic: title.italic }), shownSize, title.curve)
+      : null;
     const titleView = rect && title.text.trim() && (photo || movingTitle) ? {
       rect, text: title.text, ghost: movingTitle,
+      letters: curved ? { size: shownSize, width: curved.width, glyphs: curved.glyphs } : null,
       style: {
         fontFamily: ui.fontFamily, fontWeight: ui.fontWeight, fontStyle: ui.fontStyle, color: title.color,
         fontSize: Math.max(6, title.fontSize * k), lineHeight: Math.max(8, title.fontSize * k * 1.2), textAlign: title.alignment,
@@ -310,7 +427,8 @@ export default function CoverScreen() {
   return (
     <View style={styles.page}>
       <Stack.Screen options={HEADER} />
-      <Text style={styles.sub} testID="cover-one-photo">{W.ONE_PHOTO}</Text>
+      {/* The Text tab gives this line's room, and the back cover's, to the controls. */}
+      {tab === 'background' && <Text style={styles.sub} testID="cover-one-photo">{W.ONE_PHOTO}</Text>}
       {/* The website's order since #235: the tabs, the photos, then the cover. */}
       <View style={styles.tabs} accessibilityRole="tablist">
         {(['background', 'text'] as const).map((t) => (
@@ -322,22 +440,23 @@ export default function CoverScreen() {
       </View>
       {tab === 'background' && photos.length > 0 && (
         <View style={styles.photoRow}>
-          <CoverPhotoRow photos={photos} onCover={onCover} onPick={(p) => putPhotoOnCover(builder, p)} pad={space.md} />
+          <CoverPhotoGrid photos={photos} onCover={onCover} onPick={(p) => putPhotoOnCover(builder, p)} pad={space.md} rows={2.5} />
         </View>
       )}
       <View style={styles.top}>
         <CoverStage
           uri={stageUri} busy={!picture.uri && !!shownUri} failed={picture.error ? PAGE_NOT_SHOWN : null}
           width={coverW} height={coverH} titleRect={titleRect} hasPhoto={hasPhoto} onDrag={onDrag} label={W.FRONT_COVER}
-          live={liveView}
+          live={liveView} words={wordsRects} over={stageOver}
         />
         <Text style={styles.caption}>{W.FRONT_COVER}</Text>
+        {coverNote && <Text style={styles.noteLine} accessibilityLiveRegion="polite" testID="cover-note">{coverNote}</Text>}
         {picture.notDrawn.length > 0 && <Text style={styles.small} testID="cover-not-drawn">{NOT_DRAWN_LINE}</Text>}
         {blank && <Text style={styles.warnLine} accessibilityLiveRegion="polite" testID="cover-blank">{BLANK_COVER_MESSAGE}</Text>}
-        <Text style={styles.small}>{W.BACK_NOTE}</Text>
+        {tab === 'background' && <Text style={styles.small}>{W.BACK_NOTE}</Text>}
       </View>
 
-      <ScrollView style={styles.controls} contentContainerStyle={styles.controlsBody} keyboardShouldPersistTaps="handled" scrollEnabled={!sliding}>
+      <ScrollView ref={controls} style={styles.controls} contentContainerStyle={styles.controlsBody} keyboardShouldPersistTaps="handled" scrollEnabled={!sliding}>
         {tab === 'background' ? (
           <>
             <Text style={styles.label}>{W.COLOUR}</Text>
@@ -365,6 +484,7 @@ export default function CoverScreen() {
                 <Text style={styles.removeText}>{`✕  ${W.REMOVE_PHOTO}`}</Text>
               </Pressable>
             )}
+            {hasPhoto && <AddTextButton onPress={addWords} testID="cover-add-text-photo" />}
           </>
         ) : (
           <>
@@ -388,8 +508,15 @@ export default function CoverScreen() {
               <Text style={styles.chevron}>▾</Text>
             </Pressable>
 
+            {title.text.trim() ? (
+              <View onLayout={(e) => { effectsY.current = e.nativeEvent.layout.y; }}>
+                <WordArtControls prefix="cover" value={title} change={titleEffects} onOpen={() => controls.current?.scrollTo({ y: effectsY.current, animated: true })} />
+              </View>
+            ) : null}
+
             <Text style={styles.label}>{W.COLOUR}</Text>
-            <TextColourPicker value={title.color} onChange={(hex) => setTitleColour(builder, hex)} testID="cover-title-color" />
+            <TextColourPicker value={title.color} fillTo={title.fillTo} onChange={(hex) => setTitleColour(builder, hex)}
+              onGradient={(g) => setTitleGradient(builder, g)} testID="cover-title-color" />
             {ink && (
               <View style={styles.warn} testID="cover-title-hard-to-see">
                 <Text style={styles.warnText}>{W.TITLE_HARD_TO_SEE}</Text>
@@ -421,6 +548,18 @@ export default function CoverScreen() {
                 change of the cover title, drawn again. */}
             <Slider value={title.fontSize} min={TITLE_SIZE.min} max={TITLE_SIZE.max} step={1} label={W.SIZE}
               onSlide={setSizeLive} onDone={(px) => { setSizeLive(null); setTitleSize(latest.current, px); }} onActive={setSliding} testID="cover-title-size-slider" />
+
+            {/* Words placed by hand: each opens in Edit text; more go anywhere on the cover. */}
+            <Text style={styles.label}>{W.MORE_WORDS}</Text>
+            <Text style={styles.hint}>{W.MORE_WORDS_HINT}</Text>
+            {placed.map((t) => (
+              <Pressable key={t.id} accessibilityRole="button" accessibilityLabel={W.changeWords(t.text)} onPress={() => setEditing({ kind: 'free', textId: t.id })}
+                testID={`cover-words-${t.id}`} style={({ pressed }) => [styles.fontBox, pressed && styles.pressed]}>
+                <Text style={styles.fontBoxText} numberOfLines={1}>{t.text}</Text>
+                <Text style={styles.chevron}>›</Text>
+              </Pressable>
+            ))}
+            <AddTextButton onPress={addWords} testID="cover-add-text" />
           </>
         )}
       </ScrollView>
@@ -430,7 +569,18 @@ export default function CoverScreen() {
       </SafeAreaView>
 
       {fontsOpen && <FontListSheet value={title.fontFamily} onPick={(f) => setTitleFont(latest.current, f)} onClose={() => setFontsOpen(false)} testID="cover-font-list" />}
+      {editing && <TextEditorSheet ctx={coverCtx} params={{ target: editing }} close={() => setEditing(null)} />}
     </View>
+  );
+}
+
+/** "+ Add text": words placed by hand on the cover. */
+function AddTextButton({ onPress, testID }: { onPress: () => void; testID: string }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={W.ADD_TEXT} onPress={onPress} testID={testID}
+      style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}>
+      <Text style={styles.addText}>{`+  ${W.ADD_TEXT}`}</Text>
+    </Pressable>
   );
 }
 
@@ -472,4 +622,9 @@ const styles = StyleSheet.create({
   toggleTextOn: { color: colors.accent, fontWeight: '800' },
   pressed: { opacity: 0.85 },
   bar: { borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.card, padding: space.md },
+  hint: { fontSize: 13, color: colors.muted },
+  addButton: { minHeight: 48, borderRadius: 12, borderWidth: 1.5, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },
+  addText: { fontSize: 15, fontWeight: '700', color: colors.accent },
+  noteLine: { fontSize: 13, color: '#FFF8F0', backgroundColor: '#2D2D2D', borderRadius: 10, paddingHorizontal: space.sm, paddingVertical: 6, textAlign: 'center', overflow: 'hidden' },
+  safeLine: { position: 'absolute', borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: 2 },
 });

@@ -54,7 +54,7 @@ describe("the words part uses the website's words", () => {
     expect(web.pageColor).toContain('Use {current.name.toLowerCase()} on every page');
     expect(w.useOnEveryPage('Red')).toBe('Use red on every page');
     expect(web.pageColor).toContain(w.PAGE_COLOUR_HINT);
-    expect(web.review).toContain("sayGuard(`Every page is ${pageColorOf({ type: 'solid', solid: hex })?.name.toLowerCase() ?? 'that colour'} now.`)");
+    expect(web.review).toContain("sayGuard(`Every page is ${pageFillOfKey(hex)?.name.toLowerCase() ?? 'that colour'} now.`)");
     expect(w.everyPageIs('Blue')).toBe('Every page is blue now.');
     expect(w.everyPageIs(null)).toBe('Every page is that colour now.');
     expect(web.review).toContain(`<Palette size={18} /> ${w.PAGE_COLOUR}`);

@@ -13,7 +13,7 @@
    out a second way: the website's side is print itself.
    ══════════════════════════════════════════════════════════════════════════ */
 import { applyMatrix, type AppLine, type Matrix } from '../../src/render/pageWords';
-import { MAX_LINE_POSITION_DIFF_PX, MAX_LINE_WIDTH_DIFF_PX } from './compare';
+import { MAX_CURVE_LETTER_DIFF_PX, MAX_LINE_POSITION_DIFF_PX, MAX_LINE_WIDTH_DIFF_PX } from './compare';
 
 export { appWords, type AppLine, type TextItemLines } from '../../src/render/pageWords';
 
@@ -56,7 +56,8 @@ export function lineFailures(app: AppLine[], web: WebLine[]): string[] {
     const at = applyMatrix(w.m, w.x, w.y);
     const tag = `line ${i + 1} "${w.text}"`;
     if (a.text !== w.text) out.push(`${tag}: the app drew "${a.text}"`);
-    if (!(Math.abs(a.pageX - at.x) <= MAX_LINE_POSITION_DIFF_PX && Math.abs(a.pageY - at.y) <= MAX_LINE_POSITION_DIFF_PX)) {
+    const bar = a.onCurve ? MAX_CURVE_LETTER_DIFF_PX : MAX_LINE_POSITION_DIFF_PX;
+    if (!(Math.abs(a.pageX - at.x) <= bar && Math.abs(a.pageY - at.y) <= bar)) {
       out.push(`${tag}: drawn at ${a.pageX.toFixed(3)}, ${a.pageY.toFixed(3)}, print at ${at.x.toFixed(3)}, ${at.y.toFixed(3)}`);
     }
     if (!(Math.abs(a.width - w.width) <= MAX_LINE_WIDTH_DIFF_PX)) out.push(`${tag}: ${a.width.toFixed(2)} px wide, print ${w.width.toFixed(2)}`);

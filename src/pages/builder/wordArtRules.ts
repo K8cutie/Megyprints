@@ -7,12 +7,23 @@
 // imports wordArt.ts exactly as before.
 // ──────────────────────────────────────────────────────────────────────────
 
+/** The words on a curve (the cover title, owner 2026-11-05: "that wordart capability"). */
+export type WordArtCurve = 'arch' | 'smile' | 'wave';
+
 export interface WordArtStyle {
   outlineColor?: string;
   outlineWidth?: number; // design px; 0/undefined = no outline
   shadow?: boolean;
   /** Design px; the cover's floating shadow is sized from it. */
   fontSize?: number;
+  /** A two-colour fill: the letters fade from their colour, at the top of the
+   *  line, to this one at the bottom. */
+  fillTo?: string;
+  /** A soft light of this colour around the letters, in the shadow's place
+   *  (every renderer draws one shadow). */
+  glow?: string;
+  /** The words on a curve, on one line (never wrapped, and not clipped to the box). */
+  curve?: WordArtCurve;
 }
 
 /** Outline width (design px) the editor's Outline toggle applies. */
@@ -30,11 +41,18 @@ export const WORDART_SHADOW = { color: 'rgba(0,0,0,0.38)', offsetX: 0, offsetY: 
  *  a glow): every renderer, Fabric included, draws exactly one shadow. */
 export const WORDART_FLOAT = { color: 'rgba(0,0,0,0.6)', offsetX: 0, offsetY: 0.06, blur: 0.14 };
 
-/** The shadow a text casts, in DESIGN px, or null. Cover text floats unless its
- *  Shadow switch was turned OFF (shadow === false), so every cover, old ones
- *  included, gets it; anywhere else a text casts the small caption shadow only
- *  when it was switched ON. */
+/** A glow's blur, as a share of the text's font size, and how many times it is
+ *  cast: one soft light round thin letters hardly shows. */
+export const WORDART_GLOW_BLUR = 0.25;
+export const WORDART_GLOW_PASSES = 3;
+
+/** The shadow a text casts, in DESIGN px, or null. A glow is a shadow with no
+ *  offset, in its own colour. Cover text floats unless its Shadow switch was
+ *  turned OFF (shadow === false), so every cover, old ones included, gets it;
+ *  anywhere else a text casts the small caption shadow only when it was
+ *  switched ON. */
 export function wordArtShadow(s: WordArtStyle, onCover = false): { color: string; offsetX: number; offsetY: number; blur: number } | null {
+  if (s.glow) return { color: s.glow, offsetX: 0, offsetY: 0, blur: WORDART_GLOW_BLUR * (s.fontSize || 24) };
   if (onCover) {
     if (s.shadow === false) return null;
     const size = s.fontSize || 24;
@@ -44,7 +62,62 @@ export function wordArtShadow(s: WordArtStyle, onCover = false): { color: string
 }
 
 export const hasWordArt = (s: WordArtStyle): boolean =>
-  !!s.shadow || !!(s.outlineWidth && s.outlineColor);
+  !!s.shadow || !!(s.outlineWidth && s.outlineColor) || !!s.fillTo || !!s.glow || !!s.curve;
+
+/** How far an arch or a smile turns from end to end, radians (100 degrees). */
+export const WORDART_ARC = (100 * Math.PI) / 180;
+/** How high a wave rides, as a share of the font size. */
+export const WORDART_WAVE = 0.4;
+
+/** One letter on a curve: its middle, from the middle of the curve, and how far it is turned (radians). */
+export interface CurveGlyph { text: string; x: number; y: number; angle: number }
+export interface CurveLayout { glyphs: CurveGlyph[]; width: number; height: number }
+
+/** The words as a curve takes them: one line. */
+export const curveLine = (text: string): string => String(text ?? '').replace(/\s+/g, ' ').trim();
+
+/** Each letter of `text` on `curve`, with the measurer's font already set.
+ *  Letters sit where the straight line would put them along the curve (each
+ *  from the width of the words before it, so spacing is print's), middle of
+ *  the curve at (0, 0). A space takes its room and draws nothing. Every renderer
+ *  and the fit check read this one layout. */
+export function curveGlyphs(text: string, m: TextMeasurer, fontSize: number, curve: WordArtCurve): CurveLayout {
+  const chars = Array.from(curveLine(text));
+  const total = m.measureText(chars.join('')).width;
+  if (!chars.length || !(total > 0)) return { glyphs: [], width: 0, height: 0 };
+  const radius = total / WORDART_ARC;
+  const dip = radius * (1 - Math.cos(WORDART_ARC / 2));
+  const wave = Math.min(WORDART_WAVE * fontSize, total / 10);
+  const place = (s: number): { x: number; y: number; angle: number } => {
+    if (curve === 'wave') {
+      const k = (2 * Math.PI) / total;
+      return { x: s, y: wave * Math.sin(k * s), angle: Math.atan(wave * k * Math.cos(k * s)) };
+    }
+    const a = s / radius;
+    const y = radius * (1 - Math.cos(a)) - dip / 2;
+    return curve === 'arch'
+      ? { x: radius * Math.sin(a), y, angle: a }
+      : { x: radius * Math.sin(a), y: -y, angle: -a };
+  };
+  const glyphs: CurveGlyph[] = [];
+  let width = 0, top = 0, bottom = 0, before = '';
+  chars.forEach((ch) => {
+    const start = before ? m.measureText(before).width : 0;
+    before += ch;
+    const advance = m.measureText(before).width - start;
+    const p = place(start + advance / 2 - total / 2);
+    width = Math.max(width, (Math.abs(p.x) + advance / 2) * 2);
+    top = Math.min(top, p.y);
+    bottom = Math.max(bottom, p.y);
+    if (ch !== ' ') glyphs.push({ text: ch, ...p });
+  });
+  return { glyphs, width, height: bottom - top + fontSize };
+}
+
+/** The curve's middle, for words anchored as a straight line is (left, centre or right). */
+export function curveCentreX(anchorX: number, align: 'left' | 'center' | 'right', width: number): number {
+  return align === 'left' ? anchorX + width / 2 : align === 'right' ? anchorX - width / 2 : anchorX;
+}
 
 /** Pick a contrasting outline color for a fill (dark fills → white, light → ink). */
 export function contrastOutline(fill: string): string {

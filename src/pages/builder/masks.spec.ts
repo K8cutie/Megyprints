@@ -35,7 +35,8 @@ describe('applyMask', () => {
       expect(isPathShape(sh)).toBe(true);
     }
     expect(isPathShape('circle')).toBe(false);
-    expect(MASKS.length).toBe(26);
+    // 26, then the owner's 20 from the numbered sheet (2026-11-08: maskArt.spec)
+    expect(MASKS.length).toBe(46);
   });
   it('textured edges: one PNG per edge, checked in, used as a CSS mask and stretched to the frame', () => {
     for (const t of TEXTURE_MASKS) {

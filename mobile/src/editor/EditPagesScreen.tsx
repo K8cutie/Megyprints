@@ -39,13 +39,14 @@
 import { router, Stack, useFocusEffect, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALBUM_SIZES, dealtBoxRoll } from '@web/pages/builder/types';
 import { useSettleGuard } from '@web/lib/settleGuard';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { isSideways } from '../builder/previewLayout';
+import { askPreviewAtCover } from '../builder/previewCover';
 import { useTurnsWithThePhone } from '../lib/screenTurning';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { PRIORITY, usePagePicture } from '../builder/usePagePicture';
@@ -56,12 +57,14 @@ import { A11Y, BACK_TO_PREVIEW, DONE_PREVIEW, EDIT_PAGES, GO_TO_PAGE, NEXT_PAGE,
 import { dangerLast } from './actionRows';
 import { pageHint, pickedHint } from './editorHint';
 import { EMPTY_KINDS, hitTest, pageTargets, type Target } from './hitTest';
+import { usePageTapGuard } from './pageTapGuard';
 import { PagePicker } from './PagePicker';
+import { editorPictureWidth } from './pagePictureWidth';
 import { PageStage, type EmptyHintInfo, type ReachInfo } from './PageStage';
 import { addChoicesFor, bannersFor, onRegistryChange, overlayComponents, registryVersion, runTap, selectedActionsFor, sheetById, toolsFor, type EditorContext } from './registry';
 import { editThePages } from './scope';
 import { selectedTarget, selectTarget } from './selection';
-import { renderedLines } from './textLines';
+import { placedInk, renderedLines } from './textLines';
 import { lastEditorVisit, MOST_STEPS, nothingChanged, redoShown, rememberVisit, startOnOpen, undoShown } from './undoBar';
 import './parts';
 
@@ -178,11 +181,8 @@ export default function EditPagesScreen() {
   const shownW = Math.max(1, Math.floor(Math.min(area.w - space.md * 2, (area.h - space.sm) * aspect)));
   const shownH = Math.max(1, Math.round(shownW / aspect));
 
-  // The picture is drawn for the widest the page can be on this phone (the
-  // short side: the same either way up), so a bar coming or going or the
-  // phone turning never draws it again; while a changed page is being
-  // drawn, the last picture of it stays on show.
-  const px = Math.min(1400, Math.round((Math.min(screenW, screenH) - space.md * 2) * PixelRatio.get()));
+  // While a changed page is being drawn, the last picture of it stays on show.
+  const px = editorPictureWidth(screenW, screenH);
   const req = page ? { page, pageIndex: index, albumSize: builder.albumSize, photos: builder.uploadedPhotos, width: px } : null;
   const picture = usePagePicture(text, req, PRIORITY.editing);
   const lastShown = useRef<{ index: number; uri: string } | null>(null);
@@ -191,8 +191,11 @@ export default function EditPagesScreen() {
 
   // ── What a tap can hit, and what is selected ──
   const plan = useMemo(
-    () => (page ? pageTargets({ page, albumSize: builder.albumSize, pageIndex: index, photoCount: builder.uploadedPhotos.length, countLines: renderedLines(text) }) : null),
-    [page, builder.albumSize, index, builder.uploadedPhotos.length, text],
+    () => (page ? pageTargets({
+      page, albumSize: builder.albumSize, pageIndex: index, photoCount: builder.uploadedPhotos.length, countLines: renderedLines(text),
+      inkOf: placedInk(platform.textMeasurer()),
+    }) : null),
+    [page, builder.albumSize, index, builder.uploadedPhotos.length, text, platform],
   );
   const targets = useMemo(() => plan?.targets ?? [], [plan]);
   const selected = selectedTarget(builder.selectedElementId, index, targets);
@@ -217,9 +220,12 @@ export default function EditPagesScreen() {
     restartUndo,
   } : null;
 
+  // A second tap isn't aimed at what is now under the finger (pageTapGuard.ts).
+  const tapGuard = usePageTapGuard(selected?.key ?? null, !!sheet || picking);
   const onTap = (x: number, y: number) => {
-    if (!ctx) return;
+    if (!ctx || tapGuard.afterSheet()) return;
     const hit = hitTest(targets, x, y);
+    if (hit && EMPTY_KINDS.includes(hit.kind) && tapGuard.afterMove()) return;
     if (hit) runTap(hit, ctx);
     else select(null);
   };
@@ -230,6 +236,8 @@ export default function EditPagesScreen() {
   const goPrev = () => { if (index > 0) builder.goToPage(index - 1); };
   const goNext = () => { if (index < total - 1) builder.goToPage(index + 1); };
   const backToPreview = () => { if (router.canGoBack()) router.back(); else router.replace('/preview'); };
+  // Finished: the album from its cover. "Back to preview" goes back to this page.
+  const doneEditing = () => { askPreviewAtCover(); backToPreview(); };
 
   const canUndo = undoShown(builder.canUndo, builder.albumPages, start);
   const canRedo = redoShown(builder.canRedo, redoHeld);
@@ -361,7 +369,7 @@ export default function EditPagesScreen() {
       <View style={styles.turnRow}>
         {index > 0 && <Button label={`‹ ${PREVIOUS_PAGE}`} kind="plain" onPress={turn(goPrev)} style={styles.turnButton} testID="edit-prev" />}
         {isLast
-          ? <Button label={DONE_PREVIEW} onPress={turn(backToPreview)} style={styles.turnButton} testID="edit-done" />
+          ? <Button label={DONE_PREVIEW} onPress={turn(doneEditing)} style={styles.turnButton} testID="edit-done" />
           : <Button label={`${NEXT_PAGE} ›`} onPress={turn(goNext)} style={styles.turnButton} testID="edit-next" />}
       </View>
     </>

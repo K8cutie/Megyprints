@@ -28,8 +28,9 @@ import { BOOK } from './bookFeel';
 import PageTurnLayer from './PageTurnLayer';
 import { planTurn, type TurnFace, type TurnPlan } from './pageTurn';
 import { resolveSlotBox } from './slotGeometry';
-import { slotPhotoDomBox } from './slotPhotoFit';
-import { applyMask, isMaskId, textureOverlayCss } from './masks';
+import { slotPhotoDomBox, slotPhotoRect } from './slotPhotoFit';
+import { applyMask, isMaskId, textureOverlayCss, artBox, maskArt } from './masks';
+import { MaskArtView } from './MaskArtDom';
 import { lookCss, isLookId } from './looks';
 import CoverEditor from './CoverEditor';
 import TesterPageStamp from './TesterPageStamp';
@@ -47,6 +48,7 @@ import { chooserListSizes, CHOOSER_TITLE } from './chooserFit';
 import { trashSpot, TRASH_SIZE, type Box } from './trashSpot';
 import { ornamentFit } from './ornaments';
 import { wordArtDomStyle, resolveTextSlotAlign, freeTextBoxWidth, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
+import { needsWordArtCanvas, WordArtCanvas } from './WordArtCanvas';
 import { normalizeGradient, gradientToCss } from './gradient';
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 
@@ -428,8 +430,12 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
               style={{
                 zIndex: 1, left: slotLeft, top: slotTop, width: slotW, height: slotH, overflow: 'hidden',
                 justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
+                // A curve isn't clipped to the frame (print's renderSlotText).
+                ...(st.curve ? { overflow: 'visible' } : {}),
               }}>
-              <span style={{
+              {needsWordArtCanvas(st) ? (
+                <WordArtCanvas text={st} boxW={slotW} boxH={slotH} scale={sx} align={align} onCover={!!coverMode} />
+              ) : <span style={{
                 // Wrapped inside print's margin (CAPTION_PAD_X), so it breaks where print does.
                 width: '100%', boxSizing: 'border-box', paddingLeft: slotW * CAPTION_PAD_X, paddingRight: slotW * CAPTION_PAD_X, textAlign: align as any,
                 fontFamily: st.fontFamily || 'serif', fontSize: (st.fontSize || 24) * sx,
@@ -437,7 +443,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 textDecoration: st.underline ? 'underline' : 'none', color: st.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(st, sx, coverMode),
-              }}>{st.text}</span>
+              }}>{st.text}</span>}
             </div>
           );
         }
@@ -463,6 +469,47 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
               left={slotLeft} top={slotTop} width={slotW} height={slotH} sx={sx} zIndex={1}
               showList={!!onChooseSlot && cell >= 84} options={['Photo', 'Quote', 'Text']}
               onTap={() => onEmptyTap(idx)} />
+          );
+        }
+
+        // A mask that paints (maskArt): print's own description, in page px.
+        if (slot.art) {
+          const ab = artBox({ x: slotLeft, y: slotTop, w: slotW, h: slotH },
+            { albumSize: page.size as AlbumSizePreset, pageIndex, coverMode: !!coverMode, fullBleed: !!template.fullBleed, kx: sx, ky: sy });
+          const art = maskArt(slot.art, { x: 0, y: 0, w: ab.w, h: ab.h, ref: ab.ref });
+          const pan = { x: (page.slotOffsetsX?.[idx] ?? 0) * sx, y: (page.slotOffsetsY?.[idx] ?? 0) * sy };
+          // print turns the whole cover-fitted photo, then clips it: a turned
+          // slot needs the photo at its full fit (its size known), not cropped
+          // to the window first
+          const turned = !!slot.rotation && uploaded.width > 0 && uploaded.height > 0;
+          const fitRect = turned ? slotPhotoRect({ w: uploaded.width, h: uploaded.height }, { w: art.photo.w, h: art.photo.h }, page.slotScales?.[idx], pan) : null;
+          const pb = fitRect
+            ? { left: fitRect.x, top: fitRect.y, width: fitRect.w, height: fitRect.h, objectPosition: '50% 50%' }
+            : slotPhotoDomBox({ w: art.photo.w, h: art.photo.h }, page.slotScales?.[idx], pan);
+          return (
+            <MaskArtView key={`slot-${idx}`} slotIndex={idx} art={art} w={ab.w} h={ab.h}
+              onClick={onSlotTap ? (e) => { e.stopPropagation(); onSlotTap(idx); } : undefined}
+              style={{ zIndex: 1, left: ab.x, top: ab.y, cursor: onSlotTap ? 'pointer' : undefined }}
+              photo={
+                // print turns the photo, not the shape (renderSlotPhoto)
+                <div style={{ position: 'absolute', left: art.photo.x, top: art.photo.y, width: art.photo.w, height: art.photo.h,
+                  transform: slot.rotation ? `rotate(${slot.rotation}deg)` : undefined, transformOrigin: 'center center' }}>
+                  <img src={uploaded.previewUrl} alt="" draggable={false} className="absolute object-cover"
+                    style={{ left: pb.left, top: pb.top, width: pb.width, height: pb.height, maxWidth: 'none', objectPosition: pb.objectPosition,
+                      ...(isLookId(page.slotLooks?.[idx]) ? { filter: lookCss(page.slotLooks?.[idx] as never) } : {}) }} />
+                </div>
+              }>
+              {editable && onRemoveFromSlot && (
+                <button onClick={(e) => { e.stopPropagation(); onRemoveFromSlot(idx); }} aria-label="Remove photo"
+                  style={{
+                    position: 'absolute', ...trashSpot(ab, qrBoxes), zIndex: 6, width: TRASH_SIZE, height: TRASH_SIZE,
+                    borderRadius: '50%', background: 'rgba(45,45,45,0.65)', border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                  <Trash2 size={16} color="white" />
+                </button>
+              )}
+            </MaskArtView>
           );
         }
 
@@ -561,7 +608,8 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           className={`absolute ${onTextTap ? 'cursor-pointer' : 'pointer-events-none'}`}
           onClick={onTextTap ? (e) => { e.stopPropagation(); onTextTap(t.id); } : undefined}
           style={{
-          zIndex: 3, left: t.x * sx, top: t.y * sy,
+          // Words placed by hand go on the page after its captions, so they print over them.
+          zIndex: t.placed ? 6 : 3, left: t.x * sx, top: t.y * sy,
           width: freeTextBoxWidth(t) * sx,
           transform: `rotate(${t.rotation || 0}deg) scale(${t.scaleX ?? 1}, ${t.scaleY ?? 1})`,
           transformOrigin: 'top left', fontFamily: t.fontFamily || 'serif',
@@ -570,10 +618,17 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
           // Underline + 1.25 line rhythm, matching the Fabric editor and print —
           // free text was the one kind whose underline showed only in the editor.
           textDecoration: t.underline ? 'underline' : 'none', lineHeight: TEXT_LINE_HEIGHT,
+          // Lines typed apart stay apart, and a long word breaks, as print's wrap does.
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word',
           display: 'flex', alignItems: 'center', justifyContent: t.alignment || 'center',
           textAlign: (t.alignment || 'center') as any, opacity: (t.opacity ?? 100) / 100,
           ...wordArtDomStyle(t, sx, coverMode),
-        }}>{t.text}</div>
+          // A two-colour fill or a curve is print's own drawing, on a canvas (words placed by hand).
+          ...(needsWordArtCanvas(t) ? { minHeight: (t.fontSize || 24) * sx * TEXT_LINE_HEIGHT } : {}),
+        }}>{needsWordArtCanvas(t) ? (
+          // A free text's canvas is as tall as its lines (WordArtCanvas measures them).
+          <WordArtCanvas text={t} boxW={freeTextBoxWidth(t) * sx} boxH={(t.fontSize || 24) * sx * TEXT_LINE_HEIGHT} scale={sx} align={t.alignment || 'center'} onCover={!!coverMode} free />
+        ) : t.text}</div>
       ))}
       {/* Template text boxes. Filled → formatted text clipped to the box; empty →
           faint tap hint. Tapping opens the text editor (onTextSlotTap). */}
@@ -622,11 +677,13 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
             <div key={`tslot-${i}`} className="absolute flex items-center"
               onClick={onTextSlotTap ? (e) => { e.stopPropagation(); onTextSlotTap(i); } : undefined}
               style={{
-                zIndex: 5, left: boxLeft + offL, top: boxTop + offT, width: boxW, height: boxH, overflow: 'hidden',
+                zIndex: 5, left: boxLeft + offL, top: boxTop + offT, width: boxW, height: boxH, overflow: boxed.curve ? 'visible' : 'hidden',
                 justifyContent: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
                 cursor: onTextSlotTap ? 'pointer' : undefined,
               }}>
-              <span style={{
+              {needsWordArtCanvas(boxed) ? (
+                <WordArtCanvas text={boxed} boxW={boxW} boxH={boxH} scale={sx} align={align} onCover={!!coverMode} />
+              ) : <span style={{
                 // Wrapped inside print's margin (CAPTION_PAD_X), so it breaks where print does.
                 width: '100%', boxSizing: 'border-box', paddingLeft: boxW * CAPTION_PAD_X, paddingRight: boxW * CAPTION_PAD_X, textAlign: align as any,
                 fontFamily: boxed.fontFamily || 'serif', fontSize: (boxed.fontSize || 24) * sx,
@@ -634,7 +691,7 @@ export function PageView({ page, photos, singleW, H, pageIndex, onSlotTap, onTex
                 textDecoration: boxed.underline ? 'underline' : 'none', color: boxed.color || '#2D2D2D',
                 lineHeight: TEXT_LINE_HEIGHT, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                 ...wordArtDomStyle(boxed, sx, coverMode),
-              }}>{boxed.text}</span>
+              }}>{boxed.text}</span>}
             </div>
           );
         }

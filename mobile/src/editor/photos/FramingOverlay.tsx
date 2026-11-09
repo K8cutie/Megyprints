@@ -195,17 +195,21 @@ export function FramingOverlay({ ctx, scale }: OverlayProps) {
     <View style={[targetStyle(t, scale), styles.hit]} {...finger.panHandlers} testID="photos-framing">
       {shown && (
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+          {/* Clipped, level, to the box the photo is drawn in (a mask that
+              paints keeps it in its window, so the photo never covers the
+              film or the card while the finger moves it); turned inside. */}
           <View style={{
-            position: 'absolute',
+            position: 'absolute', overflow: 'hidden',
             left: (cell.box.x - t.box.x) * scale, top: (cell.box.y - t.box.y) * scale,
             width: cell.box.w * scale, height: cell.box.h * scale,
-            ...(cell.rotation ? { transform: [{ rotate: `${cell.rotation}deg` }] } : {}),
           }}>
-            <Image
-              source={{ uri: photo!.previewUrl }}
-              style={{ position: 'absolute', left: shown.cx - shown.w / 2, top: shown.cy - shown.h / 2, width: shown.w, height: shown.h, transform: [{ scale: shown.zoom }] }}
-              contentFit="fill" transition={0} cachePolicy="memory-disk"
-            />
+            <View style={[StyleSheet.absoluteFill, cell.rotation ? { transform: [{ rotate: `${cell.rotation}deg` }] } : null]}>
+              <Image
+                source={{ uri: photo!.previewUrl }}
+                style={{ position: 'absolute', left: shown.cx - shown.w / 2, top: shown.cy - shown.h / 2, width: shown.w, height: shown.h, transform: [{ scale: shown.zoom }] }}
+                contentFit="fill" transition={0} cachePolicy="memory-disk"
+              />
+            </View>
           </View>
           <View style={[StyleSheet.absoluteFill, styles.outline, t.shape === 'ellipse' && { borderRadius: (Math.max(t.box.w, t.box.h) * scale) / 2 }]} />
         </View>

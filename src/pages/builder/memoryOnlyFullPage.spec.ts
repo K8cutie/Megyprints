@@ -210,7 +210,9 @@ describe('no layout change moves a memory off its full page', () => {
     expect(builder.canUndo).toBe(false);
   });
 
-  it('adding a video memory to a masked, Studio-moved full page makes the photo full bleed again (its filter stays)', async () => {
+  // Owner, 2026-11-04: "i added a mask on a picture then i added the QR the mask
+  // disappeared, and you need to re apply the mask".
+  it('adding a video memory to a masked, Studio-moved full page: the moved frame goes, the photo keeps its mask and its filter', async () => {
     await tap((b) => b.goToPage(3));
     expect(builder.canAddMemoryQr).toBe(true);
     await tap((b) => b.applyMemoryQr(memory('MEMNEW'), 'bl'));
@@ -218,7 +220,17 @@ describe('no layout change moves a memory off its full page', () => {
     expect(p.templateId).toBe(qrBadgeTemplate('8x8', 'bl')!.id);
     expect(memorySpots(p)).toEqual(['badge:MEMNEW']);
     expect(p.slotGeometries ?? []).toEqual([]);
-    expect(p.slotMasks ?? []).toEqual([]);
+    expect(p.slotMasks).toEqual(['heart']); // the photo's only: none on the QR's frame
+    expect(p.slotLooks).toEqual(['bw']);
+  });
+
+  it('moving the QR to another corner keeps the mask too', async () => {
+    await tap((b) => b.goToPage(3));
+    await tap((b) => b.applyMemoryQr(memory('MEMNEW'), 'bl'));
+    await tap((b) => b.setMemoryQrCorner('tr'));
+    const p = builder.albumPages[3];
+    expect(p.templateId).toBe(qrBadgeTemplate('8x8', 'tr')!.id);
+    expect(p.slotMasks).toEqual(['heart']);
     expect(p.slotLooks).toEqual(['bw']);
   });
 

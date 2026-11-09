@@ -21,6 +21,8 @@ export const NO_ORDERS = 'No orders yet.';
 
 /** A cancelled order (the website's line; "message us" is a button here). */
 export const CANCELLED_NOTE = "This order was cancelled. Your album is still saved, so you can order it again. If that's a surprise, message us.";
+/** The same order after its album was deleted in My albums: nothing is saved to order again. */
+export const CANCELLED_NOTE_NO_ALBUM = "This order was cancelled. If that's a surprise, message us.";
 /** A cancel the shop's database refused: paid, sent, or already closed. */
 export const CANCEL_GONE = 'This order can no longer be cancelled here. If you already sent the money, message us.';
 export const CANCEL_FAILED = 'Could not cancel the order. Please try again.';
@@ -30,6 +32,9 @@ export const cancelYes = (orderNumber: string): string => `Yes, cancel order ${o
 
 /** A tester-code order: nothing is charged, printed or sent. */
 export const testOrderNote = (code: string): string => `You used the tester code ${code}, so nothing is charged. Thank you for testing Megy Prints!`;
+/** A tester-code order that stopped half-way. It counts as unpaid (3 stop new
+ *  orders, 0042), and with its album deleted checkout can no longer finish it. */
+export const UNFINISHED_TEST_NOTE = "This test order didn't finish. If you don't need it, you can cancel it.";
 
 /** The box on an order waiting for payment (the website's "Send ₱X by bank transfer to finish"). */
 export function payHeadline(total: number | null): string {
@@ -107,6 +112,6 @@ export function orderView(o: AppOrder): OrderView {
     numberLine: `Order ${o.order_number}`,
     placed: placedLine(o),
     price: price !== null ? peso(price) : '',
-    payBy: track.awaitingPayment ? payByLine(o.created_at) : null,
+    payBy: track.awaitingPayment ? payByLine(o.created_at, o.album_id) : null,
   };
 }

@@ -3436,6 +3436,9 @@ both links on the start screen and in the menu, and the Sign in line, open
 the live pages; Back comes back to the app. The Privacy page's ML Kit
 paragraph is website PR #264. A **new APK** is needed.
 
+**Since 2026-11-09 the links open the app's own screens**, not the browser
+("Privacy Policy and Terms of Service as the app's own screens", below).
+
 ## main merged in; the pay card and the cover photo row (2026-11-03, `feat/port-main-sync`, 2.0.1)
 
 The owner released 2.0.0 (code 100) to the testers and said "Merge what
@@ -3513,6 +3516,952 @@ Home, then the notification). 2.0.0 (code 100) was never uploaded.
 
     What's new:
     • The app tells you when a new version is ready, so you always have the latest
+
+## 2.0.3: the beta testers' fixes (2026-11-04, `fix/port-crew-round1`)
+
+Owner: "all the fixes make it 2.0.3". The Overseer beta testers (six
+personas on two emulators, a local test database) and Mother, who
+reproduced each defect herself before it was fixed and checked each fix on
+the phone after:
+
+- **"Your cover" on Your order showed an empty "Cover" box.** The cover step
+  puts the photo on the cover as its background; checkout read only the
+  cover's slots (and its test expected the empty box). The card now draws
+  the cover as it prints, as the Preview and the website's Order Summary do
+  (`CoverThumb.tsx`, `orderStart.coverPhotoUri`).
+- **One Back from Your order wiped the name, phone and address.** The form is
+  kept as the website keeps it (`lib/checkoutSession` rules: the same album,
+  the same account, a guest's goes to whoever signs in; forgotten on sign
+  out), in memory only (`src/lib/checkout/formKeep.ts`).
+- **Back in the photo picker dropped every picked photo without asking.** It
+  asks "Add the 50 photos you picked?" with Leave them out and Add 50 photos
+  (`src/lib/pickLeave.ts`, expo-router's `usePreventRemove`).
+- **The start screen's "how it works" slides cut their words at the right
+  edge on Android.** The words beside the picture get the rest of the slide
+  outright; each slide is the exact width (`HomeCards.tsx`).
+- **Signed out with Your order open, the next account saw the typed name,
+  phone and address** (Mother, round 2: the sign-in ran out on the form).
+  Auth forgot the form, then the open screen kept it again as a guest's. An
+  account going away now clears the fields and keeps nothing (`order.tsx`;
+  the website's `Order.tsx` had the same shape, fixed with it).
+- **"Included with your album" said "5 years of memory hosting" beside a
+  20-year order** (owner, from the app). It now reads "Memories stay live
+  for 5 years (you added 15 more years)", in the price line's and the
+  picker's words, and the album line says "7 living-memory QRs" like the box
+  under it (`pricing.includedHostingLine`, shared with the website).
+- **My albums was a list you couldn't open** (owner: "Why cant i open the
+  albums is that just a list"). Phase 1 made it read-only. Each album now
+  says Open: tapping it loads it from the account with the website's own
+  `loadAlbum` (what `/builder?album=<id>` does) and goes where "Continue my
+  album" goes, its pages once made. While it loads the card says
+  "Opening…"; a failed read stays on My albums and says to check the
+  phone is online (`src/app/albums.tsx`). Photos that aren't on this phone
+  show the missing-photos note the editor already has.
+- **Round 2: all six testers reached checkout** (round 1: none). Mother
+  checked the round-1 fixes on the phone (all fixed; the one regression is
+  the sign-out item above) and reproduced ten more, each fixed with a test
+  that failed first:
+  - Signing in from Home with an album made signed out: My albums said "No
+    albums yet". The save at sign-in lived only in the Preview; it is the
+    whole app's now (`accountSave.useAccountSave` in `BuilderProvider`), and
+    My albums reads the list again when a save lands.
+  - Place order again after a failed send could never finish: the cover was
+    sent again (409 at once, before its bytes were read) and the pages file
+    after it on the same connection got 502 every time. A file a try sent is
+    not made or sent again (`sendOrder` `sent`), the pages file gets 3 tries
+    like the cover, and the form opens at the words under Place order (they
+    were below the fold). No connection says so in plain words.
+  - Signed in on Your order: the first read of the album came before its
+    save, and "isn't saved to your account" stayed for good. It is read
+    again when the save lands, and Place order reads it again and goes on.
+  - A free test order that stopped half-way said "To finish it, pay that
+    order" (nothing to pay). It says it didn't finish, and Place order with
+    the code finishes that same order (an unfinished one counts toward the 3
+    unpaid orders, 0042). The website has the same words; not checked there.
+  - Place order waited for Android's notification question: Home while it
+    was up held the order until you came back. The order goes on now.
+  - "Sign in first" by the tester code has its Sign in button.
+  - A double tap on Next skipped Album size (the second tap hit the next
+    screen's Next as it slid in). Each step's way forward goes once per
+    visit, and a screen just on top ignores it for 0.5 s (`useOncePerVisit`).
+  - Closing Android's photo question without answering left "Photo access
+    is off" for good (Expo saves it as blocked). It still offers to ask
+    again, until Android answers at once without asking.
+  - "Add the 50 photos you picked?" showed a blank gap (an empty Android
+    message): it has a line. The cover row said "best ones first" with no
+    photo check in the app: it says what it is. "Replace photo" opened a
+    sheet titled "Add a photo": it says Replace photo.
+  Left as designed (Mother: by design): a cover with no photo is allowed (a
+  title-only cover); "Pick 1 photo for the front cover" reads as a must.
+  Owner's call.
+- **A shared phone** (found in my own sign-in save before round 3): another
+  account signing in gets a fresh album, and the sign-in save no longer
+  sends the old account's pages into the new account (`useAccountSave`
+  saves only the album its render shows).
+- **Test builds for a server on this PC** (a plain-http address in
+  `.env.local`) may talk plain http; the Play build refuses such an address
+  (`plugins/withLocalServer.js`). Round 1 of the testers could not sign in
+  at all without it.
+- **Version 2.0.3, code 103.** Same permissions as 2.0.1 and 2.0.2. It has
+  everything in 2.0.2: if 2.0.2 was never uploaded, upload 2.0.3 instead
+  (as 2.0.0 was skipped).
+
+### Release notes 2.0.3 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Your order shows your album's real cover
+    • Going back from checkout keeps your name and address
+    • The photo picker asks before dropping photos you picked
+    • Your order says clearly how long your videos stay live
+    • Tap an album in My albums to open it
+    • Albums made before you sign in now show in My albums
+    • Place order again finishes an order that stopped
+    • A double tap on Next no longer skips a step
+    Also new:
+    • The app tells you when a new version is ready
+
+(Drop the last line if 2.0.2 went out first: it is 2.0.2's.)
+
+### Known in 2.0.3 (round 3 of the testers; to be fixed in 2.0.4)
+
+The owner asked for 2.0.3 to be built from the round 2 fixes as they were,
+and round 3's findings to go into 2.0.4. Mother's round 3 on the 2.0.3 test
+build found:
+- **Opening an album from My albums can overwrite the album open before it**
+  (its pages and size become the opened album's), when the opened album's
+  photos are on this phone. The sign-in save sees the new pages while the
+  old album id is still set (`loadAlbum` waits for the photos first).
+- A shared phone: the photos one account picked stay on the phone, and
+  "Continue my album" carries them into the next account's album.
+- After opening an album, "Add the photos" lists the photos of the album
+  open before it.
+- Opening an album re-saves it and the album left behind ("Changed just now").
+- With a stuck test order, applying the tester code after the "didn't
+  finish" question leaves the question up and hides Place order.
+- Finishing a stopped order after leaving checkout sends the cover again,
+  and the pages file after it can wait about 40 s (it still goes through).
+- "Ask for photo access again" can be a dead tap when Android is slow
+  (over 0.4 s); while blocked, it comes back on every visit; a closed
+  question says "Photo access is off".
+- A double tap on "Make my album" opens the Preview at page 1, not the cover.
+- Small words: an empty frame says "Click to add"; signed out, "Start a new
+  album?" says the album is lost though it is in the account.
+
+## 2.0.4: what the testers' round 3 found (2026-11-04, `fix/port-crew-round3`)
+
+Owner: "Build 2.0.3 and put this latest in 2.0.4". 2.0.4 is 2.0.3 plus
+fixes for round 3 of the beta testers (Mother, on the 2.0.3 crew build).
+Each fix has a test that failed first.
+- **Opening an album never writes it over the album that was open.**
+  `loadAlbum` puts the pages in first, and the id only once the phone has
+  found the photos. The sign-in save (`useAccountSave`) saw the new pages
+  with the old id and saved them there. It doesn't save while an album
+  opens, or pages that came with a new id. Opening an album no longer
+  re-saves the album left behind when nothing in it changed (website
+  `loadAlbum`, flushCloud's rule), so untouched albums stop showing
+  "Changed just now".
+- **The picked photos belong to the album, not the phone**
+  (`draftFollowsAlbum`). When the phone's album becomes another one, the
+  picked photos become that album's photos on this phone:
+  - none for a fresh album (another account signing in);
+  - the opened album's own once it is in.
+
+  Before, another account's "Continue my album" carried the last person's
+  picks, and an opened album listed the album before it's photos as its own.
+- **With a stuck test order, the tester code used after the "didn't finish"
+  question** hides the question and brings Place order back. The question
+  says "a second order", as its button does.
+- **Finishing a stopped order later never sends its cover again.** The files
+  sent are kept on the phone for 6 hours (`sentFiles`), by names that carry
+  the order's id. Before, the duplicate cover answer broke the connection,
+  and the pages file waited about 40 s for a 502.
+- **The Preview:**
+  - "Next page" ignores taps for 0.5 s after the Preview comes on
+    (`useJustArrived`), so a double tap on "Make my album" opens the cover.
+  - "Order this album"'s answer is scrolled into view.
+- **Photo access:**
+  - Whether Android showed its question is seen by how long the app was
+    away for it: under 1 s means no question was shown
+    (`QUESTION_SHOWN_MS`).
+    - Android opens its permission screen on every ask, so the app always
+      goes to the background and loses focus. With no question it is back
+      in 130-360 ms (round 4, Android's event log).
+    - Round 3's 0.4 s timer timed the whole ask: a cold phone took 556 ms,
+      which made a dead tap.
+    - The first 2.0.4 build took any trip to the background as a question,
+      so every tap was dead.
+  - "Won't ask" is remembered until access changes, and the screen says
+    "Your phone will not ask again."
+  - A question that was only closed says "not allowed", not "off".
+- **An empty frame says "Tap to add:".**
+- **Round 4 (Mother, on the first 2.0.4 build):**
+  - An album opened from My albums is noted as the account's own copy, so
+    the next app start doesn't save it again ("Changed just now").
+  - Owner: "If signed out theres a huge awkward space at the bottom." Home
+    now centres its cards when it is shorter than the screen, as the
+    website's home does (`HeroSection`). Signed in, it scrolls as before.
+  - An order file that gets no answer is a failed try, not an endless
+    wait. If the connection dropped under the pages file, the screen said
+    "Sending your print file…" for 13+ minutes. Each upload try now has a
+    time limit (`uploadTimeLimitMs`): a minute plus the file at 1 Mbit/s,
+    about 2.5 min for an 11 MB file. After three tries, the plain words.
+  - An album opened from My albums starts at its cover, not at the page
+    where the previous album was left.
+  - With photos missing, "Order this album" says so once: its answer
+    takes the place of the note already on the Preview.
+  - Left as is (owner's call): signed out, "Continue my album" still opens
+    the last account's album on the phone. This was already the case
+    before 2.0.4.
+- **Round 4b (Mother, then the test written for what she saw):**
+  - "Start a new album" puts away an album nobody changed without saving
+    it again (shared `reset`, the same rule as `loadAlbum`), so it no
+    longer shows "Changed just now".
+  - Another account signing in never saves the album on the phone into
+    the NEW account. reset is told whose album it is putting away (the
+    layout effect's `owner`). Before, it went by the saved draft's
+    account, and when that said none it fell back to `draftAccountRef`.
+    That ref is already the new account's by then. The saved draft says
+    none when the album was begun signed out and not saved again (30 s
+    debounce) before the switch. The website had the same hole
+    (`sharedDevice.spec.ts`). The app's account tests hid it: their
+    made-up saved sign-in was always "nobody", so reset never saved
+    there. It now follows who is signed in.
+  - Round 4c, Mother on the emulators:
+    - Both defects reproduced on the old build (r4c):
+      - lito's account got a byte-identical copy of carlo's "Leak Check
+        Old".
+      - Bea's 22nd, untouched, was PATCHed on "Start a new album".
+    - The same steps on r4d:
+      - No row for lito.
+      - Untouched albums kept their updated_at.
+      - A change still went out in one PATCH.
+      - A guest's album still went to the account they signed in with,
+        once.
+  - Seen, left for later (it was the same before 2.0.4, and the website
+    has it too): an album with a name and no photos IS saved to the
+    account by the background save (`flushCloud` keeps named albums).
+    Yet "Start a new album?" says "This one has no photos yet, so it
+    won't be kept."
+- Left as is:
+  - "Start a new album?" signed out: to say "it stays in your account", the
+    app must know the latest changes reached the account. It doesn't know
+    that while signed out. The words err on the safe side, and the website
+    says the same.
+  - The "Open order" page of an unfinished test order (website
+    `orderTracker` words). The finish no longer needs that detour.
+- **Version 2.0.4, code 104.** Same permissions as 2.0.3.
+
+### Release notes 2.0.4 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Opening an album keeps your other albums as they were
+    • Your album and photos stay yours when someone else signs in on your phone
+    • Your tester code finishes a test order that stopped
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    • Albums opened from My albums start at the cover
+    • "Order this album" shows its answer on screen
+    • Empty frames say "Tap to add"
+    • Home sits in the middle when you're signed out
+
+497 characters (Play's limit is 500). Not "Albums open on their cover": the
+owner found (2026-11-04) that Continue / Preview my album still opens on
+the page last seen, often the last page. That is on his bug list for the
+next build.
+
+### Release notes 2.0.4 when uploaded ALONE (2.0.2 and 2.0.3 skipped)
+
+Recommended (2026-11-04): 2.0.3 has round 3's HIGH defect (opening an
+album from My albums can overwrite the one open before it), and its notes
+advertise that very feature. 2.0.4 has every 2.0.2 and 2.0.3 change plus
+those fixes, so testers go 2.0.1 → 2.0.4 and the notes cover all three:
+
+    From tester feedback:
+    • Tap an album in My albums to open it at its cover
+    • Albums made before you sign in now show in My albums
+    • Your albums stay yours when someone else signs in on your phone
+    • Your order shows your album's real cover
+    • Going back from checkout keeps your name and address
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    • Empty frames say "Tap to add"
+    Also new:
+    • The app tells you when a new version is ready
+
+493 characters.
+
+## 2.0.5: speed, and the page flip switch (2026-11-04, `fix/port-speed`)
+
+Owner, testing 2.0.1 on a Galaxy S25: "most importantly performance
+issue. can you do something about it", then "Turn off the page flip
+animation. It works fine on my phone but not for everyone or add a button
+to turn it off. On by default."
+
+**Measured first** on the emulator, with the 2.0.4 test build and a
+150-photo album at the S25's 12 MP (65 pages). The script is
+`scratchpad/crew/make_big_roll.py`. Figures are CPU time per thread, from
+/proc, plus timers in a throwaway build.
+- Page turn to a page drawn for the first time: ~130 ms of the JavaScript
+  thread, ~390 ms for the whole app. To a page already drawn: ~41 ms.
+- Other screens left open under the Preview add almost nothing (130 ms
+  with only Home + Preview against 140 ms with the whole wizard). So the
+  whole-app builder re-rendering every screen is not the cost.
+- Drawing a new page: photos loaded 57-187 ms (wall, mostly native), drawn
+  33-102 ms (~35 ms a photo, JS thread), JPEG 11-16 ms, file 1-2 ms. The
+  album-changed check (`localAlbumKey`) runs 6-10 ms after every turn.
+- "Change layout": 9 pictures at 20-51 ms each, ~390 ms of JS in all.
+- Home, untouched: ~26% of a CPU core, almost all drawing. The background
+  photo's slow zoom (`homeMotion` kenBurns) redraws the whole screen every
+  frame. **Owner's call, not changed:** stop that zoom on the phone, or
+  keep it.
+
+**Changed:**
+- **Pages on screen are drawn with Skia's own sampling.** PageDrawer's
+  `screen` option is used only by pageImages `drawPageImage`: the Preview,
+  the editor, the cover step and layout pictures.
+  - Chrome's sampling (sampling.ts: a halving and an older bilinear, both
+    runtime shaders) is for the print file. The phone's CPU runs those
+    shaders interpreted.
+  - The print path (`renderPrintPage`, phoneSend) and the golden tests are
+    unchanged.
+  - Test `pageImagesSpeed`: the screen draw never calls the print shaders,
+    and the print draw still does. The two look the same at screen size:
+    mean difference under 1.5 levels, under 1% of channels more than 24
+    apart.
+- **"Page flip animation" switch** (`lib/pageFlip.ts`), under the book in
+  the upright Preview.
+  - It is on by default and kept on the phone (`megy-2.0-page-flip`).
+  - Off: a tap shows the next page at once, with no leaf and no wait for
+    the leaf's pictures. A swipe turns the page at once, with no leaf
+    following the finger. Sideways too, where the switch itself is not
+    shown.
+  - Tests are in previewScreen.
+  - On the emulator: a screenshot 0.3 s after Next shows the leaf mid-turn
+    with the switch on, and the next page already there with it off.
+    "Off" survives closing the app.
+
+**After** (same album, same steps, caches cleared):
+
+| | 2.0.4 | 2.0.5 |
+|---|---|---|
+| Drawing a new page (1-3 photos), Preview | 33-102 ms | 17-43 ms |
+| Drawing a new page, editor | 35-97 ms | 21-40 ms |
+| One "Change layout" picture | 20-51 ms | 1-4 ms |
+| Page turn to a new page (JS thread) | ~130 ms | ~96 ms |
+| Opening "Change layout" (JS thread) | ~390 ms | ~130 ms |
+
+**Still there** (next, if wanted):
+- The JPEG of each drawn page (11-16 ms).
+- Photo copies at 1280 px even for small frames.
+- The album-changed check after every page turn.
+- Home's background zoom.
+
+### Release notes 2.0.5 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Pages show faster when you turn them and when you edit
+    • "Change layout" opens about three times faster
+    • New: "Page flip animation" under your album in the Preview. Turn it off and pages change at once (it is on unless you turn it off)
+
+260 characters.
+
+### Release notes 2.0.5 when uploaded ALONE (2.0.2-2.0.4 skipped)
+
+Testers on 2.0.1 go straight to 2.0.5, so the notes cover all four
+versions:
+
+    From tester feedback:
+    • Pages show faster, and "Change layout" opens 3x faster
+    • New: turn off "Page flip animation" under your album in the Preview
+    • Tap an album in My albums to open it at its cover
+    • Albums made before you sign in now show in My albums
+    • Your albums stay yours when someone else signs in on your phone
+    • If the internet drops while you order, the app says what to do
+    • "Ask for photo access again" always answers
+    Also new:
+    • The app tells you when a new version is ready
+
+490 characters. The Play file: `Desktop\megyprints-2.0.5-code105-play.aab`
+(sha256 488df4ab…92f2, code 105 / 2.0.5, upload key 53:1A…C0:AE, the same
+permissions as 2.0.4). Its APK opened Home on the emulator, no crash.
+
+## 2.0.6: the owner's list, from testing 2.0.1 on his phone (2026-11-04, `fix/port-owner-list`)
+
+Owner, with 2.0.5 in review: "ok begin 2.0.6 and add" these five. Each has a
+test that failed first. Each was walked on the emulator with a real album:
+100 photos at 12 MP, signed in on the local test database.
+
+- **"Add to this box" pops up by itself (`pageTapGuard.ts`).** Owner: "the
+  combo box add photo quote own text appeared during editing". Reproduced
+  two ways, both a second tap landing on an empty frame it wasn't aimed at:
+  - A tap on a layout closes the sheet at once, and a second tap falls
+    through to the page under it. It still happened with 0.7 s between the
+    taps.
+  - A tap on a photo selects it, its buttons appear, and the page shrinks
+    and moves up about 50 px, so a second tap on the photo's lower edge is
+    on the empty frame below.
+
+  Now, after a sheet closes the page ignores a tap for 0.8 s. After the page
+  moves it ignores for 0.7 s only a tap that would open the chooser, so
+  another photo can still be tapped at once. A deliberate tap on an empty
+  frame still opens it, and TalkBack's tap goes straight through. On the
+  emulator, the same taps at every gap no longer open it.
+
+  What the owner's brother did wasn't seen, so this is the reproduced cause,
+  not a confirmed match. If the box still appears by itself, the steps
+  before it are what's needed.
+- **A video QR keeps the photo's mask** (`fullBleedPhoto`, shared with the
+  website). Adding a QR, or moving it to another corner, wiped the mask, so
+  it had to be applied again. The photo's mask stays now, on the photo's
+  frame only; a moved frame still goes (it printed the QR as a big square).
+  A layout change that isn't already a badge page still drops it, as the
+  filter is dropped: a mask by slot number isn't that photo's. The page plan
+  already drew this page right (masks are per frame). On the emulator: circle
+  mask, then a real video QR, and the album row holds `["circle"]` on
+  `qr-badge-8x8-bl`. **Website too** when this reaches main.
+- **The Preview opens on the cover (`previewCover.ts`).** It showed the page
+  last seen, and it stays alive under the editor. "Done — Preview my album"
+  on the last page came back on the last page. These now open the Front
+  cover: "Done — Preview my album", a step going to the Preview
+  (`useGoToPreview`), and "Continue my album". "Back to preview" still goes
+  back to the page being worked on, by choice: it says "back". Coming back
+  from an order also stays where it was.
+- **Cover photos are a grid (`CoverPhotoGrid`, app only; the website keeps
+  its row).** Owner: "just show all the photos to choose from not a side
+  scrolling thing". Five across, every photo, and still ABOVE the cover
+  (owner, 2026-11-01: "should put the pics on top"). So it scrolls inside a
+  height of its own (3.5 rows on the cover step, 2.5 on Design your cover),
+  and a tap shows on the cover right under it.
+- **"Choose a layout" fits when sideways (`useSheetBodyWidth`).** Tiles were
+  measured from the screen, not the side panel: a row of 882 points in a
+  panel with 292 of room. The sheets measure their own room now, less the
+  system's buttons, and a list fills the panel's height. "Add a photo" had
+  the same fault and is fixed the same way.
+- **Mask, Filter and Page colour stay open (`EditorSheet` `live`).** Owner:
+  "When applying mask or filter or any edit in the picture dont let the
+  editor close". A pick applies and the sheet stays, so another can be tried;
+  the ✕ closes it. The page isn't dimmed, and the sheet takes at most 42% of
+  the height, so the page shows above it. Sideways it is the side panel as
+  before. On the emulator, upright and sideways: Fade down, then Circle, the
+  tick moves, the sheet stays.
+- **Delete an album in My albums.** Owner: "ive created so much test album",
+  "add it", "just add a warning that album deletion is permanent". Each card
+  has Delete. It asks "Delete this album?" and says it is permanent and that
+  orders stay, with Keep it and Delete album. It uses the website's own delete
+  (`useAlbumSyncWith`). Deleting the album on the phone lets the phone's copy go
+  too (`letDeletedAlbumGo`, the draft), so no save brings it back. On the
+  emulator: Keep it leaves the row; Delete album removes the row and the card;
+  the album on the phone stays gone after a wait and a restart, and Home says
+  Start Creating. An order keeps its own copy (`album_snapshot`), and
+  `album_id` goes null (0002, the only table that points at albums).
+- **An order whose album was deleted says only what is true.** "Your album is
+  still saved" and "your album stays saved" are left out when `album_id` is
+  null (`CANCELLED_NOTE_NO_ALBUM`, `payByLine`). Paying and cancelling it still
+  work.
+- **A test order that didn't finish can be cancelled (`order-unfinished-test`).**
+  Owner: "also cancelling an order". Cancel was already there for an order
+  waiting for payment, and walking it found the gap: a MEGYTEST order saves its
+  row first and is marked paid last, so closing the app in between leaves it
+  unpaid. Its page had no Pay and no Cancel, yet it counts toward the 3 unpaid
+  orders, and that message says "cancel one in Your orders". Checkout can finish
+  one only through its album, and Delete takes that way out. The database already
+  allowed the cancel; only the button was missing. On the emulator, with its
+  album and without: Keep it changes nothing, Yes gives `cancelled`, by
+  `customer`. An ordinary unpaid order cancels the same. **The website has the
+  same gap** (`MyOrders.tsx`), not changed here.
+- **Version 2.0.6, code 106.**
+
+### Release notes 2.0.6 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Cover photos are a grid you scroll down, not one long row
+    • Done on your last page: your album opens on its cover
+    • "Choose a layout" fits when the phone is sideways
+    • A photo keeps its mask when you add a video QR
+    • A quick second tap no longer opens "Add to this box"
+    • Mask and Filter stay open, so you can try each one
+    • Delete an album in My albums
+    • Cancel a test order that didn't finish
+
+418 characters.
+
+## 2.0.7: try each change without the list closing, and WordArt (2026-11-05, `fix/port-stay-open-words`)
+
+Owner, testing 2.0.6 on his phone: "its a hassle to try on changes then it closes
+automatically", and "id like to see the text box on one half of the screen and
+the input box on the other half... Its basically the same format as the mask."
+He is still going through the list of similar places; "prep 2.0.7 aab" came with
+Edit text, Change layout and WordArt done. Not in it: Replace photo, the cover
+title's font list, quotes, and a tap on the page closing Mask and Filter.
+
+- **The page stays in view (`text/WordsOnPage`).** The page is above, the box being
+  edited outlined, with the words on it as they change; the box to type in and
+  the format bar are below. Sideways the page is on the left and the rest in a
+  panel down the right. Android's full-screen typing box is off
+  (`disableFullscreenUI`), so typing sideways keeps the page in view too.
+- **It is the page renderer's own picture, of the page as Done would leave it**
+  (`pageWithWords`). The website's three saves are plain functions now
+  (`pageWithBoxText`, `pageWithSlotText`, `pageWithTextUpdate` in
+  `useBuilderState`), so the rules aren't copied, and a test holds the page shown
+  to the page saved. Website behaviour is unchanged. Nothing is saved until Done,
+  and ✕ leaves the album as it was. A button draws at once; typing waits for a
+  180 ms pause (`TYPING_PAUSE_MS`). No change draws nothing new: it opens on the
+  picture the editor already has (`editorPictureWidth`).
+- **Font and colour stay open after a pick**, and so do Any color's shades (the
+  cover title's too: same picker). A list takes the keyboard's place; a tap on the
+  typing box brings the keyboard back and puts the list away; a tap on the page
+  puts either away. Upright, the box, a list and the bar take Mask's 42% of the
+  height (three rows of a list at least).
+- **Walked on the emulator (1080×2400), real photos:** typing with the keyboard up;
+  a bundled font, a font fetched from the internet and a colour, each with the list
+  open; size and bold; Any color's shades brought into view; "Too long" with "Make
+  it fit"; Back closes a list first; ✕ leaves the words; Done saves what was shown;
+  sideways with a list and with the keyboard; a small phone (720×1280, density 320).
+  Not walked: words in a frame and a free text (covered by the tests).
+- **Change layout stays open too (`LayoutSheet`, the builder's `tryPageLayout`).**
+  Owner: "Go work on change layout". A pick shows on the page and the sheet stays,
+  short and undimmed like Mask (`live`), three layouts across upright, two in the
+  side panel. The list and its pictures stay as the sheet opened, so tiles don't
+  jump and nothing is drawn again. Each try starts from that same page, so a tile
+  is what a tap gives; the first layout brings the page back as it was, zoom too;
+  all the tries are one Undo, so trying many can't push the rest out of the
+  20-step history. A layout that can't hold every photo or caption still asks and
+  closes after the answer ("Choose another layout" keeps the place in the list).
+  On the emulator: try, back to the first, one Undo; the question, Back, a new
+  page; a tap on the page closes it; sideways.
+- **WordArt on the cover title.** Owner: "I want the text editing in the coverpage
+  to have that wordart capability"; he took the recommendation, looks then shapes.
+  - **In the rules (`wordArtRules`, shared):** `fillTo` (two-colour fill, top of
+    the line to its bottom), `glow` (a shadow with no offset in its own colour,
+    cast `WORDART_GLOW_PASSES` times, since one hardly shows on thin letters),
+    `curve` ('arch', 'smile', 'wave': `curveGlyphs`, one line, each letter from
+    the width of the words before it). A curve isn't clipped to the box, and only
+    its width counts for "Too long" (`captionFits`). Outline was already drawn
+    everywhere; only the cover had no button for it.
+  - **Drawn in three places:** `wordArt.ts` (website print), `PageText` drawCurve and
+    fillOf (the app's screen and print), and the website's preview: glow and outline
+    as CSS, a two-colour fill or a curve on a canvas with print's own code
+    (`WordArtCanvas`). A curve draws all the shadows, then all the outlines, then all
+    the fills, so no letter lies over its neighbour's fill.
+  - **The buttons are the app's** (`WordArtControls`, under Font): Outline (none,
+    thin, medium, thick, any colour), Two colours, Glow, Shape. One panel at a time,
+    it stays open, and it scrolls into view. The Shadow button takes a glow off. No
+    words, no effects. While a finger moves a curved title it follows on its curve
+    (plain letters, until the finger lets go and the cover is drawn).
+  - **The spine stays plain:** no second colour, glow or curve, and a thick outline
+    is thin there.
+  - **Print:** seven new golden covers (`cover-wordart-*`) hold the app to the
+    website's print; all pass with the bars unchanged. A curved letter has its own
+    position bar (`MAX_CURVE_LETTER_DIFF_PX`, 0.1 px): its spot comes from measured
+    widths, where a straight line's needs no measuring. Every existing page and cover
+    still prints byte for byte as before (`websiteSame.mjs`, which skips the new
+    covers).
+  - **Seen, not changed:** plain small text on a cream spine or back panel can be a
+    little over the ink bar in the headless check: "megyprints.com" on a 6x4 photo
+    cover at 8.4% and Cinzel on a cream spine at 6.2% (bar 6%). Neither is WordArt.
+    The covers were moved off those cases, so nothing holds them yet.
+  - **On the emulator's native Skia (`npm run golden:phone`, build of this code):**
+    184 of 185 pass, the seven WordArt covers among them. The one failure is
+    `cover-86-old-form` text 1 at 17.8%, the known one, same number.
+  - **Walked on the emulator:** each effect on the cover screen, mixed, with the panel
+    open; a curved title dragged and saved in the album (`cover_front`); shown in the
+    Preview; "Too long" on a curve with "Make it fit". The website's real `PageView`
+    in Chromium draws each effect. The Text tab gives up "Pick 1 photo" and the back
+    cover's line: on a 720×1280 phone the controls had almost no room.
+- **Version 2.0.7, code 107.**
+
+### Release notes 2.0.7 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Edit text keeps your page in view, so you see the words change
+    • Font and colour lists stay open, so you can try each one
+    • Change layout stays open while you try each layout
+    • New cover title effects: outline, two colours, glow, and arch, smile or wave
+
+285 characters.
+
+### After 2.0.7: Edit text's bottom row cut off on its side (2026-11-06)
+
+The owner, on 2.0.7 on his S25, on its side with a three-line caption and the colour
+list open: "The test editor is cut at the bottom." The list's height was worked out
+from the screen less a one-line typing box (`SIDE_ROWS`), so each extra line of words
+pushed the format bar down off the screen. Reproduced on the 2.0.7 Play APK on the
+emulator at 1080×2340, density 450.
+
+- **Fix, on its side only:** the list takes what is left under the box, however tall
+  the box is (`flexShrink`), and the bar keeps its size. The typing box gets shorter
+  when room is short, down to two whole lines, and scrolls. Upright is unchanged: the
+  page gives way there.
+- **Measured on the same screen with the same words:** the bar sits at the same place
+  (832 to 1012 of 1080) with no list, the colour list, Any color and the font list.
+  Also at 720×1280, density 320. Upright, the bar stays on screen with both lists.
+- **Seen, not changed:**
+  - The emulator's keyboard is very tall on its side and leaves about 135 points, so
+    the bar is behind the keyboard while typing. A tap on the page hides the keyboard.
+  - With "too long" showing and a list open, the list has about one row. It scrolls,
+    and "Make it fit" gives the room back.
+- **Testing note:** a swipe that starts near the screen's edge is Android's back
+  gesture, which keeps the words and closes the editor. Start a swipe further in.
+- In no build yet: not in the 2.0.7 file uploaded on 2026-11-05.
+
+## Words on a photo, with WordArt, on pages and the cover (2026-11-07, `feat/port-words-on-photos`)
+
+Owner, after the list of PowerPoint's text features: "I like wordart and effect
+features included when editing photos so adding text on a photo is possible. I like
+those features applied in cover and pages picture editor." He said yes to the three
+points put to him: the effects are for the words, not the photo; the cover title's
+five effects first (reflection, bevel, 3-D and picture fills are not in it: none is
+proven in print); and more words on the cover too. And "applying your solution to
+potential risks": words stop at the safe print area.
+
+- **Words placed by hand** (`src/pages/builder/freeWords.ts`, shared): a free text
+  marked `placed`, at x/y in design px, as wide as its words (`placeWords`: the
+  widest line plus room for a letter's overhang and the outline, never wider than the
+  area). Every change places them again with their middle where it was, so a longer
+  line grows both ways and a bigger size stays put. New ones start white, a thin dark
+  outline (2) and the shadow, Cinzel 40 bold (`NEW_WORDS_LOOK`), so they read on any
+  photo. `freeSpot` puts a second one under the first.
+- **The safe print area** (`wordsSafeArea`): 0.25" from the top and bottom trim
+  (`PRINTER_SPEC.safeIn`) and, on a page, 1/2" from BOTH side edges (the hardbound
+  allowance: the cover is chosen after the album is made; and a page's spine side
+  flips whenever a page is added, deleted or copied before it, which would have left
+  words placed by its outer edge 0.25" from the new spine). The cover's front: 0.25"
+  all round. `wordsInk` is where the letters reach, measured as print measures (a
+  curve's full height included), and that is what is kept inside, not a box round
+  them. Too long for the page: "Too long for this page… Make it fit (size N)"
+  (`placedWordsFit`, by placing them), and Done makes them that size and says so, so
+  placed words never print cut off. At most 300 characters.
+- **An album opening never moves them**: `bindStrandedCaptions` (which puts a stray
+  free text into an empty caption box) skips `placed`, and their ids keep the live
+  website's old heal away too (see Rollout below).
+- **Pages:** "Add text" under a picked photo, just before Mask and Filter, opens Edit
+  text for new words, their middle on the photo's middle (`newWordsOn`). Typed and
+  Done: on the page, one Undo step (`addPlacedWords`, a new builder action). ✕, or
+  nothing typed, adds nothing. A tap on them opens them; "Remove" in the header (or
+  emptied words) takes them off. A finger drags them (`WordsDragOverlay`, a handle the
+  size of their letters, over the photo's own move-and-zoom): the page without them
+  shows under the words where the finger has them (drawn ahead at the lowest
+  priority), the safe area shows as a dotted line, they stop at it, and the first two
+  times a line says why. One change when the finger lets go.
+- **Effects in Edit text:** the format bar's Outline and Shadow switches became
+  "Effects ▾", a panel in the list's place: Outline (none, thin, medium, thick, any
+  colour), Two colours, Glow, Shape (straight, arch, smile, wave) and Shadow. One
+  source with the cover title's buttons (`text/WordArtControls`, `wordArtEdits`). Every
+  kind of words takes them: caption boxes, words in a frame (on a curve they aren't
+  clipped to the frame, so its editor says "Too long" for a curve too wide for it:
+  `textFit.slotBoxSize`), free texts and placed words. An outline made before (3 px)
+  shows as Thin.
+- **Cover:** "More words" under the title's size with a row per placed words and
+  "+ Add text" (also on the Background tab once there is a photo). Edit text opens
+  over the cover (the same sheet, on the cover's scope); on the cover they float on
+  the cover's shadow unless it is switched off. Dragging on the cover moves words
+  before the title or the photo; a tap opens them. The title's own drag now stops at
+  the safe area too (it went to the cover's edges).
+- **Drawn in every renderer:** print's free branch and `renderSlotText` draw a curve
+  (one line, its middle where a one-line straight text's middle is; not clipped); the
+  website's preview draws a curve or a second colour with print's own code on a canvas
+  (`WordArtCanvas`, a `free` mode), for free texts and frames too; the app's renderer
+  does the same (`drawPage` freeText and boxText). The website's desktop editor
+  (Fabric) still shows them straight and in one colour; its preview and print are right.
+- **An independent review the same day found, and these were fixed:**
+  - the spine side flipping (above);
+  - a curve in a caption box or a photo frame isn't clipped, and an arch in a bottom
+    band reached past the page's edge: now its letters must stay in the safe area too
+    (`curveInBoxFit`, with each box's place: `textFit.captionBoxRect`/`slotBoxRect`),
+    "Too long for this page" with "Make it fit", and Done makes it that size; an old
+    free text (not placed) gets no Shape;
+  - words that fit at no size (a long line on a curve) were saved anyway: Done now
+    keeps the editor open and says to shorten them or pick Straight;
+  - placed words on the cover never become the spine line (`deriveSpine` skips them);
+  - new words went on top of the cover title or a caption: they now go to the nearest
+    clear spot under, over, left or right (`freeSpot`, with their real size);
+  - the website's preview lost typed line breaks in free text (`pre-wrap` now), drew a
+    two-colour placed text one line tall and without its underline, and drew captions
+    over placed words that print over them (placed words on top, as in print; the
+    app's taps the same);
+  - the app ignored a curved free text's see-through (opacity) where print keeps it.
+- **Rollout:** new words' ids start `theme-quote-placed-`: the live website's and older
+  app builds' `bindStrandedCaptions` leave ids starting "theme-quote" alone, so opening
+  an album with placed words there before 2.0 is merged doesn't move them into a caption
+  box. The live website still prints a curve or a second colour on them plain.
+
+## 2.0.8 (code 108): 2026-11-07
+
+Owner: "Build .8 now ill upload it later". In it: Edit text's bottom row on its side
+(above, "After 2.0.7") and words on a photo with WordArt (above), PR #276 stacked on
+#273. Built from the branch `feat/port-words-on-photos`.
+
+### Release notes 2.0.8 (draft: check against the app on upload day)
+
+    From tester feedback:
+    • Edit text no longer cuts off its bottom row when your phone is sideways
+    New:
+    • Add text on any photo, on your pages and your cover
+    • Effects for all your words: outline, two colours, glow, shadow, and arch, smile or wave
+    • Words stop at a dotted line, so nothing is cut off when your album is trimmed
+
+324 characters. Uploaded by the owner 2026-11-07 (Closed testing, Alpha, in review).
+
+## 20 more masks: film strip and the numbered sheet (2026-11-08, `feat/port-more-masks`)
+
+Owner: "masks id like you to add more of those i saw a mask that looks like the strip
+of a camera film". A sample (black 35 mm film, holes the page shows through) → "yes
+thats what i meant". Photobook's editor needs an account, so "No, skip Photobook"; a
+numbered sheet of 20 ideas drawn fresh on our sample photos → "all of them are good
+add them to the selection". Stacked on `feat/port-words-on-photos` (2.0.8).
+
+**The 20.** Masks that also paint: Film strip, Instant photo, Photo slide, Photo
+corners, Taped on, Old print, Stitched, Gold oval, Inside line, Dark corners. Shapes:
+Ticket, Speech bubble, Flower, Badge, Puzzle piece, Window, Pebble, Balloon, Paw print,
+House. All 46 masks are in the Mask sheet (the app) and the Studio's mask strip (the
+website); nothing else changes in either.
+
+**One description, every renderer.** `src/pages/builder/maskArt.ts` (shared) says, in the
+frame's own px, what a mask draws: the box the photo is fitted to (`photo`), where it
+shows (`clip`, SVG path data) and what is painted `under` it (a card and its shadow),
+`inside` the shape (window bars, a tear line, dark corners, a balloon's shine) and
+`over` it (the film, tape, stitches, a ring). Sizes are fractions of the frame's shorter
+side; even patterns (film holes, the old print's scallops) are whole numbers per side,
+counted from the frame's real size. `applyMask` marks the slot `art` (its shape stays a
+rectangle). Print (`renderSlotPhoto`) and the desktop editor's bake paint it with
+`masks.ts paintArt` (canvas, Path2D); the website's preview and the phone Studio's
+thumbnails with `MaskArtDom.tsx` (SVG, a canvas shadow as an SVG drop shadow of half its
+blur); the desktop editor's card and paint over are `fabric.Path`s placed by their centre
+(Fabric moves a path placed by its corner by half its line width); the app with
+`drawPage` (`planPage` carries the description, Skia paths, a shadow blurred with
+sigma = blur / 2).
+
+**Two choices that keep faces and prints safe.**
+- A mask with a window (film, instant photo, slide, tape, old print) fits the photo to
+  the window, so the paint never hides part of it (better than the "keep faces away from
+  the edge" note first offered). The app's framing (`frameCell`) works in the same window.
+- A full-bleed layout keeps the mask inside the safe print area (`artBox`: the dotted
+  line words stop at, 1/2" at the sides, 1/4" top and bottom), only on the sides that
+  touch the trim. Most layouts the album maker deals are full-bleed with gutters, so a
+  masked photo there sits in from the page's edge. Layouts with margins are unchanged.
+
+**Proof.** `maskArt.spec.ts` (every mask in five frames: inside its frame, a line by half
+its width too; the film turns with the frame and has whole holes; tape inside the frame;
+full-bleed boxes); `printParity.spec.ts` (all renderers and the app draw from maskArt);
+11 golden pages `artmask-*` (app vs print, 0.015% at most; `websiteSame.mjs` skips them,
+the old print code draws them as plain photos); `editorPhotosFraming.test.ts` (the window
+on every layout). A throwaway check drew the same pages with the website's preview, its
+desktop editor and print side by side: the same.
+
+**An independent review, and what it found (fixed here).**
+- A template's turned slot: the preview cropped the photo to the window before turning
+  it, and print and the app (with a colour look) baked a window-sized photo and then
+  turned it, so corners differed by renderer. Now every renderer turns the whole
+  cover-fitted photo: the preview sizes the photo at its full fit, and a look's bake turns
+  the photo inside itself (the clip lies inside the window, so it is the same picture).
+  Golden page `artmask-turned-look`.
+- The desktop editor dropped the stitches' dark edge (Fabric drops a line's shadow
+  unless `affectStroke`).
+- The app's drag and pinch showed the photo over the film or the card while the finger
+  moved it: the moving photo is now clipped, level, to the window.
+- Film holes, old-print waves and which way the film runs were counted from each
+  renderer's own px, whose page size is rounded (40 of 10,424 frames differed between the
+  editor and print, more at preview sizes). They are now counted from the frame's print
+  size, which `artBox` gives every renderer (`ref`).
+- Face centring (`slotDesignSize`) centred a face in the frame, not in the window the
+  photo is drawn in. It uses the window now.
+- A frame with no width (only bad saved numbers) would loop without end drawing film
+  holes; it draws a plain photo now.
+- Not changed: the "prints a little soft" note measures the frame, not the smaller
+  window, so it can come a little early (on the safe side).
+
+**Seen, not changed.** Existing masks on full-bleed pages still reach the trim (a stamp's
+holes, torn paper), as before; changing them would move every printed page that has one.
+Oval and rounded masks still print as rectangles (known since the golden work). The Mask
+sheet is a long list now (46); no thumbnails in the app's list.
+
+## The words' colours and 12 gradients for pages and words (2026-11-08, `feat/port-colour-palettes`)
+
+Owner, on his phone (2.0, sideways): "The colors on the page color seem pretty plain.
+Could you make it have the same color palette as the fonts. The add gradients also." A
+sample (the 28 word colours in their families, 12 gradients from them, four pages) →
+"Ok i like this and i would like both page and font colors to have these paletes".
+Stacked on `feat/port-more-masks` (#277). Page colours were on the "discuss later" list of
+maybe-deprecated features: his own request settles that they are alive.
+
+**What changes.**
+- Page colour (the page sheet, the cover's Colour row; the website's picker too): the
+  words' 28 colours (`textColors.ts`), in the same six families, then 12 gradients
+  (`colorGradients.ts`: Cream to blush, Peach sunset, Gold glow, Terracotta, Sky, Ocean,
+  Lavender, Plum night, Sage, Forest, Teal sea, Charcoal), each fading top to bottom. "Use
+  <name> on every page" works for both, cover included. The bright Crayola 8 left the
+  list; a page already in one keeps it.
+- Words' colour (Edit text, the cover title): the 28 as before, plus the same 12
+  gradients, which set the words' colour and their two-colour fill (top to bottom, as
+  wordArt draws it). A plain colour now makes the words one colour (the fill goes). The
+  outline, two-colour and glow pickers in Effects have no gradients. The website's text
+  pickers are unchanged (the website has no WordArt buttons).
+
+**How.** A page choice is a key: a colour's hex, or `gradient:<id>`; the builder's
+`setPageColor` / `applyPageColorToAllPages` take the key, so no caller changed shape.
+`pageColors.ts`: `PAGE_COLORS` = the text colours, `PAGE_GRADIENTS`, `pageFillOf(Key)`,
+`gradientPage` (linear 180°, two stops: the renderers already draw it, spine and back in
+its top colour via `solidOf`), and `recolorPageTo`: each word judged on the colour right
+behind it (`colorAt`: a caption box's or photo frame's middle, a free text's x/y), a
+two-colour word kept only while both colours show, else one clean ink; quotes in photo
+frames are judged too now; words placed on a photo keep their colour. The app's gradient
+swatch is 32 overlapping bands of the blended colours in a circle (no drawing library; 12
+bands showed steps on the phone).
+
+**Proof.** Website: `pageColors.spec.ts` (the list, gradients, keys, `colorAt`, words by
+where they sit, two-colour words), `dailyTest.spec.ts` (the tester lesson's colour now from
+the 28). App: the page sheet (40 swatches; a gradient on one page and every page), Edit
+text (a gradient, then a plain colour), the cover title. Golden page
+`palette-gradient-page` (app vs print 0.028%). Renderers unchanged.
+
+## 2.0.9 (code 109): 2026-11-08
+
+Owner: "once done lets release it as part of 2.0.9". In it: the 20 more masks (above, PR
+#277) and the words' colours with 12 gradients for pages and words (above), stacked on
+2.0.8 (#276). Built from the branch `feat/port-colour-palettes`.
+
+### Release notes 2.0.9 (draft: check against the app on upload day)
+
+    New:
+    • 20 more photo masks, like a film strip, an instant photo, taped on, an old print, a gold oval, a balloon and a house
+    • On a full-page photo, a mask stays inside the print area, so nothing is cut off
+    • Page colours now match your word colours, plus 12 gradients
+    • Words can be a gradient too
+
+297 characters.
+
+## Privacy Policy and Terms of Service as the app's own screens (2026-11-09, `feat/port-legal-screens`)
+
+A tester sent the owner a screenshot of a coral screen with the Megy logo cut off at
+"PRINTS": the website's own launch screen (`vite.config.ts` `background_color` #F05239,
+the round-cropped maskable icon), seen after installing the WEBSITE from its "Install Megy
+Prints" banner (`src/components/InstallPrompt.tsx`, every page on a phone in Chrome). 2.0
+sent people to that banner: its Privacy Policy and Terms of Service links opened the
+website in the browser. Owner: "what i want is for TOS and privacy to be part of the native
+app and not a redirect".
+
+Now both are screens of the app (`src/app/privacy.tsx`, `terms.tsx`; header "Privacy
+Policy" / "Terms of Service"), drawn by `src/components/LegalDocumentView.tsx` the way the
+website's page is (Last updated, Playfair headings, DM Sans words in #5B534C, bold where the
+website is bold, terracotta underlined links). Every link that opened the browser (start
+screen, its menu, Sign in's and Place order's agree line, My profile) opens them
+(`LegalLinks.tsx`, `legal.ts` `PRIVACY_SCREEN` / `TERMS_SCREEN`).
+
+**One copy of the words.** They moved out of the website's `Privacy.tsx` / `Terms.tsx`
+into `src/lib/legalPages.ts` (shared): sections of paragraphs and lists, a line made of
+words, bold words and links that name where they go (`LegalLinkTo`), not an address. The
+website draws them with `LegalDocumentPage` (`components/LegalPage.tsx`): both pages' HTML
+was compared before and after, **byte for byte the same**. In the app (`legal.ts`
+`legalTarget`): Privacy, Terms, Your orders and My Memories open the app's screens; the
+email opens the phone's email app; the Contact page opens as "Message us" does (the
+website's, in the browser); the account deletion page is the website's form for people
+without the app (`delete-account.html`). The website's /privacy and /terms stay: Play
+Console's privacy link is the website's.
+
+**Proof.** Website: `legalPages.spec.ts` (names, no stray spaces where pieces meet, the two
+link each other), `privacyLink.spec.ts` and `termsPage.spec.ts` unchanged and passing.
+App: `test/legalLinks.test.tsx` (every heading, paragraph and list item of both pages shown,
+in order; every link's place; no link opens the website's Privacy or Terms; the start
+screen, its menu and Sign in push the screens and never open the browser),
+`checkoutWalk` and `profileWalk` (the same, from Place order and My profile). A **new
+APK** is needed.
+
+## 2.1.0 (code 110): scenes, the photo's place, and a making screen that says what it is doing (2026-11-09, `feat/port-scene-grouping`)
+
+Owner, 2026-11-09, on how photos share a page: "if the gap is big then that picture might
+not be related to the group of pictures clustered within 5 mins of each other". And on the
+wait: "i dont have a problem when the phone generates the album applying all those algos.
+What i want is to not let the user feel like the app hanged." Stacked on #279 (the legal
+screens), which is also in 2.1.0.
+
+**Scenes (shared `generateAlbum.ts`).** Inside a moment (3 hours), a new scene starts
+when consecutive shots are more than 5 minutes apart (`SCENE_GAP_MS`) or were taken more
+than 200 m apart (`SCENE_MOVE_M`, when both carry a place). The builder works the scenes
+out under "Grouping the moments" (`planScenes`) and hands them to the generator. The
+dealer keeps a page inside the leading scene when it can: the fill plan's counts (and a
+chosen count's queue plan) are dealt in the order that fits the scenes (`nextFillCount`,
+`nextPlanned`: the same counts, so the same pages); a page ends at a scene when the plan's
+room under its cap pays for it (`planSlackLeft`); a lone photo of its shape joins the next
+scene's rather than take a page. **A page is a price, so scenes never add one:** the
+layout is made without scenes first (the budget), then with them replaying the same random
+draws; while the scenes make more pages, the closest scenes are merged and it is laid out
+again, down to the budget's own album.
+
+**Measured** (5 sizes × 5 photo counts × 6 days of bursts, Surprise and "4 per page", 300
+albums; `scenes.spec.ts` keeps the bounds): pages with scenes vs without: never more
+(Surprise mean −0.15, max 0; a chosen count exactly the estimate). Pages holding two
+scenes, Surprise: 25.2 → 24.2 of 41.7 multi-photo pages on average; where the album has
+room, 11.5x8 at 60 photos 7.7 → 3.0, 8x8 at 97 photos 18.7 → 16.2, 6x8 at 97 photos
+23.2 → 20.8. "4 per page" at 60 photos: about half (8x8 7.2 → 3.8, 6x8 10.0 → 5.0), and
+one or two pages fewer at every size and count. **Why not more:** a page holds one photo
+shape (mixed-shape pages are off in fill mode) and a burst of five phone shots is usually
+three shapes, so most two-scene pages hold a lone landscape or square beside the next
+burst's. Past 120 photos on Surprise (the natural mix, no plan) nothing can pay for a short
+page, so the budget keeps the album as it was. The next lever is mixed-shape pages inside a
+scene, in fill mode.
+
+**The photo's place.** `UploadedPhoto.location` (lat, lon) from EXIF GPS, read on the
+website (`exif.ts` `readCaptureLocation`, `PhotoIntake.captureLocation`, optional).
+It stays on the device: `albumCloud` / `draftAlbumRow` do not save it. **The app reads
+none:** Android keeps a photo's place behind `ACCESS_MEDIA_LOCATION`, which `app.json`
+blocks (`blockedPermissions`, `isAccessMediaLocationEnabled: false`). Asking for it is a
+Play Console declaration and the owner's call; until then the app splits scenes on time only.
+
+**The making screen** (website `GeneratingOverlay.tsx`, app `making.tsx`; words in
+`GENERATING_COPY`, mirrored in `albumFlow.ts`, `test/albumWords.test.ts` keeps them
+equal). "Making your album", "200 photos", then the step with a real count where it counts
+photos: "Looking at your photos", "Checking photos for blur. 37 of 200", "Finding the
+faces. 112 of 200", "Grouping the moments", "Laying out the pages", "Choosing the words",
+"Almost done"; a bar moves with the count; "Your photos stay on your phone." (website:
+"on this device"). Generate now **waits for the photo check** (the blur check, then the
+face pass) with the count on screen, so full pages pick sharp, eyes-open shots: never past
+`CHECK_WAIT_MS` (2 min) and never for a check that isn't running (`whenPhotosChecked`).
+Nothing is padded: a step shows only while its work runs.
+
+**In the app the two counted steps never show (found on the emulator walk, 2026-11-09).**
+The app's builder platform still has `photoCheck.available: () => false`
+(`mobile/src/builder/appPlatform.ts`; the phone's check, `phonePhotoCheck.ts`, is only
+on the dev lab screen), so Generate has no check to wait for. On the 2.1.0 Play build the
+making screen showed "Making your album", "70 photos" / "150 photos", "Looking at your
+photos", "Laying out the pages", "Almost done", "Your photos stay on your phone." and was
+gone in about half a second, also with 150 photos of 12 MP. "Checking photos for blur" and
+"Finding the faces" are website-only until the phone's check is wired into the app.
+
+### Walked on the emulator, 2026-11-09 (2.1.0 code 110 Play build over 2.0.9)
+
+Signed out, 8x8, Surprise, Vacation. Test roll: copies of the owner's Hong Kong photos,
+70 shots in 16 known bursts (15 to 50 s between shots, 8 to 25 min between bursts, four
+moments over two days), cropped to a phone mix (51 upright, 17 wide, 2 square), EXIF time
+with a +08:00 zone tag.
+
+- Installed over 2.0.9, opened, three albums made (70, 70 and 150 photos), no crash, no
+  error in the log. Privacy Policy and Terms of Service open as the app's own screens from
+  the menu; Back returns to Home.
+- 70 photos made 41 pages. 17 pages hold two or more photos: 10 hold one scene, 7 hold two
+  scenes that are neighbours in time. The same roll through the generator 40 times: 7.9
+  two-scene pages with scenes, 8.4 without, same page count. A small gain, as measured.
+- **Full pages land late (not new, the same with scenes off).** About 11 pages an album are
+  a full-page photo from a scene the album has already left, 1.3 of them from a moment
+  (3 hours) already left: a morning shop photo facing the afternoon ride. Cause:
+  `insertMemoryPages` never puts two full pages side by side, and with half the pages full
+  (`FULL_PAGE_SHARE`) a scene with more full pages than multi-photo pages pushes the extra
+  ones one page later, past the next scene's page. This is the bigger lever for "related
+  photos together" than the scenes rule itself.
+- A test-roll trap: a photo copied to the phone within a day of its EXIF time, with no zone
+  tag, gets its time zone guessed by Android from the file's date (in quarter-hour steps), which
+  reshuffled one day of the first roll. Phone cameras write the zone tag; photos from an
+  older camera copied the same day can hit it.
+
+### Release notes 2.1.0 (draft: check against the app on upload day)
+
+    New:
+    • Megy now groups your photos by moment. Photos taken within 5 minutes of each other go on the same page when there is room
+    • A ride, a meal or a group pose is split across pages less often
+    • Grouping never adds a page, so your price stays the same
+    • Privacy Policy and Terms of Service open inside the app
+
+(The line about the making screen's count was taken out after the 2026-11-09 walk: the
+count needs the phone's photo check, which is not in the app yet.)
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

@@ -30,8 +30,8 @@ import { planPage, type PhotoItem } from '../src/render/pagePlan';
 import { ADD_TO_BOX_SHEET, addChoicesFor, bannersFor, isolateRegistry, overlayComponents, runTap, selectedActionsFor, sheetById, toolsFor, type EditorContext } from '../src/editor/registry';
 import { editThePages } from '../src/editor/scope';
 import {
-  addPageAfter, applyLayout, blankPlan, canDeletePage, cancelSwap, chooseLayout, deleteBlankPages, deleteThisPage, fixStudioPage,
-  layoutChoices, nextBlankPage, pendingSwap, photosHeld, photoTags, pickLook, pickMask, placePicked, storeFraming, swapOnTap,
+  addPageAfter, applyLayout, blankPlan, canDeletePage, cancelSwap, deleteBlankPages, deleteThisPage, fixStudioPage,
+  layoutChoices, nextBlankPage, pendingSwap, photosHeld, photoTags, pickLook, pickMask, placePicked, storeFraming, swapOnTap, tryLayout,
 } from '../src/editor/photos/actions';
 import { FramingGesture, frameCell, softAt, storedFraming } from '../src/editor/photos/framing';
 import { addPickedPhotos, beginIntake, intakeLeaving, resetIntake, takeIntake } from '../src/editor/photos/intake';
@@ -249,7 +249,7 @@ describe('Swap photo, then a tap on the other one', () => {
 });
 
 describe('Replace photo, Remove photo and "Add a photo"', () => {
-  it('Replace photo opens "Add a photo" for the frame; photos are tagged with their page; a photo from another page swaps in, said', async () => {
+  it('Replace photo opens the photo sheet for the frame (titled "Replace photo"); photos are tagged with their page; a photo from another page swaps in, said', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     let ctx = await openOn(platform, 4);
     const t = firstPhoto(platform);
@@ -291,7 +291,7 @@ describe('Replace photo, Remove photo and "Add a photo"', () => {
     await tapOn(platform, t);
     ctx = ctxNow(platform);
     const actions = selectedActionsFor(ctx.selected!, ctx);
-    expect(actions.map((a) => a.id)).toEqual(['replace', 'remove', 'swap', 'mask', 'filter']); // Remove second: on screen on a narrow phone
+    expect(actions.map((a) => a.id)).toEqual(['replace', 'remove', 'swap', 'addWords', 'mask', 'filter']); // Remove second: on screen on a narrow phone; Add text (the words part's) before Mask
     const remove = actions.find((a) => a.id === 'remove')!;
     expect(remove.label).toBe('Remove photo');
     expect(remove.danger).toBe(true);
@@ -377,7 +377,7 @@ describe('Change layout', () => {
     expect(toolsFor(ctx).find((t) => t.id === 'changeLayout')?.label).toBe('Change layout');
   });
 
-  it('a layout that holds every photo is applied at once (applyPageLayout, one undo step); one that can\'t asks first, and "a new page" keeps every photo', async () => {
+  it('a layout that holds every photo is tried at once (tryPageLayout, one undo step); one that can\'t asks first, and "a new page" keeps every photo', async () => {
     const platform = await madeAlbum(SCENARIOS[2]);
     const p = pageWith(2);
     let ctx = await openOn(platform, p);
@@ -387,18 +387,19 @@ describe('Change layout', () => {
     expect(same).toBeDefined();
     if (same) {
       const calls: Call[] = [];
-      let ask: ReturnType<typeof chooseLayout> = null;
-      await act(async () => { ask = chooseLayout(ctxNow(platform, { calls }), same); });
+      const start = ctx.page;
+      let ask: ReturnType<typeof tryLayout> = null;
+      await act(async () => { ask = tryLayout(ctxNow(platform, { calls }), start, same, true); });
       expect(ask).toBeNull();
-      expect(editCalls(calls).map(([k, ...a]) => [k, ...a])).toEqual([['layoutChangeLoses', same.id], ['applyPageLayout', same.id]]);
+      expect(editCalls(calls).map(([k, ...a]) => [k, ...a])).toEqual([['tryPageLayout', start, same.id, true]]);
       expect(builder().albumPages[p].templateId).toBe(same.id);
       await act(async () => { builder().undo(); });
       expect(builder().albumPages[p].templateId).toBe(before[p].templateId);
     }
     ctx = ctxNow(platform);
     const one = getTemplatesForAlbum(builder().albumSize).find((t) => photosHeld(t) === 1 && !(t.textSlots?.length))!;
-    let ask: ReturnType<typeof chooseLayout> = null;
-    await act(async () => { ask = chooseLayout(ctx, one); });
+    let ask: ReturnType<typeof tryLayout> = null;
+    await act(async () => { ask = tryLayout(ctx, ctx.page, one, true); });
     expect(ask).toMatchObject({ t: { id: one.id }, photos: n - 1 });
     expect(builder().albumPages).toBe(before); // nothing yet: it asks
     const placedBefore = new Set(builder().albumPages.flatMap((pg) => (pg.slotFills ?? []).filter((f) => f != null)));

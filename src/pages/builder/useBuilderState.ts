@@ -25,7 +25,7 @@ import { placePhoto } from './slotSwap';
 import { freeBandForTemplate, pickQuote } from './themeQuotes';
 import { getThemedTitle, THEME_TITLES, THEMES, DEFAULT_COVER_DESIGN, clampQrGeom, defaultQrGeom, type CoverDesign } from './types';
 import { getCanvasDimensions } from './layouts';
-import { generateAlbum, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
+import { generateAlbum, planScenes, sweepFillQuotes, countAlbumBoxes, dealAlbumBoxes, quotesNeededForSweep, DEAL_BANK_QUOTES, splitStudioPages, remapSlotFills, mergeStudioPages, canTakeMemoryQr, memoryFaceCandidates, FULL_PAGE_SHARE, memoriesOn, layoutHoldsMemory, frameShape, frameTakesPhoto, type BoxContentOptions } from './generateAlbum';
 import { clampSlotGeometry, type GuardReason } from './slotGeometry';
 import { isMaskId, type MaskId } from './maskShapes';
 import { isLookId, type LookId } from './lookRules';
@@ -57,7 +57,7 @@ import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from './retiredSizes
 import { newCoverPhotoId, coverLocalPhotoId, withLiveCoverPhoto } from './coverPhoto';
 import { DEFAULT_TITLE_FONT } from './fontCatalog';
 import { readAlbumThemeFrom, writeAlbumThemeTo } from '../../lib/albumThemeRules';
-import { nextCheckJob, checkIsReady, checkProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
+import { nextCheckJob, checkIsReady, checkProgress, faceCheckProgress, suggestLeaveOut, type LeaveOutSuggestion } from '../../lib/photoCheck';
 
 /* ══════════════════════════════════════════════════════════════════════════
    useBuilderState — All builder state + localStorage persistence
@@ -112,6 +112,104 @@ function reflowFills(
     ptr++;
   }
   return out;
+}
+
+/* What each way of saving words does to a page, as plain functions: the builder's
+   setBoxText, setSlotText and updateTextElement apply them, and the app's text
+   editor draws the page with them before anything is saved. */
+
+/** setBoxText's change. `theme` fills what `content` leaves out of a new text;
+ *  `newId` names it (the app's editor draws with one that stays the same). */
+export function pageWithBoxText(
+  page: AlbumPage,
+  slotIndex: number,
+  content: Partial<TextElement> & { text: string },
+  theme: { fontFamily: string; textColor: string },
+  newId: () => string = () => `box-${slotIndex}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+): AlbumPage {
+  const existing = page.textElements.find((t) => t.boxIndex === slotIndex);
+  const trimmed = content.text.trim();
+  // Empty → clear the box (revert to the "Tap to add text" placeholder).
+  if (!trimmed) {
+    return existing
+      ? { ...page, textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex) }
+      : page;
+  }
+  // Mutual exclusivity (third leg): writing a caption evicts a photo/QR/ornament
+  // occupying the same caption box.
+  const textSlotFills = [...(page.textSlotFills ?? [])];
+  const textSlotQr = [...(page.textSlotQr ?? [])];
+  const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
+  textSlotFills[slotIndex] = null;
+  textSlotQr[slotIndex] = null;
+  const textSlotQrGeom = (page.textSlotQrGeom ?? []).map((g, k) => (k === slotIndex ? null : g));
+  textSlotOrnament[slotIndex] = null;
+  if (existing) {
+    return {
+      ...page,
+      textSlotFills,
+      textSlotQr,
+      textSlotOrnament,
+      textSlotQrGeom,
+      textElements: page.textElements.map((t) =>
+        t.boxIndex === slotIndex
+          // A title the customer types is theirs: it stops following the album name.
+          // A line the customer writes or picks is theirs too: it stops following the occasion.
+          ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined, fromOccasion: content.text === t.text ? t.fromOccasion : undefined }
+          : t),
+    };
+  }
+  const newText: TextElement = {
+    id: newId(),
+    text: content.text,
+    x: 0,
+    y: 0,
+    fontSize: content.fontSize ?? 28,
+    fontFamily: content.fontFamily ?? theme.fontFamily,
+    color: content.color ?? theme.textColor,
+    bold: content.bold ?? false,
+    italic: content.italic ?? false,
+    underline: content.underline ?? false,
+    alignment: content.alignment ?? 'center',
+    outlineColor: content.outlineColor,
+    outlineWidth: content.outlineWidth,
+    shadow: content.shadow,
+    fillTo: content.fillTo,
+    glow: content.glow,
+    curve: content.curve,
+    quote: content.quote,
+    rotation: 0,
+    opacity: 100,
+    boxIndex: slotIndex,
+  };
+  return { ...page, textSlotFills, textSlotQr, textSlotOrnament, textElements: [...page.textElements, newText] };
+}
+
+/** setSlotText's change: words in a frame clear its photo, QR and ornament. */
+export function pageWithSlotText(page: AlbumPage, slotIndex: number, content: SlotText | null): AlbumPage {
+  const slotTexts = [...(page.slotTexts ?? [])];
+  slotTexts[slotIndex] = content;
+  if (content) {
+    const fills = [...(page.slotFills ?? [])];
+    const qrFills = [...(page.qrFills ?? [])];
+    const ornamentFills = [...(page.ornamentFills ?? [])];
+    fills[slotIndex] = null;
+    qrFills[slotIndex] = null;
+    ornamentFills[slotIndex] = null;
+    return { ...page, slotTexts, slotFills: fills, qrFills, ornamentFills };
+  }
+  return { ...page, slotTexts };
+}
+
+/** updateTextElement's change. New words are the customer's: they stop
+ *  following the occasion. */
+export function pageWithTextUpdate(page: AlbumPage, id: string, updates: Partial<TextElement>): AlbumPage {
+  return {
+    ...page,
+    textElements: page.textElements.map((t) => (t.id === id
+      ? { ...t, ...updates, ...(updates.text != null && updates.text !== t.text ? { fromOccasion: undefined } : {}) }
+      : t)),
+  };
 }
 
 /* Re-lay a page onto a new template: carry QR/text (trimmed to the new slot
@@ -211,12 +309,18 @@ function asMemoryBadge(before: AlbumPage, relaid: AlbumPage, memory: QrFill, tem
   };
 }
 
-/** A memory page's photo covers the whole sheet: no Studio-moved frame and no
- *  mask (both are kept by slot number, and every renderer applies them to the
- *  QR slot too — a moved frame printed the QR as a big square mid-page). The
- *  photo keeps its filter when it stays the same photo (`samePhoto`). */
+/** A memory page's photo fills its frame: no Studio-moved frame (kept by slot
+ *  number, and every renderer applies it to the QR slot too — a moved frame
+ *  printed the QR as a big square mid-page). When it stays the same photo
+ *  (`samePhoto`) it keeps its filter and its mask, the photo's slot only, so
+ *  none lands on the QR's (owner, 2026-11-04: "i added a mask on a picture then
+ *  i added the QR the mask disappeared, and you need to re apply the mask"). */
 export function fullBleedPhoto(page: AlbumPage, samePhoto: boolean): Pick<AlbumPage, 'slotGeometries' | 'slotMasks' | 'slotLooks'> {
-  return { slotGeometries: [], slotMasks: [], slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [] };
+  return {
+    slotGeometries: [],
+    slotMasks: samePhoto && page.slotMasks?.[0] ? [page.slotMasks[0]] : [],
+    slotLooks: samePhoto && page.slotLooks?.[0] ? [page.slotLooks[0]] : [],
+  };
 }
 
 /* The page's dominant photo ratio (the most common ratio among the photos
@@ -505,8 +609,10 @@ function isStateCorrupted(state: SerializedState): boolean {
 /** Heal STRANDED captions: an unbound text element (free, not a deliberate theme
  *  quote) on a page that has an empty textbox should belong IN that box. Bind it
  *  so it renders fixed + centered instead of floating at the top-left. Only fills
- *  boxes with no caption yet; idempotent (already-bound text is left alone). */
-function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
+ *  boxes with no caption yet; idempotent (already-bound text is left alone).
+ *  Words the customer placed by hand (Add text: `placed`) are where they put
+ *  them, never stranded: they stay where they are. */
+export function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
   return pages.map((page) => {
     if (!page.textElements?.length || !page.templateId) return page;
     const slots = getTemplateById(page.templateId)?.textSlots ?? [];
@@ -521,7 +627,7 @@ function bindStrandedCaptions(pages: AlbumPage[]): AlbumPage[] {
     (page.textSlotOrnament ?? []).forEach((o, i) => { if (o) filled.add(i); });
     let changed = false;
     const textElements = page.textElements.map((t) => {
-      if (t.boxIndex != null || t.id.startsWith('theme-quote')) return t;
+      if (t.boxIndex != null || t.id.startsWith('theme-quote') || t.placed) return t;
       let slot = -1;
       for (let i = 0; i < slots.length; i++) { if (!filled.has(i)) { slot = i; break; } }
       if (slot < 0) return t; // no empty box left
@@ -627,7 +733,19 @@ function getInitialState({ deviceStore, sessionStore }: Pick<BuilderPlatform, 'd
 }
 
 /** The stages of a whole-album generation, in order. Shown to the customer. */
-export type GeneratingPhase = 'measuring' | 'laying_out' | 'quotes' | 'finishing';
+/** The steps of making an album, as the "Making your album" screen names
+ *  them (GENERATING_COPY). Owner (2026-11-09): a wait is fine when the screen
+ *  says what the phone is doing, with a real count, so the work on the
+ *  photos (the blur check, the face pass) is waited for and counted here
+ *  instead of being left half done. */
+export type GeneratingPhase = 'measuring' | 'checking' | 'faces' | 'grouping' | 'laying_out' | 'quotes' | 'finishing';
+/** How far the step on screen is, when it counts photos. */
+export interface GeneratingCount { done: number; total: number }
+/** The longest Generate waits for the photo check (the blur check, then the
+ *  face pass) before laying out the album from what was checked: a slow
+ *  phone is never stuck on it. 200 photos take about a minute on a phone
+ *  that finds faces fast. */
+export const CHECK_WAIT_MS = 120_000;
 
 /** What generateAlbum did, and (for a new size) the memories' plan. */
 export type GenerateResult =
@@ -766,6 +884,9 @@ export interface BuilderActions {
    *  generation can take several seconds (measuring, laying out, waiting on
    *  the theme's quotes) and a silent wait reads as a hang (owner, 2026-09-12). */
   generating: GeneratingPhase | null;
+  /** How far the step in `generating` is, when it counts photos ("Checking
+   *  photos for blur 37 of 200"); null when the step has no count. */
+  generatingCount: GeneratingCount | null;
   regeneratePage: () => void;
   shuffleLayout: () => void;
   cycleLayout: () => void;
@@ -775,6 +896,12 @@ export interface BuilderActions {
    *  that no longer fit go on a new page after it ('new-page') or leave the
    *  album ('leave-out', the default). */
   applyPageLayout: (templateId: string, leftover?: 'new-page' | 'leave-out') => void;
+  /** A layout being tried while the app's Change layout stays open: laid out
+   *  from `start` (the page when the sheet opened), so each try replaces the last
+   *  and nothing a try drops is gone for good; `start`'s own layout brings the page
+   *  back exactly as it was. Only the first try is an undo step (`firstTry`), so
+   *  trying many layouts doesn't push the rest out of the undo history. */
+  tryPageLayout: (start: AlbumPage, templateId: string, firstTry: boolean) => void;
   /** What a layout would take off the current page: photos that no longer fit
    *  and captions whose box it lacks. */
   layoutChangeLoses: (templateId: string) => { photos: number; captions: number };
@@ -855,6 +982,10 @@ export interface BuilderActions {
   addThemedQuote: () => string | null;
   updateTextElement: (id: string, updates: Partial<TextElement>) => void;
   deleteTextElement: (id: string) => void;
+  /** Words the customer placed by hand (Add text on a photo: freeWords.ts),
+   *  already placed and sized, onto the page being edited (the cover, while
+   *  its scope is on). One undo step. */
+  addPlacedWords: (words: TextElement) => void;
   /** Set the text for a template text box (textSlots[slotIndex]). Targets the
    *  current page by default, or an explicit pageIndex (the preview spread shows
    *  two pages). Creates/updates the boxed TextElement; empty text clears it. */
@@ -872,12 +1003,13 @@ export interface BuilderActions {
 
   // Background
   setPageBackground: (bg: AlbumBackground) => void;
-  /** The page in one of the page colours (pageColors.ts): a solid background,
-   *  with words that wouldn't show on it switched to an ink that does. Under
-   *  the cover scope it colours the cover. */
-  setPageColor: (hex: string) => void;
-  /** Every page in that colour — the cover too. */
-  applyPageColorToAllPages: (hex: string) => void;
+  /** The page in one of the page colours or gradients (pageColors.ts), named
+   *  by its key (a colour's hex, or 'gradient:<id>'), with words that wouldn't
+   *  show on it switched to an ink that does. Under the cover scope it colours
+   *  the cover. */
+  setPageColor: (key: string) => void;
+  /** Every page in that colour or gradient — the cover too. */
+  applyPageColorToAllPages: (key: string) => void;
   /** COVER: put a photo the customer picked on the cover. The file is kept in
    *  the device's photo store, so the cover still has it after the app is
    *  closed (coverPhoto). Resolves once it is on the cover. */
@@ -1002,7 +1134,7 @@ export function useBuilderState(): BuilderActions {
   const { deviceStore, sessionStore, faces, photoCheck: checker, lifecycle, textMeasurer, occasionChanged, cloud: account } = platform;
   /** The occasion's caption lines (website: lib/quotes; app: its own pool). */
   const { ensureThemeQuotes } = platform.quotes;
-  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview } = platform.photos;
+  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview } = platform.photos;
   /** A saved photo URL that must be found again in the photo store when the
    *  album opens: none at all, or one the device says doesn't last (website:
    *  a blob: URL, dead with the old tab; app: a picker's URI). */
@@ -1050,6 +1182,11 @@ export function useBuilderState(): BuilderActions {
     if (draftAccountRef.current) albumIdRef.current = newAlbumId();
     draftAccountRef.current = user.id;
   }
+  /** While another account signing in puts the album away (reset): the account
+   *  it belongs to. By then draftAccountRef is the new account's, and the saved
+   *  draft can still say none (begun signed out, not saved again since), so
+   *  the album went to the NEW account (beta round 4b). */
+  const leavingOwnerRef = useRef<string | null>(null);
   /** The cloud version the album on screen is based on (albumSyncRecord). Held
    *  by THIS tab and saved inside its draft: two tabs share one draft, and a
    *  record kept per device let a stale tab save its old album onto the other
@@ -1070,6 +1207,7 @@ export function useBuilderState(): BuilderActions {
   if (editedAtRef.current === undefined) editedAtRef.current = getInitialState(platform).editedAt ?? 0;
   const [albumPages, setAlbumPages] = useState<AlbumPage[]>(() => getInitialState(platform).albumPages);
   const [generating, setGenerating] = useState<GeneratingPhase | null>(null);
+  const [generatingCount, setGeneratingCount] = useState<GeneratingCount | null>(null);
   const albumPagesRef = useRef(albumPages);
   useEffect(() => { albumPagesRef.current = albumPages; }, [albumPages]);
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState(platform).currentPageIndex);
@@ -1841,13 +1979,13 @@ export function useBuilderState(): BuilderActions {
           }
           const stored = await idbPhotos.store(usable, id);
           const dims = stored ?? await getImageDimensions(usable);
-          const capturedAt = await captureTime(file); // the original: a JPEG copy has no EXIF
+          const [capturedAt, location] = await Promise.all([captureTime(file), captureLocation ? captureLocation(file) : null]); // the original: a JPEG copy has no EXIF
           if (dims.width > 0 && dims.height > 0) measuredRef.current.set(id, { width: dims.width, height: dims.height });
           const note = copyQuality(recorded.get(id) ?? { width: 0, height: 0 }, dims);
           const shown = usable !== file ? { previewUrl: previewUrlOf(usable), type: usable.type } : {};
           uploadedPhotosRef.current = uploadedPhotosRef.current.map((p) => (p.id === id ? { ...p, ...shown } : p));
           setUploadedPhotos((prev) => prev.map((p) => (p.id === id
-            ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(note ? { copyNote: note } : {}) }
+            ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), ...(capturedAt ? { capturedAt } : {}), ...(location ? { location } : {}), ...(note ? { copyNote: note } : {}) }
             : p)));
           return 'ok' as const;
         });
@@ -1906,7 +2044,7 @@ export function useBuilderState(): BuilderActions {
         // A failed write (e.g. a full disk) returns null — still measure, or the
         // photo stays 0×0 and gets classified by guesswork.
         const dims = stored ?? await getImageDimensions(usable);
-        const capturedAt = await captureTime(file); // the original: a JPEG copy has no EXIF
+        const [capturedAt, location] = await Promise.all([captureTime(file), captureLocation ? captureLocation(file) : null]); // the original: a JPEG copy has no EXIF
         // Record the size SYNCHRONOUSLY here — see measuredRef.
         if (dims.width > 0 && dims.height > 0) {
           measuredRef.current.set(photo.id, { width: dims.width, height: dims.height });
@@ -1919,7 +2057,7 @@ export function useBuilderState(): BuilderActions {
         setUploadedPhotos((prev) =>
           prev.map((p) =>
             p.id === photo.id
-              ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt }
+              ? { ...p, ...shown, ...(dims.width > 0 ? { width: dims.width, height: dims.height } : {}), capturedAt, ...(location ? { location } : {}) }
               : p,
           ),
         );
@@ -1932,7 +2070,7 @@ export function useBuilderState(): BuilderActions {
     }
 
     return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies, heic: heicDone() };
-  }, [idbPhotos, looksHeic, toAlbumPhoto, getImageDimensions, captureTime, previewUrlOf, convertingPreview]);
+  }, [idbPhotos, looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, convertingPreview]);
 
   /* ── Megy's free photo check (lib/photoCheck) ──
      One photo at a time, in the background, on the phone: blur + fingerprint
@@ -2121,11 +2259,48 @@ export function useBuilderState(): BuilderActions {
 
   /** Resolve once every in-flight photo measurement has settled. Drains in a
    *  loop because waiting can overlap a fresh batch of uploads. */
-  const whenPhotosMeasured = useCallback(async () => {
+  const whenPhotosMeasured = useCallback(async (onProgress?: (pending: number) => void) => {
     while (pendingMeasureRef.current.size > 0) {
-      await Promise.allSettled([...pendingMeasureRef.current]);
+      onProgress?.(pendingMeasureRef.current.size);
+      // One at a time, so the count on screen moves with each photo.
+      await Promise.race([...pendingMeasureRef.current]).catch(() => { /* a failed measure must not block generation */ });
+      await new Promise((r) => setTimeout(r, 0)); // let the settled task leave the set
     }
+    onProgress?.(0);
   }, []);
+
+  /** Megy's photo check, finished before the album is made (owner,
+   *  2026-11-09): the blur check and the face pass run in the background
+   *  while photos are picked, and Generate used to lay out whatever was
+   *  done. Now it waits for them with the count on screen ("Checking photos
+   *  for blur 37 of 200", then "Finding the faces"), so the full pages pick
+   *  sharp, eyes-open shots and the repeats are known — never past
+   *  CHECK_WAIT_MS, and never for a check that isn't running: a slow phone
+   *  gets its album from what was checked. */
+  const whenPhotosChecked = useCallback(async () => {
+    if (!checker.available()) return;
+    const deadline = Date.now() + CHECK_WAIT_MS;
+    let idle = 0;
+    for (;;) {
+      const photos = uploadedPhotosRef.current;
+      const job = nextCheckJob(photos, checkTriedRef.current, checker.facesForAllPhotos());
+      if (!job) break;
+      if (job.stage === 'basic') {
+        setGenerating('checking');
+        setGeneratingCount(checkProgress(photos));
+      } else {
+        setGenerating('faces');
+        setGeneratingCount(faceCheckProgress(photos, checker.facesForAllPhotos()));
+      }
+      if (Date.now() > deadline) break;
+      // The check loop starts from an effect; give it a moment, then stop
+      // waiting for a check that isn't running.
+      idle = checkRunningRef.current ? 0 : idle + 1;
+      if (idle > 3) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    setGeneratingCount(null);
+  }, [checker]);
 
   const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
     const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
@@ -2143,7 +2318,11 @@ export function useBuilderState(): BuilderActions {
     // guess — putting photos into frames of the wrong orientation and cropping
     // heads off. Wait for the measurements, then read sizes from measuredRef,
     // which is authoritative the instant a measurement lands.
-    await whenPhotosMeasured();
+    await whenPhotosMeasured((pending) => {
+      const total = uploadedPhotosRef.current.length;
+      setGeneratingCount(pending > 0 ? { done: Math.max(0, total - pending), total } : null);
+    });
+    await whenPhotosChecked();
     setGenerating('laying_out');
     await paintFrame();
     const photos = uploadedPhotosRef.current.map((p) => {
@@ -2222,7 +2401,14 @@ export function useBuilderState(): BuilderActions {
         }
       } catch { /* no faces known → least-crop order */ }
     }
-    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    // SCENES (owner, 2026-11-09): photos taken within 5 minutes are one
+    // scene, and a page never holds two scenes (generateAlbum SCENE_GAP_MS).
+    setGenerating('grouping');
+    await paintFrame();
+    const scenes = planScenes(pool);
+    setGenerating('laying_out');
+    await paintFrame();
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, scenes, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     // Bank quotes are off (DEAL_BANK_QUOTES): quote boxes are made empty, so
@@ -2270,8 +2456,9 @@ export function useBuilderState(): BuilderActions {
     return { made: true, ...(memories ? { memories } : {}) };
     } finally {
       setGenerating(null);
+      setGeneratingCount(null);
     }
-  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme, ensureThemeQuotes]);
+  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme, ensureThemeQuotes, whenPhotosMeasured, whenPhotosChecked]);
 
   /** Does the current page carry a video memory? Then its layout stays the
    *  full photo with the QR badge (see relayPageOnTemplate), and the layout
@@ -2490,6 +2677,22 @@ export function useBuilderState(): BuilderActions {
       return next;
     });
   }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
+
+  const tryPageLayout = useCallback((start: AlbumPage, templateId: string, firstTry: boolean) => {
+    const template = getTemplateById(templateId);
+    if (!template) return;
+    const tried = template.id === start.templateId ? start : relayPageOnTemplate(start, template);
+    if (firstTry) {
+      if (tried === start) return; // No change: no undo step for nothing.
+      pushSnapshot();
+    }
+    setAlbumPages((prev) => {
+      if (!prev[currentPageIndex]) return prev;
+      const next = [...prev];
+      next[currentPageIndex] = tried;
+      return next;
+    });
+  }, [currentPageIndex]);
 
   /* ── Face-centred auto-pan ──
      detectFaceCenter gives the face as a 0–1 point on the photo; every renderer
@@ -2721,8 +2924,8 @@ export function useBuilderState(): BuilderActions {
         slotScales: [p.slotScales?.[0] ?? 1, 1],
         slotOffsetsX: [p.slotOffsetsX?.[0] ?? 0, 0],
         slotOffsetsY: [p.slotOffsetsY?.[0] ?? 0, 0],
-        // The photo goes full bleed under its memory: a mask or a moved frame
-        // on this single would make the memory page something else.
+        // The photo fills its frame under its memory (a moved frame would make
+        // the memory page something else); its filter and mask stay.
         ...fullBleedPhoto(p, true),
         // Drop any theme decorative corners — they sit in all four corners and
         // would overlay (and in print obscure) the QR chip.
@@ -2772,20 +2975,7 @@ export function useBuilderState(): BuilderActions {
    *  non-null text clears any photo/QR at the same slot (mutual exclusivity). */
   const setSlotText = useCallback((slotIndex: number, content: SlotText | null, pageIndex?: number) => {
     pushSnapshot();
-    const apply = (page: AlbumPage): AlbumPage => {
-      const slotTexts = [...(page.slotTexts ?? [])];
-      slotTexts[slotIndex] = content;
-      if (content) {
-        const fills = [...(page.slotFills ?? [])];
-        const qrFills = [...(page.qrFills ?? [])];
-        const ornamentFills = [...(page.ornamentFills ?? [])];
-        fills[slotIndex] = null;
-        qrFills[slotIndex] = null;
-        ornamentFills[slotIndex] = null;
-        return { ...page, slotTexts, slotFills: fills, qrFills, ornamentFills };
-      }
-      return { ...page, slotTexts };
-    };
+    const apply = (page: AlbumPage): AlbumPage => pageWithSlotText(page, slotIndex, content);
     if (pageIndex == null) {
       updateCurrentPage(apply);
     } else {
@@ -3247,13 +3437,7 @@ export function useBuilderState(): BuilderActions {
 
   const updateTextElement = useCallback((id: string, updates: Partial<TextElement>) => {
     pushSnapshot();
-    updateCurrentPage((page) => ({
-      ...page,
-      // New words are the customer's: they stop following the occasion.
-      textElements: page.textElements.map((t) => (t.id === id
-        ? { ...t, ...updates, ...(updates.text != null && updates.text !== t.text ? { fromOccasion: undefined } : {}) }
-        : t)),
-    }));
+    updateCurrentPage((page) => pageWithTextUpdate(page, id, updates));
   }, [updateCurrentPage]);
 
   const deleteTextElement = useCallback((id: string) => {
@@ -3264,66 +3448,17 @@ export function useBuilderState(): BuilderActions {
     }));
   }, [updateCurrentPage]);
 
+  const addPlacedWords = useCallback((words: TextElement) => {
+    pushSnapshot();
+    updateCurrentPage((page) => ({ ...page, textElements: [...page.textElements, { ...words, placed: true, boxIndex: undefined }] }));
+  }, [updateCurrentPage]);
+
   // Text bound to a template text box (textSlots[slotIndex]). Position/size come
   // from the template's slot at render time, so x/y are unused for boxed text.
   const setBoxText = useCallback((slotIndex: number, content: Partial<TextElement> & { text: string }, pageIndex?: number) => {
     pushSnapshot();
     const theme = THEMES[selectedTemplate];
-    const applyToPage = (page: AlbumPage): AlbumPage => {
-      const existing = page.textElements.find((t) => t.boxIndex === slotIndex);
-      const trimmed = content.text.trim();
-      // Empty → clear the box (revert to the "Tap to add text" placeholder).
-      if (!trimmed) {
-        return existing
-          ? { ...page, textElements: page.textElements.filter((t) => t.boxIndex !== slotIndex) }
-          : page;
-      }
-      // Mutual exclusivity (third leg): writing a caption evicts a photo/QR/ornament
-      // occupying the same caption box.
-      const textSlotFills = [...(page.textSlotFills ?? [])];
-      const textSlotQr = [...(page.textSlotQr ?? [])];
-      const textSlotOrnament = [...(page.textSlotOrnament ?? [])];
-      textSlotFills[slotIndex] = null;
-      textSlotQr[slotIndex] = null;
-      const textSlotQrGeom = (page.textSlotQrGeom ?? []).map((g, k) => (k === slotIndex ? null : g));
-      textSlotOrnament[slotIndex] = null;
-      if (existing) {
-        return {
-          ...page,
-          textSlotFills,
-          textSlotQr,
-          textSlotOrnament,
-          textSlotQrGeom,
-          textElements: page.textElements.map((t) =>
-            t.boxIndex === slotIndex
-              // A title the customer types is theirs: it stops following the album name.
-              // A line the customer writes or picks is theirs too: it stops following the occasion.
-              ? { ...t, ...content, text: content.text, fromAlbumName: content.text === t.text ? t.fromAlbumName : undefined, fromOccasion: content.text === t.text ? t.fromOccasion : undefined }
-              : t),
-        };
-      }
-      const newText: TextElement = {
-        id: `box-${slotIndex}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        text: content.text,
-        x: 0,
-        y: 0,
-        fontSize: content.fontSize ?? 28,
-        fontFamily: content.fontFamily ?? theme.fontFamily,
-        color: content.color ?? theme.textColor,
-        bold: content.bold ?? false,
-        italic: content.italic ?? false,
-        underline: content.underline ?? false,
-        alignment: content.alignment ?? 'center',
-        outlineColor: content.outlineColor,
-        outlineWidth: content.outlineWidth,
-        shadow: content.shadow,
-        quote: content.quote,
-        rotation: 0,
-        opacity: 100,
-        boxIndex: slotIndex,
-      };
-      return { ...page, textSlotFills, textSlotQr, textSlotOrnament, textElements: [...page.textElements, newText] };
-    };
+    const applyToPage = (page: AlbumPage): AlbumPage => pageWithBoxText(page, slotIndex, content, theme);
     // Default: the current page. The preview spread passes an explicit pageIndex
     // so it can edit either of the two pages on screen.
     if (pageIndex == null) {
@@ -3624,7 +3759,7 @@ export function useBuilderState(): BuilderActions {
       const id = coverLocalPhotoId(c as AlbumPage | undefined);
       if (id) discardedPhotoIds.push(id);
     }
-    const discardedAccount = stored?.accountId ?? draftAccountRef.current ?? null;
+    const discardedAccount = leavingOwnerRef.current ?? stored?.accountId ?? draftAccountRef.current ?? null;
     // The version the album being put away is on (in memory, else its draft's).
     const leavingRec = syncRecFor(albumIdRef.current) ?? draftSyncRecord(stored?.albumId, stored?.sync);
     const leaving: AlbumData | null = draftHasContent(persistRef.current?.local)
@@ -3632,6 +3767,10 @@ export function useBuilderState(): BuilderActions {
       : stored && draftHasContent(stored)
         ? albumDataFromDraft(stored as StoredDraft, currentAlbumTheme())
         : null;
+    // Unchanged since the version this device saved or opened: no write (as
+    // loadAlbum). Re-saving marked an album nobody touched "Changed just now"
+    // (beta round 4b: "Start a new album" after opening one).
+    const unchanged = !!leaving && !!leavingRec?.base && leavingRec.key === albumContentKey(toAlbumRow(leaving));
     // The saved session is read directly, so this is right even while the
     // auth context is still loading (it is, on the fresh-start mount).
     void account.signedInUserId().then(async (signedIn) => {
@@ -3639,7 +3778,7 @@ export function useBuilderState(): BuilderActions {
       //    copy is only refreshed every 10 min or on leaving, so the draft on
       //    this device can be newer — and it is the album the customer will
       //    come back to.
-      if (signedIn && leaving && (!discardedAccount || discardedAccount === signedIn)) {
+      if (signedIn && leaving && !unchanged && (!discardedAccount || discardedAccount === signedIn)) {
         // Only onto the version this device had: a newer one saved on another
         // device is not overwritten by the copy being put away.
         await saveToCloud(signedIn, leaving, { quiet: true, rec: leavingRec });
@@ -3699,7 +3838,10 @@ export function useBuilderState(): BuilderActions {
     if (!user?.id) return;
     const owner = draftOwnerRef.current;
     draftOwnerRef.current = user.id;
-    if (owner && owner !== user.id) reset();
+    if (owner && owner !== user.id) {
+      leavingOwnerRef.current = owner;
+      try { reset(); } finally { leavingOwnerRef.current = null; }
+    }
   }, [user?.id, reset]);
 
   /* ── Load specific album by ID — SAFE: respects local data ── */
@@ -3719,7 +3861,14 @@ export function useBuilderState(): BuilderActions {
       const onScreen = persistRef.current?.local;
       const wasOnScreen = albumIdRef.current === albumId;
       if (albumIdRef.current !== albumId && draftHasContent(onScreen)) {
-        void saveToCloud(user.id, serializeAlbum(), { quiet: true });
+        // Unchanged since the version this device saved or opened: no write
+        // (flushCloud's rule). Re-saving it marked an album nobody touched
+        // "Changed just now" and moved it up the album list (beta round 3).
+        const leaving = serializeAlbum();
+        const rec = syncRecFor(leaving.id);
+        if (!(rec?.base && rec.key === albumContentKey(toAlbumRow(leaving)))) {
+          void saveToCloud(user.id, leaving, { quiet: true });
+        }
       }
       const albumData = await albumSync.load(user.id, albumId);
       // SAME album already on screen: which version is newer is decided by
@@ -3939,12 +4088,14 @@ export function useBuilderState(): BuilderActions {
     duplicatePage,
     generateAlbum: generateAlbumAction,
     generating,
+    generatingCount,
     regeneratePage,
     shuffleLayout,
     cycleLayout,
     availableTemplatesForCurrentPage,
     layoutChangeLoses,
     applyPageLayout,
+    tryPageLayout,
     layoutPickerOpen,
     setLayoutPickerOpen,
     resizeAsk,
@@ -3983,6 +4134,7 @@ export function useBuilderState(): BuilderActions {
     addThemedQuote,
     updateTextElement,
     deleteTextElement,
+    addPlacedWords,
     setBoxText,
     finishBoxesWithQuotes,
     requoteForOccasion,

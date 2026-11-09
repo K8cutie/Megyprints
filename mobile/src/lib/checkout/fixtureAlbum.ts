@@ -16,6 +16,7 @@
 import { generateAlbum } from '@web/pages/builder/generateAlbum';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from '@web/pages/builder/types';
 import { withSeed } from '../sharedCheck';
+import { coverPhotoUri } from './orderStart';
 import { siteFile } from './site';
 import type { CheckoutAlbum, OrderAlbumRow } from './orderPayload';
 
@@ -63,8 +64,6 @@ export function fixtureCheckoutAlbum(): CheckoutAlbum {
   const photos = fixturePhotos();
   const pages = withSeed(FIXTURE_SEED, () => generateAlbum(photos, FIXTURE_SIZE));
   const coverFront = coverFrom(pages);
-  const coverIndex = (coverFront.slotFills ?? []).find((f): f is number => typeof f === 'number');
-  const coverPhotoUri = coverIndex != null ? photos[coverIndex]?.previewUrl ?? null : null;
   const row: OrderAlbumRow = {
     id: FIXTURE_ALBUM_ID,
     title: FIXTURE_TITLE,
@@ -86,7 +85,7 @@ export function fixtureCheckoutAlbum(): CheckoutAlbum {
     pages,
     photoUris: photos.map((p) => p.previewUrl),
     coverFront,
-    coverPhotoUri,
+    coverPhotoUri: coverPhotoUri(coverFront, photos),
     row,
     fixture: true,
   };

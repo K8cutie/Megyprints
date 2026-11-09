@@ -24,6 +24,8 @@ export interface OpenOrder {
   created_at: string;
   payment_submitted_at: string | null;
   tester_code?: string | null;
+  /** NULL once the customer has deleted the album (0002: on delete set null). */
+  album_id?: string | null;
 }
 
 /** The website's Your orders columns, plus the total the customer was asked to pay. */
@@ -60,14 +62,32 @@ export function payByOn(iso: string): string {
 }
 
 /** The line under the QR on an order already placed: the website's Orders
- *  page words (src/pages/MyOrders.tsx), with that order's own last day. */
-export function payByLine(iso: string): string {
+ *  page words (src/pages/MyOrders.tsx), with that order's own last day. An
+ *  order whose album was deleted (album_id null) makes no promise about it. */
+export function payByLine(iso: string, albumId?: string | null): string {
   const day = payByOn(iso);
-  return `${day ? `Please pay by ${day}.` : `Please pay within ${UNPAID_ORDER_DAYS} days.`} After that this order closes by itself, and your album stays saved.`;
+  const first = day ? `Please pay by ${day}.` : `Please pay within ${UNPAID_ORDER_DAYS} days.`;
+  return `${first} After that this order closes by itself${albumId === null ? '.' : ', and your album stays saved.'}`;
+}
+
+/** A free tester-code order that stopped half-way (its files or its claim
+ *  never went through): still "pending_payment", but nobody is to pay it.
+ *  The checkout finishes THAT order with the code (it counts as unpaid, and 3
+ *  unpaid orders stop new ones: 0042). Beta round 2: its box said "To
+ *  finish it, pay that order", and its page had nothing to pay. */
+export function unfinishedTestOrder(o: OpenOrder): boolean {
+  return o.status === 'pending_payment' && !!o.tester_code && !o.payment_submitted_at;
 }
 
 /** The box at the top of checkout. */
 export function openOrderWords(o: OpenOrder): { headline: string; body: string; button: string } {
+  if (unfinishedTestOrder(o)) {
+    return {
+      headline: `This album has a test order that didn't finish: ${o.order_number}, placed ${placedOn(o.created_at)}.`,
+      body: 'Nothing is charged for a test order. Use your tester code and tap Place order below to finish it.',
+      button: `Open order ${o.order_number}`,
+    };
+  }
   return {
     headline: `This album already has an order ${o.payment_submitted_at ? "— you sent the payment and we're confirming it" : 'waiting for payment'}: ${o.order_number}, placed ${placedOn(o.created_at)}.`,
     body: `${o.payment_submitted_at ? "You don't need a new one." : "To finish it, pay that order. You don't need a new one."} Changed the album since? Place a new order below and we'll print the new one.`,
@@ -101,5 +121,6 @@ export function openOrderView(o: OpenOrder): 'pay' | 'status' {
 
 /** The question under Place order before a second order. */
 export function secondOrderQuestion(o: OpenOrder): string {
+  if (unfinishedTestOrder(o)) return `This album has test order ${o.order_number} that didn't finish. Place a second order for it?`;
   return `This album already has order ${o.order_number} ${o.payment_submitted_at ? 'with its payment sent' : 'waiting for payment'}. Place a second order for it?`;
 }

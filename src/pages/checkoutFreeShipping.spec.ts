@@ -36,7 +36,7 @@ vi.mock('../lib/storeSettings', () => ({
 
 import Order from './Order';
 import { saveCheckoutForm } from '../lib/checkoutSession';
-import { noteOrderHandoff } from '../lib/printQueue';
+import { noteOrderHandoff, clearPendingPrintJob } from '../lib/printQueue';
 import { EMPTY_ADDRESS } from '../lib/contact';
 import { priceOf, compareAtPriceOf, type PriceSchedule } from '../lib/pricing';
 
@@ -62,6 +62,7 @@ beforeEach(() => {
   window.scrollTo = (() => {}) as typeof window.scrollTo;
   h.auth = { user: { id: 'user-1' }, loading: false };
   h.job = { albumId: 'album-1', albumSize: '8x8', pages: Array.from({ length: 41 }, (_, i) => page(i)), photos, coverFront: { ...page(99), id: 'cover' } };
+  clearPendingPrintJob();
   noteOrderHandoff({ albumId: 'album-1', saved: true });
   saveCheckoutForm({ albumId: 'album-1', name: 'Fe Freeship', phone: '0917 555 0133', address: EMPTY_ADDRESS, material: 'glossy', cover: 'hardboundLeather', userId: 'user-1' });
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
@@ -80,7 +81,22 @@ describe('free shipping and the real was price at checkout', () => {
     const included = host.querySelector('[data-testid="order-included"]')?.textContent ?? '';
     expect(included).toContain('Free shipping (₱200 value)');
     expect(included).toContain('7 living-memory QRs (₱140 value)');
-    expect(included).toContain('5 years of memory hosting');
+    expect(included).toContain('Memories stay live for 5 years');
+    expect(included).not.toContain('you added');
+  });
+
+  it('a longer memory term is named in the included box, and the QRs have one name (owner, 2026-11-04)', async () => {
+    h.schedule = schedule({ free_shipping_value: 200 });
+    const qr = { code: 'abcd2345', destination: 'https://example.com/v', qrPngDataUrl: '' };
+    const job = h.job as { pages: Record<string, unknown>[] };
+    job.pages[0] = { ...job.pages[0], qrFills: [qr] };
+    await render(); await settle();
+    const summary = host.textContent ?? '';
+    expect(summary).toContain('7 living-memory QRs included');
+    expect(summary).not.toContain('QR memories');
+    const ten = [...host.querySelectorAll('[role="radio"]')].find((b) => b.textContent?.startsWith('10 years')) as HTMLButtonElement;
+    await act(async () => { ten.click(); });
+    expect(host.querySelector('[data-testid="order-included"]')?.textContent).toContain('Memories stay live for 5 years (you added 5 more years)');
   });
 
   it('crosses out the price we really charged before, and the saving is exactly was − now', async () => {

@@ -14,10 +14,13 @@
    • the page colour sheet.
    ══════════════════════════════════════════════════════════════════════════ */
 import { createElement, type ReactElement } from 'react';
+import { Dimensions, Keyboard, StyleSheet } from 'react-native';
 import { createRoot, type Root, type TestInstance } from 'test-renderer';
 import { SCENARIOS } from '../../tools/parity/scenarios';
 import { curatedQuotesFor } from '@web/lib/themeQuotePool';
 import { PAGE_COLORS } from '@web/pages/builder/pageColors';
+import type { AlbumPage } from '@web/pages/builder/types';
+import { SheetPlacement } from '../src/editor/core/EditorSheet';
 import { editThePages } from '../src/editor/scope';
 import '../src/editor/parts';
 import type { EditorContext, SheetProps } from '../src/editor/registry';
@@ -27,7 +30,8 @@ import { PageColourSheet } from '../src/editor/text/PageColourSheet';
 import { PHOTO_QUOTES_URL, type PhotoQuoteDeps } from '../src/editor/text/photoQuotes';
 import { forgetResume, takeResume } from '../src/editor/text/resumeQuote';
 import { createFontStore, type FontStoreDeps } from '../src/editor/text/fonts/fontStore';
-import { fitOf } from '../src/editor/text/wordsFlow';
+import { TYPING_PAUSE_MS } from '../src/editor/text/WordsOnPage';
+import { contentOf, editorStateOf, fitOf, initialContent, pageWithWords, saveWords, type WordsTarget } from '../src/editor/text/wordsFlow';
 import * as words from '../src/editor/text/words';
 import { PageText } from '../src/render/pageText';
 import { forgetAddedFonts } from '../src/render/fontTable';
@@ -39,6 +43,16 @@ import { act, builder, ctxOn, madeAlbum, useEditorBench } from './editorHarness'
 jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }));
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { router } = require('expo-router') as { router: { push: jest.Mock } };
+
+/** Every page "Edit text" asked to have drawn (no Skia here), the last one on show. */
+const mockPictures: { page: AlbumPage }[] = [];
+jest.mock('../src/builder/usePagePicture', () => ({
+  PRIORITY: { editing: 3, shown: 2, thumbnail: 1, ahead: 0 },
+  usePagePicture: (_text: unknown, req: { page: AlbumPage } | null) => {
+    if (req) mockPictures.push(req);
+    return { uri: req ? 'file:///page.jpg' : null, notDrawn: [], missing: 0, error: null };
+  },
+}));
 
 useEditorBench();
 
@@ -75,6 +89,7 @@ async function show<P>(Sheet: (p: SheetProps<P>) => ReactElement | null, platfor
 
 const all = (pred: (i: TestInstance) => boolean) => sheetRoot!.container.queryAll(pred);
 const has = (id: string) => all((i) => i.props.testID === id).length > 0;
+const byId = (id: string): TestInstance | undefined => all((i) => i.props.testID === id)[0];
 function textOf(node: TestInstance = sheetRoot!.container): string {
   return node.children.map((c) => (typeof c === 'string' ? c : textOf(c))).join('');
 }
@@ -251,14 +266,39 @@ describe('the text editor', () => {
     await press('text-bold');
     await press('text-bigger');
     await press('text-color-open');
+    await press('text-color-Gold');
+    expect(has('text-color-panel')).toBe(true); // it stays open to try another (owner, 2026-11-05)
     await press('text-color-Navy');
-    expect(has('text-color-panel')).toBe(false); // a swatch closes the colours, as on the website
+    expect(has('text-color-panel')).toBe(true);
     await press('text-align-left');
     await press('text-editor-done');
     expect(log.closed).toBe(1);
     expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)).toMatchObject({
       text: 'Our first beach day', bold: true, fontSize: 30, color: '#1F3A5F', alignment: 'left', fontFamily: 'Georgia, "Times New Roman", serif',
     });
+  });
+
+  it('the colour list has the 12 gradients (owner, 2026-11-08): one gives the words its two colours; a plain colour takes them back to one', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const log = await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await type('text-editor-input', 'Summer');
+    await press('text-color-open');
+    expect(all((i) => i.props.testID?.startsWith?.('text-color-gradient-') && i.props.accessibilityRole === 'radio').length).toBe(12);
+    await press('text-color-gradient-peach-sunset');
+    expect(textOf(byId('text-color-name')!)).toBe('Peach sunset');
+    await press('text-editor-done');
+    expect(log.closed).toBe(1);
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)).toMatchObject({ text: 'Summer', color: '#F07F5F', fillTo: '#F48FB1' });
+
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await press('text-color-open');
+    expect(byId('text-color-gradient-peach-sunset')!.props.accessibilityState).toMatchObject({ checked: true });
+    await press('text-color-Navy');
+    await press('text-editor-done');
+    const t = builder().albumPages[4].textElements.find((x) => x.boxIndex === 0)!;
+    expect(t.color).toBe('#1F3A5F');
+    expect(t.fillTo).toBeUndefined();
   });
 
   it('✕ closes without saving', async () => {
@@ -280,10 +320,50 @@ describe('the text editor', () => {
     expect(has('font-list')).toBe(true);
     expect(all((i) => i.props.testID?.startsWith?.('font-') && typeof i.props.onClick === 'function' && i.props.testID !== 'font-list').length).toBe(74);
     await press('font-Lora');
-    expect(has('font-list')).toBe(false);
-    expect(textOf()).toContain('Lora');
+    expect(has('font-list')).toBe(true); // stays open to try another (owner, 2026-11-05)
+    expect(textOf(all((i) => i.props.testID === 'text-font-open')[0])).toContain('Lora');
     await press('text-editor-done');
     expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)?.fontFamily).toBe('"Lora", Georgia, serif');
+  });
+
+  it('the font list stays open: each pick shows on the words, the last one is saved, and the words are saved only on Done', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const log = await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await type('text-editor-input', 'Hello');
+    await press('text-font-open');
+    for (const name of ['Lora', 'Playfair', 'Cinzel']) {
+      await press(`font-${name}`);
+      expect(has('text-font-panel')).toBe(true);
+      expect(all((i) => i.props.testID === `font-${name}` && i.props.accessibilityState?.selected === true).length).toBeGreaterThan(0);
+      expect(textOf(all((i) => i.props.testID === 'text-font-open')[0])).toContain(name);
+      expect(log.closed).toBe(0);
+    }
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)).toBeUndefined();
+    await press('text-font-open'); // the same button closes the list
+    expect(has('text-font-panel')).toBe(false);
+    await press('text-editor-done');
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)?.fontFamily).toContain('Cinzel');
+  });
+
+  it('"Any color" stays open too: a shade or a code shows on the words, and the code follows the shade', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await type('text-editor-input', 'Hello');
+    await press('text-color-open');
+    await press('text-color-any');
+    const shade = all((i) => /^any-color-#/.test(i.props.testID ?? '') && typeof i.props.onClick === 'function')[1].props.testID as string;
+    await press(shade);
+    const hex = shade.replace('any-color-', '');
+    expect(has('text-color-any-panel')).toBe(true);
+    expect(has('text-color-panel')).toBe(true);
+    expect(all((i) => i.props.testID === 'any-color-code')[0].props.value).toBe(hex);
+    await act(async () => { all((i) => i.props.testID === 'any-color-code')[0].props.onChangeText('#3A6EA5'); });
+    await press('any-color-use');
+    expect(has('text-color-any-panel')).toBe(true);
+    await press('text-editor-done');
+    expect(builder().albumPages[4].textElements.find((t) => t.boxIndex === 0)?.color?.toUpperCase()).toBe('#3A6EA5');
   });
 
   it('no internet: the words keep their font, and it says so plainly', async () => {
@@ -314,6 +394,180 @@ describe('the text editor', () => {
     await press('text-make-fit');
     expect(textOf(all((i) => i.props.testID === 'text-size')[0])).toBe(String(size));
     expect(has('text-too-long')).toBe(false);
+  });
+});
+
+describe('the page above the words (the same format as Mask)', () => {
+  const lastPage = () => mockPictures[mockPictures.length - 1].page;
+  const pause = () => act(async () => { await new Promise((r) => setTimeout(r, TYPING_PAUSE_MS + 30)); });
+  const box0 = (p: AlbumPage) => p.textElements.find((t) => t.boxIndex === 0);
+  /** A page as print sees it: a new text's id is the only thing allowed to differ. */
+  const plain = (p: AlbumPage) => {
+    const copy = JSON.parse(JSON.stringify(p)) as AlbumPage;
+    return { ...copy, textElements: copy.textElements.map((t) => ({ ...t, id: '' })) };
+  };
+  const layOut = async () => {
+    const page = all((i) => i.props.testID === 'text-editor-page' && typeof i.props.onLayout === 'function')[0];
+    await act(async () => { page.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 320, height: 320 } } }); });
+  };
+  beforeEach(() => { mockPictures.length = 0; });
+
+  it('opens on the page itself; typing shows after a short pause, a button at once; nothing is saved until Done, and Done saves what was shown', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const before = builder().albumPages[4];
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    expect(lastPage()).toBe(before); // the picture the editor already has: nothing new to draw
+    await type('text-editor-input', 'Hello');
+    expect(lastPage()).toBe(before);
+    await pause();
+    expect(box0(lastPage())?.text).toBe('Hello');
+    await press('text-bold');
+    expect(box0(lastPage())?.bold).toBe(true);
+    await press('text-font-open');
+    await press('font-Playfair');
+    expect(box0(lastPage())?.fontFamily).toBe('"Playfair Display", Georgia, serif');
+    await press('text-color-open');
+    await press('text-color-Navy');
+    expect(box0(lastPage())?.color).toBe('#1F3A5F');
+    await press('text-bigger');
+    expect(box0(lastPage())?.fontSize).toBe(30);
+    expect(builder().albumPages[4]).toBe(before); // still only on show
+    const shown = lastPage();
+    await press('text-editor-done');
+    expect(plain(builder().albumPages[4])).toEqual(plain(shown));
+  });
+
+  it('the same words are the same page, so typing them again draws nothing new', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await type('text-editor-input', 'Hello');
+    await pause();
+    const first = JSON.stringify(lastPage());
+    await type('text-editor-input', 'Hello!');
+    await pause();
+    await type('text-editor-input', 'Hello');
+    await pause();
+    expect(JSON.stringify(lastPage())).toBe(first);
+  });
+
+  it('✕ leaves the album as it was, whatever was tried', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const before = builder().albumPages[4];
+    const log = await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await type('text-editor-input', 'Only tried');
+    await pause();
+    await press('text-bold');
+    await press('text-editor-close');
+    expect(log.closed).toBe(1);
+    expect(builder().albumPages[4]).toBe(before);
+  });
+
+  it('the page shown is the page saved, for each kind of words, cleared words too', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    await act(async () => { builder().addTextElement(10, 10, 'A title'); });
+    const added = builder().albumPages[4].textElements.find((t) => t.text === 'A title')!.id;
+    const check = async (target: WordsTarget, text: string) => {
+      const page = builder().albumPages[4];
+      const content = { ...contentOf(editorStateOf(initialContent(page, target))), text, bold: true };
+      const shown = pageWithWords(page, target, content);
+      await act(async () => { saveWords(builder(), page, 4, target, content); });
+      expect(plain(builder().albumPages[4])).toEqual(plain(shown));
+    };
+    await check({ kind: 'box', boxIndex: 0 }, 'In a caption box');
+    await check({ kind: 'box', boxIndex: 0 }, 'In a caption box, changed');
+    await check({ kind: 'box', boxIndex: 0 }, '   ');
+    await check({ kind: 'slot', slotIndex: 0 }, 'In a frame');
+    await check({ kind: 'slot', slotIndex: 0 }, '');
+    await check({ kind: 'free', textId: added }, 'A new title');
+  });
+
+  it('the box being edited is outlined on the page', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    await layOut();
+    expect(has('text-editor-picture')).toBe(true);
+    expect(has('text-editor-box')).toBe(true);
+  });
+
+  it('a list takes the keyboard\'s place; the typing box puts it away, and a tap on the page puts either away', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    const dismiss = jest.spyOn(Keyboard, 'dismiss');
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    const focus = async () => {
+      const input = all((i) => i.props.testID === 'text-editor-input' && i.type === 'TextInput')[0];
+      await act(async () => { input.props.onFocus({ nativeEvent: {} }); });
+    };
+    await press('text-font-open');
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(has('text-font-panel')).toBe(true);
+    await focus();
+    expect(has('text-font-panel')).toBe(false);
+    await press('text-color-open');
+    expect(dismiss).toHaveBeenCalledTimes(2);
+    expect(has('text-color-panel')).toBe(true);
+    await press('text-editor-page');
+    expect(has('text-color-panel')).toBe(false);
+    expect(dismiss).toHaveBeenCalledTimes(3);
+    dismiss.mockRestore();
+  });
+
+  it('on its side: the page on the left, everything else in a panel down the right', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    sheetRoot = createRoot();
+    const props = { ctx: ctxOn(platform), params: { target: { kind: 'box', boxIndex: 0 } as WordsTarget, store: fakeFonts(true) }, close: () => {} };
+    await act(async () => { sheetRoot!.render(createElement(SheetPlacement.Provider, { value: 'side' }, createElement(TextEditorSheet, props))); });
+    const panel = all((i) => i.props.testID === 'text-editor-side')[0];
+    expect(panel).toBeTruthy();
+    expect(panel.queryAll((i) => i.props.testID === 'text-editor-input').length).toBeGreaterThan(0);
+    expect(panel.queryAll((i) => i.props.testID === 'text-editor-done').length).toBeGreaterThan(0);
+    expect(panel.queryAll((i) => i.props.testID === 'text-editor-page')).toHaveLength(0);
+    expect(has('text-editor-page')).toBe(true);
+  });
+
+  it('on its side the format bar stays on screen, however many lines the words take (owner, 2026-11-06: "cut at the bottom")', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    sheetRoot = createRoot();
+    const props = { ctx: ctxOn(platform), params: { target: { kind: 'box', boxIndex: 0 } as WordsTarget, store: fakeFonts(true) }, close: () => {} };
+    await act(async () => { sheetRoot!.render(createElement(SheetPlacement.Provider, { value: 'side' }, createElement(TextEditorSheet, props))); });
+    const styleOf = (id: string) => StyleSheet.flatten(all((i) => i.props.testID === id)[0].props.style);
+    const screenH = Dimensions.get('window').height;
+
+    // The typing box gives way to the keyboard, and the bar keeps its size.
+    const box = styleOf('text-editor-input');
+    expect(box.flexShrink).toBe(1);
+    // ...never to a line and a half: two whole lines of words and the box's padding.
+    expect(box.minHeight).toBe(2 * (box.lineHeight as number) + 2 * (box.paddingVertical as number));
+    expect(styleOf('text-format-bar')).toMatchObject({ flexGrow: 0, flexShrink: 0 });
+    // With no list open nothing under the box can shrink: that would squash the bar.
+    expect(styleOf('text-bar-area').flexShrink).toBeUndefined();
+
+    // A list has what is left under the box, not a height worked out from one line of words.
+    await press('text-color-open');
+    expect(styleOf('text-bar-area').flexShrink).toBe(1);
+    expect(styleOf('text-bar-area').minHeight).toBeGreaterThanOrEqual(48);
+    expect(styleOf('text-color-panel').maxHeight).toBe(screenH);
+    await press('text-font-open');
+    expect(styleOf('text-font-panel').flexShrink).toBe(1);
+    expect(styleOf('font-list').maxHeight).toBe(screenH);
+  });
+
+  it('upright a list keeps its share of the screen: the page gives way, not the bar', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(4);
+    await show<TextEditorParams>(TextEditorSheet, platform, { target: { kind: 'box', boxIndex: 0 }, store: fakeFonts(true) });
+    const styleOf = (id: string) => StyleSheet.flatten(all((i) => i.props.testID === id)[0].props.style);
+    expect(styleOf('text-editor-input').flexShrink).toBeUndefined();
+    await press('text-color-open');
+    expect(styleOf('text-bar-area').flexShrink).toBeUndefined();
+    expect(styleOf('text-color-panel').maxHeight).toBeLessThan(Dimensions.get('window').height / 2);
   });
 });
 
@@ -410,7 +664,8 @@ describe('the page colour sheet', () => {
     const log = await show(PageColourSheet, platform, undefined);
     expect(textOf()).toContain(words.PAGE_COLOUR);
     expect(textOf()).toContain(words.PAGE_COLOUR_HINT);
-    expect(all((i) => i.props.testID?.startsWith?.('page-color-') && i.props.accessibilityRole === 'radio').length).toBe(9);
+    // the words' 28 colours and the 12 gradients (owner, 2026-11-08)
+    expect(all((i) => i.props.testID?.startsWith?.('page-color-') && i.props.accessibilityRole === 'radio').length).toBe(40);
     await press('page-color-Red');
     const red = PAGE_COLORS.find((c) => c.name === 'Red')!.hex;
     expect(builder().albumPages[2].background).toEqual({ type: 'solid', solid: red });
@@ -423,6 +678,23 @@ describe('the page colour sheet', () => {
     expect(log2.said).toEqual(['Every page is red now.']);
     expect(builder().albumPages.every((p) => p.background?.type === 'solid' && p.background.solid === red)).toBe(true);
     expect(log.closed).toBe(0);
+  });
+
+  it('a gradient colours the page top to bottom; "Use ocean on every page" colours them all and says so', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await onPage(2);
+    await show(PageColourSheet, platform, undefined);
+    await press('page-color-gradient-ocean');
+    const ocean = { type: 'gradient', gradient: { type: 'linear', angle: 180, stops: [{ offset: 0, color: '#6FA8DC' }, { offset: 1, color: '#1F3A5F' }] } };
+    expect(builder().albumPages[2].background).toEqual(ocean);
+    await act(async () => { sheetRoot!.unmount(); });
+    const log = await show(PageColourSheet, platform, undefined);
+    expect(textOf(byId('page-color-name')!)).toBe('Ocean');
+    expect(textOf()).toContain(words.useOnEveryPage('Ocean'));
+    await press('page-color-all');
+    expect(log.said).toEqual(['Every page is ocean now.']);
+    expect(builder().albumPages.every((p) => JSON.stringify(p.background) === JSON.stringify(ocean))).toBe(true);
+    expect(builder().coverFront.background).toEqual(ocean);
   });
 });
 

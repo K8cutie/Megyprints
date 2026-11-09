@@ -15,8 +15,14 @@ export const FRONT_COVER = 'Front cover';
 /** CoverEditor.tsx: the two tabs. */
 export const TABS = { background: 'Background', text: 'Text' } as const;
 
-/** CoverEditor.tsx Background tab: over the one row of photos (no "Show all" since #235). */
-export const YOUR_PHOTOS = 'Your photos, best ones first. Tap one.';
+/** CoverEditor.tsx Background tab: over the one row of photos (no "Show all"
+ *  since #235). "Best ones first" is the website's photo check's order. */
+export const WEBSITE_YOUR_PHOTOS = 'Your photos, best ones first. Tap one.';
+/** APP: the app has no photo check yet (appPlatform.ts photoCheck), so the
+ *  row is in the album's order, and its line promised a ranking it never
+ *  had (beta round 2). Once the check is on, it takes the website's words
+ *  again (test/editorCover.test.ts fails first). */
+export const YOUR_PHOTOS = 'Your photos. Tap one for the cover.';
 export const COLOUR = 'Colour';
 export const ZOOM = 'Zoom';
 export const RESET = 'Reset';
@@ -44,6 +50,15 @@ export const ITALIC = 'Italic';
 export const SHADOW = 'Shadow';
 /** CoverEditor.tsx: the Shadow button's title. */
 export const SHADOW_HINT = 'Shadow under the words';
+/** APP: WordArt on the title (owner, 2026-11-05); the website draws it and has no buttons for it.
+ *  The words part's own (text/WordArtControls, one source). */
+export { EFFECTS, OUTLINE, TWO_COLOURS, GLOW, SHAPE, NONE, OUTLINE_SIZES, OUTLINE_COLOUR, TWO_COLOURS_HINT, GLOW_HINT, SHAPES } from '../text/words';
+/** APP: words placed by hand on the cover (owner, 2026-11-07), and the list of them. */
+export { ADD_TEXT } from '../text/words';
+export const MORE_WORDS = 'More words';
+export const MORE_WORDS_HINT = 'Put more words anywhere on the cover. Drag them on the cover to move them.';
+/** The button for words already there (TalkBack reads it). */
+export const changeWords = (text: string) => `Change “${text}”`;
 export const SIZE = 'Size';
 export const sizeLine = (px: number) => `${px}px`;
 /** CoverEditor.tsx (as a dialog): the one way out. */

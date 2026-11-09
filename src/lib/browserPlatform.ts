@@ -30,7 +30,7 @@ import type { BuilderPlatform, PickedPhoto, StoredPhoto } from '../shared/platfo
 import { browserLocalStore, browserSessionStore } from './browserStores';
 import { useIndexedDBPhotos, getImageDimensions, type StoredPhoto as IndexedDBPhoto } from './useIndexedDBPhotos';
 import { initFaceApi, detectFaceCenter } from '../pages/builder/faceDetection';
-import { readCaptureTime } from '../pages/builder/exif';
+import { readCaptureTime, readCaptureLocation } from '../pages/builder/exif';
 import { toAlbumPhoto } from './heicPhoto';
 import { looksHeic, HEIC_CONVERTING_PREVIEW } from './heicRules';
 import { checkPhoto, facesForAllPhotos } from './photoCheckRunner';
@@ -77,6 +77,7 @@ export const browserBuilderPlatform: BuilderPlatform = {
     toAlbumPhoto: (photo) => withFile(photo, (file) => toAlbumPhoto(file)),
     getImageDimensions: (photo) => withFile(photo, (file) => getImageDimensions(file)),
     captureTime: (photo) => withFile(photo, (file) => readCaptureTime(file)),
+    captureLocation: (photo) => withFile(photo, (file) => readCaptureLocation(file)),
     previewUrlOf: (photo) => URL.createObjectURL(asFile(photo)),
     releasePreviewUrl: (url) => URL.revokeObjectURL(url),
     // Exactly the rule the builder had: a blob: URL dies with the tab.

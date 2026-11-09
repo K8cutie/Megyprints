@@ -19,6 +19,7 @@ import { SCENARIOS } from '../../tools/parity/scenarios';
 import { dangerLast } from '../src/editor/actionRows';
 import { EditorSheet, SheetPlacement, SIDE_PANEL_W, sidePanelWidth } from '../src/editor/core/EditorSheet';
 import { GO_TO_PAGE, pageCount } from '../src/editor/editorWords';
+import { editorPictureWidth } from '../src/editor/pagePictureWidth';
 import { PagePicker } from '../src/editor/PagePicker';
 import { pageTargets } from '../src/editor/hitTest';
 import { selectedActionsFor, type EditorContext } from '../src/editor/registry';
@@ -89,14 +90,14 @@ describe('the picked thing\'s buttons: in rows, all in view, the red one last', 
     expect(dangerLast([])).toEqual([]);
   });
 
-  it('a photo on a real album: Replace, Swap, Mask, Filter, then Remove photo', async () => {
+  it('a photo on a real album: Replace, Swap, Add text, Mask, Filter, then Remove photo', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     const b = builder();
     const i = b.albumPages.findIndex((_p, k) => pageTargets({ page: b.albumPages[k], albumSize: b.albumSize, pageIndex: k, photoCount: b.uploadedPhotos.length }).targets.some((t) => t.kind === 'photo'));
     await act(async () => { builder().goToPage(i); });
     const ctx = ctxOn(platform);
     const photo = ctx.targets.find((t) => t.kind === 'photo')!;
-    expect(dangerLast(selectedActionsFor(photo, ctx)).map((x) => x.label)).toEqual(['Replace photo', 'Swap photo', 'Mask', 'Filter', 'Remove photo']);
+    expect(dangerLast(selectedActionsFor(photo, ctx)).map((x) => x.label)).toEqual(['Replace photo', 'Swap photo', 'Add text', 'Mask', 'Filter', 'Remove photo']); // Add text: owner, 2026-11-07
   });
 
   it('the screen: a wrapping row, not a sideways scroll', () => {
@@ -119,7 +120,8 @@ describe('on its side', () => {
   });
 
   it('the page picture is drawn for the short side: turning the phone draws nothing again', () => {
-    expect(SCREEN).toContain('Math.min(screenW, screenH) - space.md * 2');
+    expect(SCREEN).toContain('const px = editorPictureWidth(screenW, screenH);');
+    expect(editorPictureWidth(412, 915)).toBe(editorPictureWidth(915, 412));
   });
 
   it('a sheet opens as a panel down the right, the page left in view; upright, from the bottom as before', async () => {
@@ -138,6 +140,17 @@ describe('on its side', () => {
     const bottom = flat(screen.getByTestId('sheet').props.style);
     expect(bottom.width).toBeUndefined();
     expect(bottom.borderTopLeftRadius).toBe(16);
+  });
+
+  it('a sheet whose edits show on the page (Mask, Filter), upright: no dimming, and short enough to leave the page in view', async () => {
+    await render(
+      <SheetPlacement.Provider value="bottom">
+        <EditorSheet title="Mask" onClose={() => {}} live scroll testID="sheet"><Text>Circle</Text></EditorSheet>
+      </SheetPlacement.Provider>,
+    );
+    expect(flat(screen.getByTestId('sheet').props.style).maxHeight).toBe('42%');
+    expect(flat(screen.getByTestId('sheet-dim').parent?.props.style).backgroundColor).toBeUndefined();
+    expect(screen.getByText('Circle')).toBeOnTheScreen();
   });
 
   it('the panel is never more than 46% of the screen', () => {

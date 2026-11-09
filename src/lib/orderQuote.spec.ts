@@ -58,7 +58,7 @@ describe("the database's total is the Pay screen's total", () => {
 });
 
 describe('0055 follows the checkout', () => {
-  it('7 QR memories included, ₱20 each past that: the same numbers as pricing.ts', () => {
+  it('7 living-memory QRs included, ₱20 each past that: the same numbers as pricing.ts', () => {
     expect(sql).toContain(`qr_fee := greatest(0, qr - ${FREE_QR_MEMORIES}) * ${EXTRA_QR_RATE};`);
   });
 

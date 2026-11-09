@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   grayscale, tileSharpness, dHash, hamming, eyeAspectRatio, eyesClosedIn,
   isBlurry, medianSharpness, photoQuality, findRepeats, suggestLeaveOut,
-  nextCheckJob, checkIsReady, checkProgress, checkCopySize, basicCheck, checkFrom, faceVerdict,
+  nextCheckJob, checkIsReady, checkProgress, faceCheckProgress, checkCopySize, basicCheck, checkFrom, faceVerdict,
   BLUR_ABS, REPEAT_BITS, CHECK_LONG_SIDE, type CheckablePhoto, type PhotoCheck,
 } from './photoCheck';
 
@@ -343,5 +343,15 @@ describe('scheduling the check (two passes)', () => {
     ps[2].check = { ...ps[2].check!, facesTried: true };        // face models unavailable: still done
     expect(checkIsReady(ps)).toBe(true);                        // 'solo' faces can wait
     expect(checkProgress(ps)).toEqual({ done: 4, total: 4 });
+  });
+
+  it('faceCheckProgress counts the photos whose faces were looked for, among those that get a face pass', () => {
+    const checked = (id: string, faces: number | null, facesTried = false) =>
+      ({ id, width: 100, height: 100, check: { v: 1 as const, sharp: 100, hash: ({ a: '0000000000000000', b: 'ffffffffffffffff', c: 'f0f0f0f0f0f0f0f0' } as Record<string, string>)[id] ?? '0000000000000000', faces, eyesClosed: false, facesTried } });
+    const ps = [checked('a', null), checked('b', 2), checked('c', null, true), { id: 'd', width: 100, height: 100 }];
+    // Every checked photo gets a face pass: b and c are done, a is not, d has no check yet.
+    expect(faceCheckProgress(ps, true)).toEqual({ done: 2, total: 3 });
+    // No fast face finding: only the repeats get one, and these are not repeats.
+    expect(faceCheckProgress(ps, false)).toEqual({ done: 0, total: 0 });
   });
 });

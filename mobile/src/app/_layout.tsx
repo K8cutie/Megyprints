@@ -78,6 +78,8 @@ export default function RootLayout() {
             <Stack.Screen name="auth-return" options={{ title: 'Signing in' }} />
             <Stack.Screen name="change-password" options={{ title: 'Change password' }} />
             <Stack.Screen name="delete-account" options={{ title: 'Delete my account' }} />
+            <Stack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
+            <Stack.Screen name="terms" options={{ title: 'Terms of Service' }} />
           </Stack>
         </BuilderProvider>
       </DraftProvider>

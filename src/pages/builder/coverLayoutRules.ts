@@ -14,7 +14,7 @@
 import type { AlbumBackground, AlbumPage, CoverDesign, TextStyle } from './types';
 import type { CoverWrapGeometry, Rect, CoverPanel } from './coverGeometry';
 import { insetRect } from './coverGeometry';
-import { contrastOutline } from './wordArtRules';
+import { contrastOutline, WORDART_OUTLINE_WIDTH } from './wordArtRules';
 import { contrastRatio, parseRgb } from './colorContrast';
 
 // In colorContrast.ts (shared with the 2.0 app's page colours); still offered here.
@@ -286,6 +286,7 @@ export interface SpineInfo {
  *  TEXT selection (deterministic): (1) the bound-caption title (a TextElement on
  *  textSlot 0 — the cover template's title box); else (2) the largest free
  *  TextElement (lowest index wins ties) — the visual "title"; else (3) empty.
+ *  Words placed by hand (`placed`) are never chosen.
  *  The chosen element's styling is copied but the SIZE is re-fit to the physical
  *  spine (the front title size is in page-design space and must not be used raw)
  *  and to its LENGTH (fitSpineLine), and the colour to the spine (spineInk).
@@ -293,7 +294,9 @@ export interface SpineInfo {
 export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry, measure: SpineMeasure): SpineInfo {
   const bg = solidOf(front.background);
   const spineFontSize = Math.round(Math.min(g.panels.spine.width * 0.5, g.panels.front.height * 0.035));
-  const nonEmpty = (front.textElements ?? []).filter((t) => !!t.text && t.text.trim().length > 0);
+  // Words placed by hand on the cover photo (freeWords.ts: "Est. 2026", "Mom ♥")
+  // are not the album's name: the spine never takes them.
+  const nonEmpty = (front.textElements ?? []).filter((t) => !!t.text && t.text.trim().length > 0 && !t.placed);
 
   let chosen = nonEmpty.find((t) => t.boxIndex === 0);
   if (!chosen) {
@@ -316,7 +319,9 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry, measure: Spi
         underline: false,
         alignment: 'center',
         outlineColor: chosen.outlineColor,
-        outlineWidth: chosen.outlineWidth,
+        // The spine's words are small: never the front's thick outline, its
+        // second fill colour, its glow or its curve.
+        outlineWidth: chosen.outlineWidth === undefined ? undefined : Math.min(chosen.outlineWidth, WORDART_OUTLINE_WIDTH),
         shadow: chosen.shadow,
       }
     : {

@@ -150,15 +150,15 @@ describe('each before-task: one tap on a list already shown, one answer that cou
 
   it("the colour, in the owner's words, from the page colours", () => {
     let day = dayFor('colour');
-    while (beforeTaskFor(day).answer !== PAGE_COLORS.find((c) => c.name === 'Brown')!.hex) day = addDays(day, 10);
+    while (beforeTaskFor(day).answer !== PAGE_COLORS.find((c) => c.name === 'Tan')!.hex) day = addDays(day, 10);
     const t = beforeTaskFor(day);
     expect(t.options.map((o) => o.label)).toEqual(PAGE_COLORS.map((c) => c.name));
     // The owner's example: "Every page can have a background colour. Try it: pick Red."
     expect(t.teach).toBe('Every page can have a background colour.');
-    expect(t.line).toBe('pick **Brown**.');
-    expect(t.wrong).toBe("Today's colour is Brown. Tap Brown.");
-    expect(t.want).toBe("Pick today's colour first: Brown.");
-    expect(isTodaysAnswer(t, PAGE_COLORS.find((c) => c.name === 'Brown')!.hex.toLowerCase())).toBe(true);
+    expect(t.line).toBe('pick **Tan**.');
+    expect(t.wrong).toBe("Today's colour is Tan. Tap Tan.");
+    expect(t.want).toBe("Pick today's colour first: Tan.");
+    expect(isTodaysAnswer(t, PAGE_COLORS.find((c) => c.name === 'Tan')!.hex.toLowerCase())).toBe(true);
   });
 
   it('the font: fonts the app can draw, shown in their own face, never the title\'s own font', () => {
@@ -313,7 +313,7 @@ describe('the answer, applied to the album the way the steps before "Make my alb
 describe('the line on "You finished today\'s lesson!": both of today\'s tasks', () => {
   it('names today\'s before-task and its answer in plain words', () => {
     expect(beforeTaskLabel({ before: 'cover', answer: 'megy-sample-12.jpg' })).toBe('cover photo 12');
-    expect(beforeTaskLabel({ before: 'colour', answer: '#EE204D' })).toBe('background Red');
+    expect(beforeTaskLabel({ before: 'colour', answer: '#C62828' })).toBe('background Red');
     expect(beforeTaskLabel({ before: 'titleFont', answer: FONTS.find((f) => f.name === 'Dancing Script')!.family })).toBe('title font Dancing Script');
     expect(beforeTaskLabel({ before: 'titleAlign', answer: 'left' })).toBe('title on the left');
     expect(beforeTaskLabel({ before: 'size', answer: '6x6' })).toBe('size 6×6');

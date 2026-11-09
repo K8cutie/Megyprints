@@ -10,8 +10,9 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { SCENARIOS } from '../../tools/parity/scenarios';
 import type { BuilderActions } from '@web/pages/builder/useBuilderState';
-import { captionBoxSize, captionFits } from '@web/pages/builder/textFit';
-import { contrastOutline, WORDART_OUTLINE_WIDTH } from '@web/pages/builder/wordArtRules';
+import { captionBoxSize, captionFits, slotBoxSize } from '@web/pages/builder/textFit';
+import { contrastOutline } from '@web/pages/builder/wordArtRules';
+import { OUTLINE_WIDTHS, outlinePatch } from '../src/editor/text/wordArtEdits';
 import { PAGE_COLORS } from '@web/pages/builder/pageColors';
 import type { AlbumPage } from '@web/pages/builder/types';
 import { addChoicesFor, ADD_TO_BOX_SHEET, toolsFor, type EditorContext } from '../src/editor/registry';
@@ -107,18 +108,20 @@ describe('the text editor saves through the website’s actions, with its argume
     const start = initialContent(page(4), target);
     // MobileReview buildInitial: Georgia 28, charcoal, the template's alignment.
     expect(start).toMatchObject({ text: '', fontSize: 28, fontFamily: 'Georgia, "Times New Roman", serif', color: '#2D2D2D', bold: false, italic: false, underline: false });
-    const s = { ...editorStateOf(start), text: 'Our first beach day', bold: true, outline: true, color: '#1F3A5F', fontSize: bigger(bigger(28)) };
+    // Effects › Outline › Thin: the colour that stands out from the words.
+    const outline = outlinePatch({ color: '#1F3A5F' }, OUTLINE_WIDTHS.thin);
+    const s = { ...editorStateOf(start), text: 'Our first beach day', bold: true, color: '#1F3A5F', fontSize: bigger(bigger(28)), outlineWidth: outline.outlineWidth!, outlineColor: outline.outlineColor };
     const content = contentOf(s);
     expect(content).toEqual({
       text: 'Our first beach day', fontSize: 32, fontFamily: 'Georgia, "Times New Roman", serif', color: '#1F3A5F',
       bold: true, italic: false, underline: false, alignment: start.alignment,
-      outlineColor: contrastOutline('#1F3A5F'), outlineWidth: WORDART_OUTLINE_WIDTH, shadow: undefined,
+      outlineColor: contrastOutline('#1F3A5F'), outlineWidth: OUTLINE_WIDTHS.thin, shadow: undefined,
     });
     const calls: Call[] = [];
     await act(async () => { saveWords(spied(builder(), calls), page(4), 4, target, content); });
     expect(calls).toEqual([['setBoxText', 0, content]]);
     const saved = page(4).textElements.find((t) => t.boxIndex === 0)!;
-    expect(saved).toMatchObject({ text: 'Our first beach day', bold: true, fontSize: 32, color: '#1F3A5F', outlineWidth: WORDART_OUTLINE_WIDTH });
+    expect(saved).toMatchObject({ text: 'Our first beach day', bold: true, fontSize: 32, color: '#1F3A5F', outlineWidth: OUTLINE_WIDTHS.thin });
 
     const sheets: { id: string; params: unknown }[] = [];
     expect(await tapOn(platform, targetOf(platform, 'boxText', 0), sheets)).toBe('rule');
@@ -248,8 +251,9 @@ describe('"Too long for this box" (the website’s caption fit, measured with th
     expect(fit.fits).toBe(false);
     expect(fit.fitsAt).toBeGreaterThanOrEqual(8);
     expect(fitOf({ ...s, text: 'Hi', fontSize: 28 }, box, m)).toEqual({ fits: true, fitsAt: null });
-    // Words in a frame and free texts: no box, nothing said (as MobileReview).
-    expect(fitBoxFor(page(4), { kind: 'slot', slotIndex: 0 }, builder().albumSize, 4)).toBeNull();
+    // Words in a frame: the frame (the editor asks only for words on a curve,
+    // which aren't clipped to it). Free texts: no box, nothing said (as MobileReview).
+    expect(fitBoxFor(page(4), { kind: 'slot', slotIndex: 0 }, builder().albumSize, 4)).toEqual(slotBoxSize(page(4), 0, builder().albumSize, 4));
     expect(fitBoxFor(page(4), { kind: 'free', textId: 'x' }, builder().albumSize, 4)).toBeNull();
     // Before the fonts load there is no measurer: nothing is said.
     expect(fitOf(s, box, null)).toBeNull();

@@ -117,6 +117,20 @@ describe('B signs in where A\'s album was left', () => {
     expect(h.writes.some((w) => w.user_id === 'user-b' && JSON.stringify(w).includes("Ana's Baptism"))).toBe(false);
   });
 
+  it('an album begun signed out and then A\'s: B signing in never saves it as B\'s (its saved copy still says no account; beta round 4b)', async () => {
+    draftOf(null); // made signed out …
+    h.user = { id: 'user-a' }; // … then A signed in: it is A's album now
+    await mount();
+    expect(builder.getAlbumId()).toBe('album-a');
+    h.user = null; // A signs out …
+    await act(async () => { root!.render(createElement(Probe)); });
+    h.user = { id: 'user-b' }; // … and B signs in, builder open
+    await act(async () => { root!.render(createElement(Probe)); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(builder.uploadedPhotos).toHaveLength(0);
+    expect(h.writes.some((w) => w.user_id === 'user-b' && JSON.stringify(w).includes("Ana's Baptism"))).toBe(false);
+  });
+
   it('a GUEST\'s album is still theirs to keep when they sign in (the album they were making)', async () => {
     draftOf(null);
     h.user = { id: 'user-b' };

@@ -36,10 +36,10 @@
    another device too, or deleted there: the website's question, its words.
    Photos this phone no longer has are named, with the way to put them back.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router, Stack, useIsFocused } from 'expo-router';
+import { router, Stack, useFocusEffect, useIsFocused } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, Easing, PanResponder, PixelRatio, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Animated, Easing, PanResponder, PixelRatio, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View, type ScrollViewInstance } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
@@ -49,10 +49,12 @@ import { canTurnBack, canTurnForward, previewCaption, previewCounter, swipeTurn,
 import { planTurn, type TurnFace, type TurnPlan } from '@web/pages/builder/pageTurn';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
-import { accountSaveDue, markAccountSaved } from '../builder/accountSave';
+import { markAccountSaved } from '../builder/accountSave';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
-import { useOncePerVisit } from '../lib/useOncePerVisit';
+import { useJustArrived, useOncePerVisit } from '../lib/useOncePerVisit';
+import { PAGE_FLIP_LABEL, usePageFlip } from '../lib/pageFlip';
+import { takePreviewAtCover } from '../builder/previewCover';
 import { orderCheck, orderSaveError, type OrderCheck } from '../lib/checkout/orderStart';
 import { screenCanTurn, useTurnsWithThePhone } from '../lib/screenTurning';
 import { BOARD, BOOK_DRESS_Y, isSideways, pagePictureWidth, sidewaysBook, uprightBook, UPRIGHT_CHROME_GUESS, UPRIGHT_EDGE, type Box } from '../builder/previewLayout';
@@ -229,6 +231,8 @@ function EditButton({ box, label, twoLines, onPress, testID }: { box: Box; label
 
 export default function Preview() {
   const { builder, platform, text } = useBuilder();
+  // The page flip, on or off (pageFlip.ts; on unless this phone turned it off).
+  const [flip, setFlip] = usePageFlip(platform.deviceStore);
   const { session } = useAuth();
   const { clear: clearDraft } = useDraft();
   const { width: screenW, height: screenH } = useWindowDimensions();
@@ -248,23 +252,26 @@ export default function Preview() {
   const view: PreviewView = sideways || openBook ? 'spread' : 'page';
   const index = Math.min(builder.currentPageIndex, Math.max(0, total - 1));
   const [coverAt, setCoverAt] = useState<number | null>(() => (index === 0 ? 0 : null));
+  // Sent here to look at the album (previewCover.ts): from its cover.
+  const { goToPage } = builder;
+  useFocusEffect(useCallback(() => {
+    if (!takePreviewAtCover()) return;
+    goToPage(0);
+    setCoverAt(0);
+  }, [goToPage]));
   const onCover = coverAt === index;
   const pos: PreviewPosition = { view, index, total, onCover, hasCover: true };
   const [turn, setTurn] = useState<{ plan: TurnPlan; n: number; drive?: Animated.Value } | null>(null);
   const seq = useRef(0);
   const [notDrawn, setNotDrawn] = useState<Record<string, string[]>>({});
 
-  // On the phone now (the builder's own write, not its 30 s timer); signed
-  // in, a newly made album goes to the account once (accountSave.ts).
+  // On the phone now (the builder's own write, not its 30 s timer). Signed
+  // in, a newly made album goes to the account once: for the whole app, on
+  // any screen (accountSave.ts useAccountSave, in BuilderProvider).
   const signedIn = !!session;
   const madeAt = pages[0]?.madeAt ?? 0;
   useEffect(() => {
     builder.saveDraftNow();
-    if (!signedIn || total === 0) return;
-    const albumId = builder.getAlbumId();
-    if (!accountSaveDue(platform.deviceStore, albumId, madeAt)) return;
-    void builder.manualSave().then((ok) => { if (ok) markAccountSaved(platform.deviceStore, albumId, madeAt); }).catch(() => {});
-    // Once per album made (madeAt), and when the customer signs in.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedIn, madeAt]);
   // Made again (from the Photos step): the book opens on its cover again.
@@ -315,7 +322,8 @@ export default function Preview() {
   };
   const go = async (t: Turn | null, from: PreviewPosition) => {
     if (!t || turning.current) return;
-    const plan = planTurn(from, t);
+    // The flip off: the page changes at once, nothing drawn first for a leaf.
+    const plan = flip ? planTurn(from, t) : null;
     if (plan && text) {
       turning.current = true;
       const faces = [plan.leaf.front, plan.leaf.back, plan.patch?.face].filter((f): f is TurnFace => !!f);
@@ -332,10 +340,16 @@ export default function Preview() {
   };
   const back = () => { const from = settleDrag().pos; void go(turnBack(from), from); };
   const forward = () => { const from = settleDrag().pos; void go(turnForward(from), from); };
+  // "Next page" is where "Make my album" was: the second tap of a double tap
+  // on it opened the album at page 1, not the cover (useJustArrived).
+  const justArrived = useJustArrived();
+  const nextPage = () => { if (!justArrived()) forward(); };
 
   // A finger on a page turns it as it moves (owner, 2026-11-03: the page
   // follows the finger). The cover still turns on a swipe, as before.
   const startDrag = (dir: 'forward' | 'back'): boolean => {
+    // The flip off: no leaf follows the finger; a swipe turns the page at once (release).
+    if (!flip) return false;
     const before = settleDrag();
     const from = before.pos;
     if (turning.current) return false;
@@ -475,6 +489,13 @@ export default function Preview() {
     else builder.goToPage(index);
     router.push('/edit-pages');
   };
+  // Upright, the answer comes under the page buttons, below the screen: the
+  // tap looked dead until the page was scrolled (beta round 3). It is
+  // scrolled into view (on its side it has its own room).
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  useEffect(() => {
+    if (orderAsk || orderError) scrollRef.current?.scrollToEnd({ animated: true });
+  }, [orderAsk, orderError]);
   const orderAskBox = (orderAsk || orderError) && (
     <View style={styles.ask} testID="preview-order-ask-box">
       <Text style={styles.askText} testID={orderError ? 'preview-order-error' : 'preview-order-ask'}>{orderError ?? orderAsk?.message}</Text>
@@ -574,7 +595,7 @@ export default function Preview() {
           onPress={onCover ? editCover : editPages} testID={onCover ? 'preview-edit-cover' : 'preview-edit-pages'} />
         {canTurnBack(pos) && <TurnButton box={side.back} label={`Previous ${word}`} mark="‹" main={false} onPress={back} testID="preview-prev" />}
         {canTurnForward(pos)
-          ? <TurnButton box={side.forward} label={`Next ${word}`} mark="›" main onPress={forward} testID="preview-next" />
+          ? <TurnButton box={side.forward} label={`Next ${word}`} mark="›" main onPress={nextPage} testID="preview-next" />
           : <TurnButton box={side.forward} label="Order this album" mark={ordering ? '…' : 'Order'} main onPress={() => { void order(); }} testID="preview-order" />}
         {/* "Order this album"'s question or a failed save, over the book. */}
         {orderAskBox && <View style={[styles.sideAsk, { left: side.room.x, top: side.room.y, width: side.room.w, height: side.room.h }]}>{orderAskBox}</View>}
@@ -591,6 +612,7 @@ export default function Preview() {
     <View style={styles.page}>
       {chrome}
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.body}
         testID="preview-scroll"
         onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); setViewH((v) => (v === h ? v : h)); }}
@@ -616,12 +638,21 @@ export default function Preview() {
               </Pressable>
             )}
           </View>
+          {/* The page flip, on or off (owner, 2026-11-04): off, pages change at once. */}
+          <Pressable accessibilityRole="switch" accessibilityState={{ checked: flip }} accessibilityLabel={PAGE_FLIP_LABEL}
+            onPress={() => setFlip(!flip)} style={styles.flipRow} testID="preview-page-flip">
+            <Text style={styles.flipText}>{PAGE_FLIP_LABEL}</Text>
+            <Text style={[styles.flipState, flip && styles.flipStateOn]}>{flip ? 'On' : 'Off'}</Text>
+            <Switch value={flip} onValueChange={setFlip} importantForAccessibility="no-hide-descendants"
+              trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.card} />
+          </Pressable>
           {/* The website's line under its open-book button: the other way to see it. */}
           {!onCover && !openBook && canTurn && <Text style={styles.hint} testID="preview-turn-hint">or turn your phone sideways</Text>}
           {missingHere.length > 0 && (
             <Text style={styles.notDrawn} testID="preview-not-drawn">{NOT_DRAWN_LINE}</Text>
           )}
-          {missing.count > 0 && (
+          {/* "Order this album" answering the same (orderAskBox, below) takes its place: it said it twice (round 4). */}
+          {missing.count > 0 && orderAsk?.kind !== 'missing' && (
             <View style={styles.ask} testID="preview-missing-photos">
               <Text style={styles.askText}>{missingOnPhoneMessage(missing)}</Text>
               <Button label="Add the photos" kind="plain" onPress={() => router.push('/photos')} testID="preview-missing-add" />
@@ -655,7 +686,7 @@ export default function Preview() {
         <View style={styles.turnRow}>
           {canTurnBack(pos) && <Button label={`‹ Previous ${word}`} kind="plain" onPress={back} style={styles.turnButton} testID="preview-prev" />}
           {canTurnForward(pos)
-            ? <Button label={`Next ${word} ›`} onPress={forward} style={styles.turnButton} testID="preview-next" />
+            ? <Button label={`Next ${word} ›`} onPress={nextPage} style={styles.turnButton} testID="preview-next" />
             : <Button label={orderLabel} busy={ordering} onPress={() => { void order(); }} style={styles.turnButton} testID="preview-order" />}
         </View>
       </SafeAreaView>
@@ -670,6 +701,10 @@ const styles = StyleSheet.create({
   body: { alignItems: 'center', paddingTop: space.sm, paddingBottom: space.md, paddingHorizontal: UPRIGHT_EDGE, gap: space.sm },
   below: { alignSelf: 'stretch', alignItems: 'center', gap: space.sm, paddingHorizontal: space.md - UPRIGHT_EDGE },
   hint: { fontSize: 12, color: colors.muted, marginTop: -4 },
+  flipRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingHorizontal: space.sm },
+  flipText: { fontSize: 14, color: colors.text },
+  flipState: { fontSize: 14, fontWeight: '700', color: colors.muted, minWidth: 28 },
+  flipStateOn: { color: colors.accent },
   // On its side: everything placed where previewLayout says.
   sideways: { flex: 1, backgroundColor: '#EFE9E1' },
   sideEdit: { position: 'absolute', alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: colors.border },

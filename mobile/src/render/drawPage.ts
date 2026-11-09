@@ -37,9 +37,10 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { SkCanvas, SkImage, SkPaint, SkPath, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
-import { AlphaType, BlendMode, ClipOp, ColorType, FilterMode, MipmapMode, PaintStyle, StrokeCap, TileMode, BlurStyle } from '@shopify/react-native-skia/lib/commonjs/skia/types';
+import { AlphaType, BlendMode, ClipOp, ColorType, FillType, FilterMode, MipmapMode, PaintStyle, StrokeCap, TileMode, BlurStyle } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import { slotPhotoRect } from '@web/pages/builder/slotPhotoFit';
 import { archRy, featherGradients, heartCurves, isPathShape, maskOverlayUrl, maskPathD, maskTextureUrl, starPoints } from '@web/pages/builder/maskShapes';
+import type { ArtPaint, MaskArt } from '@web/pages/builder/maskArt';
 import { PRINT_FRAME, type PrintFrameShadow } from '@web/pages/builder/printFrameSpec';
 import { mirrorOps, type Margins } from '@web/pages/builder/bleedGeometry';
 import { wrapTextLines, firstLineCenter, TEXT_LINE_HEIGHT } from '@web/pages/builder/wordArtRules';
@@ -84,7 +85,10 @@ export class PageDrawer {
   /** How many drawings are under way (see drawing()). */
   private depth = 0;
 
-  constructor(private readonly Skia: Skia, private readonly text: PageText) {
+  /** `screen`: a picture for the phone's screen (pageImages drawPageImage),
+   *  not a print file: its pictures are drawn with Skia's own smooth sampling
+   *  (see image()). */
+  constructor(private readonly Skia: Skia, private readonly text: PageText, private readonly options: { screen?: boolean } = {}) {
     this.surfaces = new SurfacePool(Skia);
     this.sampling = new ChromeSampling(Skia, this.surfaces);
   }
@@ -144,6 +148,17 @@ export class PageDrawer {
     const p = paint ?? this.Skia.Paint();
     const m = canvas.getTotalMatrix().get();
     const level = (m[1] === 0 && m[3] === 0) || (m[0] === 0 && m[4] === 0);
+    if (this.options.screen) {
+      // On screen (the Preview, the editor, a layout's picture): Skia's own
+      // smooth sampling, drawn natively. Chrome's (sampling.ts) is for the
+      // print file, where a pixel must match the website's; on a screen the
+      // two look the same, and Chrome's shaders run interpreted on the
+      // phone's CPU: about 35 ms a photo, with every tap waiting behind it
+      // (owner, 2026-11-04: "most importantly performance issue").
+      p.setAntiAlias(!level);
+      canvas.drawImageRectOptions(img, this.rect(src), this.rect(dst), FilterMode.Linear, MipmapMode.Linear, p);
+      return;
+    }
     let pic = img;
     let from = src;
     if (decoded) {
@@ -276,12 +291,18 @@ export class PageDrawer {
    *  (lookRules.applyLookToPixel on each, as applyLookPixels does), then the
    *  soft edge's gradients (featherGradients) or the edge's overlay and its
    *  texture cutting the alpha. The caller draws it at the slot's corner. */
-  private bakedPhoto(img: SkImage, fit: { x: number; y: number; w: number; h: number }, sw: number, sh: number, item: PhotoItem, assets: AssetSource, onMissing?: (src: string) => void): SkImage {
+  private bakedPhoto(img: SkImage, fit: { x: number; y: number; w: number; h: number }, sw: number, sh: number, item: PhotoItem, assets: AssetSource, onMissing?: (src: string) => void, turn = 0): SkImage {
     const Sk = this.Skia;
     const tw = Math.max(1, Math.ceil(sw)), th = Math.max(1, Math.ceil(sh));
     const d = this.surfaces.take(tw, th); // transparent
     const tc = d.canvas;
+    // `turn`: a mask that paints turns the photo inside its bake (print's drawSlotImage)
+    if (turn) {
+      tc.save();
+      tc.rotate(turn, sw / 2, sh / 2);
+    }
     this.image(tc, img, { x: 0, y: 0, w: img.width(), h: img.height() }, fit, { decoded: true });
+    if (turn) tc.restore();
     if (item.look) {
       d.surface.flush();
       const drawn = d.surface.makeImageSnapshot();
@@ -339,9 +360,83 @@ export class PageDrawer {
     return out;
   }
 
+  /** An SVG path (a mask's), even-odd when asked. */
+  private svgPath(d: string, evenOdd = false): SkPath {
+    const path = this.Skia.Path.MakeFromSVGString(d);
+    if (!path) throw new Error('a mask path did not parse');
+    return evenOdd ? this.Skia.PathBuilder.MakeFromPath(path).setFillType(FillType.EvenOdd).build() : path;
+  }
+
+  /** A mask's paints (maskArt), as masks.ts paintArt draws them on a canvas:
+   *  a shadow is the shape blurred with sigma = blur / 2 and moved down, a
+   *  dash starts where the path does, a stroke keeps the miter limit 10. */
+  private paints(canvas: SkCanvas, paints: readonly ArtPaint[]): void {
+    const Sk = this.Skia;
+    for (const a of paints) {
+      const path = this.svgPath(a.d, a.kind === 'fill' && a.evenOdd);
+      if (a.kind === 'radial') {
+        const p = Sk.Paint();
+        p.setAntiAlias(true);
+        p.setShader(Sk.Shader.MakeRadialGradient(Sk.Point(a.cx, a.cy), a.r, a.stops.map((s) => Sk.Color(s.color)), a.stops.map((s) => s.offset), TileMode.Clamp));
+        canvas.drawPath(path, p);
+        continue;
+      }
+      const paintOf = (color: string): SkPaint => {
+        const p = this.paint(color);
+        if (a.kind === 'stroke') {
+          p.setStyle(PaintStyle.Stroke);
+          p.setStrokeWidth(a.width);
+          p.setStrokeMiter(10);
+          if (a.round) p.setStrokeCap(StrokeCap.Round);
+          if (a.dash) p.setPathEffect(Sk.PathEffect.MakeDash(a.dash, 0));
+        }
+        return p;
+      };
+      if (a.shadow) {
+        const sp = paintOf(a.shadow.color);
+        if (a.shadow.blur > 0) sp.setMaskFilter(Sk.MaskFilter.MakeBlur(BlurStyle.Normal, a.shadow.blur / 2, false));
+        canvas.save();
+        canvas.translate(0, a.shadow.dy);
+        canvas.drawPath(path, sp);
+        canvas.restore();
+      }
+      canvas.drawPath(path, paintOf(a.color));
+    }
+  }
+
+  /** A photo under a mask that paints: print's renderSlotPhoto art branch,
+   *  step for step (the card, the photo fitted to the window in the clip, the
+   *  paint inside, the paint over). */
+  private artPhoto(canvas: SkCanvas, item: PhotoItem, art: MaskArt, img: SkImage, assets: AssetSource, onMissing?: (src: string) => void): void {
+    this.paints(canvas, art.under);
+    canvas.save();
+    canvas.clipPath(this.svgPath(art.clip), ClipOp.Intersect, true);
+    const { x, y, w, h } = art.photo;
+    const turn = item.slot.rotation ?? 0;
+    const fit = slotPhotoRect({ w: img.width(), h: img.height() }, { w, h }, item.zoom, item.pan);
+    if (item.look) {
+      // turned inside the bake, drawn level (print's drawSlotImage)
+      const baked = this.bakedPhoto(img, fit, w, h, item, assets, onMissing, turn);
+      this.image(canvas, baked, { x: 0, y: 0, w: baked.width(), h: baked.height() }, { x, y, w: baked.width(), h: baked.height() });
+      baked.dispose();
+    } else {
+      canvas.save();
+      if (turn) canvas.rotate(turn, x + w / 2, y + h / 2);
+      this.image(canvas, img, { x: 0, y: 0, w: img.width(), h: img.height() }, { x: x + fit.x, y: y + fit.y, w: fit.w, h: fit.h }, { decoded: true });
+      canvas.restore();
+    }
+    this.paints(canvas, art.inside);
+    canvas.restore();
+    this.paints(canvas, art.over);
+  }
+
   private photo(canvas: SkCanvas, item: PhotoItem, photos: PhotoSource, assets: AssetSource, onMissing?: (src: string) => void): void {
     const img = photos(item.photoIndex);
     if (!img) return;
+    if (item.art) {
+      this.artPhoto(canvas, item, item.art, img, assets, onMissing);
+      return;
+    }
     const { x: sx, y: sy, w: sw, h: sh } = item.box;
     const { frame, slot } = item;
     const PX = FRAME_PX;
@@ -429,6 +524,12 @@ export class PageDrawer {
 
   private boxText(canvas: SkCanvas, item: BoxTextItem, onCover: boolean): void {
     const look = this.look(item.style, item.fontSize);
+    // On a curve: one line, not clipped to the box (print's renderTextElement,
+    // and renderSlotText for words in a photo frame).
+    if (item.style.curve) {
+      this.text.drawCurve(canvas, item.style.text, item.anchorX, item.centerY, look, item.align, item.style.curve, item.style, item.scale, onCover);
+      return;
+    }
     canvas.save();
     canvas.clipRect(this.rect(item.box), ClipOp.Intersect, true);
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.maxWidth);
@@ -447,6 +548,13 @@ export class PageDrawer {
     if (item.rotation) canvas.rotate(item.rotation, 0, 0);
     canvas.scale(item.scaleX, item.scaleY);
     const step = item.fontSize * TEXT_LINE_HEIGHT;
+    if (item.style.curve) {
+      // On a curve (words placed by hand): one line, its middle where a
+      // one-line straight text's middle is (print's free branch).
+      this.text.drawCurve(canvas, item.style.text, item.anchorX, step / 2, look, item.align, item.style.curve, item.style, item.scale, onCover, alpha);
+      canvas.restore();
+      return;
+    }
     const lines = wrapTextLines(this.text.measurer(look), item.style.text, item.boxWidth);
     lines.forEach((line, i) => this.text.drawLine(canvas, line, item.anchorX, step / 2 + i * step, look, item.align, item.style, item.scale, alpha, onCover));
     if (item.style.underline) {

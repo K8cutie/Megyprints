@@ -76,11 +76,16 @@ jest.mock('../src/builder/usePagePicture', () => ({
 
 // After the mocks: the screen and its pieces.
 import CoverScreen from '../src/editor/cover/CoverScreen';
-import { CoverStage } from '../src/editor/cover/CoverStage';
+import { CoverStage, dragTarget } from '../src/editor/cover/CoverStage';
 import { Slider } from '../src/editor/cover/Slider';
-import { coverCrop, coverTitleOf, setTitleFont, titleBoxOf } from '../src/editor/cover/coverEdits';
+import { coverCrop, coverTitleOf, OUTLINE_WIDTHS, setTitleFont, titleBoxOf } from '../src/editor/cover/coverEdits';
 import { fontSource } from '../src/editor/text/fonts/fontSources';
 import { DEFAULT_TITLE_FONT, fontNamed } from '@web/pages/builder/fontCatalog';
+import { isPlacedWords, wordsInk, wordsSafeArea } from '@web/pages/builder/freeWords';
+import type { TextElement } from '@web/pages/builder/types';
+import { captionBoxRect } from '@web/pages/builder/textFit';
+import { SAFE_LINE } from '../src/editor/text/words';
+import { getCanvasDimensions } from '@web/pages/builder/layouts';
 import * as W from '../src/editor/cover/words';
 import { NOT_DRAWN_LINE } from '../src/builder/screenWords';
 import { BLANK_COVER_MESSAGE } from '../src/editor/cover/coverChecks';
@@ -194,13 +199,13 @@ describe('the cover screen', () => {
     // A colour: the photo goes, and so does Zoom; "Use blue on every page" shows.
     expect(has('cover-color-all')).toBe(false);
     await press('cover-color-Blue');
-    expect(builder().coverFront.background).toEqual({ type: 'solid', solid: '#1F75FE' });
+    expect(builder().coverFront.background).toEqual({ type: 'solid', solid: '#3A6EA5' });
     expect(has('cover-zoom')).toBe(false);
     expect(textOf(byId('cover-color-name')!)).toBe('Blue');
     expect(JSON.stringify(builder().albumPages)).toBe(pages);
     expect(textOf(byId('cover-color-all')!)).toBe('Use blue on every page');
     await press('cover-color-all');
-    expect(builder().albumPages.every((p) => p.background?.type === 'solid' && p.background.solid === '#1F75FE')).toBe(true);
+    expect(builder().albumPages.every((p) => p.background?.type === 'solid' && p.background.solid === '#3A6EA5')).toBe(true);
   });
 
   it('Text: the title, its font, colour (with the warning and its fix), alignment, Bold / Italic / Shadow, size, dragging it', async () => {
@@ -219,8 +224,13 @@ describe('the cover screen', () => {
     expect(has('cover-font-list')).toBe(false);
     expect(textOf(byId('cover-font')!)).toContain('Playfair');
 
+    // a gradient (owner, 2026-11-08): the title's two colours; a plain colour, one again
+    await press('cover-title-color-gradient-gold-glow');
+    expect(coverTitleOf(builder().coverFront)).toMatchObject({ color: '#F3E9DC', fillTo: '#C9A24B' });
+    expect(textOf(byId('cover-title-color-name')!)).toBe('Gold glow');
     await press('cover-title-color-Gold');
     expect(coverTitleOf(builder().coverFront).color).toBe('#C9A24B');
+    expect(coverTitleOf(builder().coverFront).fillTo).toBeUndefined();
     expect(textOf(byId('cover-title-color-name')!)).toBe('Gold');
 
     await press('cover-align-left');
@@ -239,8 +249,9 @@ describe('the cover screen', () => {
     await refresh();
     expect(coverTitleOf(builder().coverFront).fontSize).toBe(60);
 
-    // Dragging the title: its box follows the finger, kept on the cover.
-    const box = titleBoxOf(builder().coverFront)!;
+    // Dragging the title: its box follows the finger, kept in the safe print area.
+    const box = titleBoxOf(builder().coverFront, builder().albumSize)!;
+    const safeTop = wordsSafeArea(builder().albumSize, 0, true).y / getCanvasDimensions(builder().albumSize).height;
     const stage = propsOf<{ onDrag: (w: 'title' | 'photo', p: 'start' | 'move' | 'end', dx: number, dy: number) => void }>('cover-stage', CoverStage);
     await act(async () => { stage.onDrag('title', 'start', 0, 0); stage.onDrag('title', 'move', 0, -0.2); });
     await refresh();
@@ -251,7 +262,97 @@ describe('the cover screen', () => {
     expect(propsOf<{ uri: string }>('cover-stage', CoverStage).uri).toBe('file:///cache/megy-pages/cover-no-title.jpg');
     await act(async () => { stage.onDrag('title', 'end', 0, -9); });
     await refresh();
-    expect(coverTitleOf(builder().coverFront).offsetY).toBeCloseTo(-box.baseY, 10); // the top edge
+    expect(coverTitleOf(builder().coverFront).offsetY).toBeCloseTo(safeTop - box.baseY, 10); // 0.25" from the top edge
+  });
+
+  describe('WordArt on the title (owner, 2026-11-05)', () => {
+    const titled = async () => {
+      await openCover();
+      await press('cover-tab-text');
+      await act(async () => { byId('cover-title')!.props.onChangeText('Our Boracay Trip'); });
+      await act(async () => { byId('cover-title')!.props.onBlur(); });
+      await refresh();
+    };
+    const element = () => builder().coverFront.textElements.find((t) => t.boxIndex === 0)!;
+
+    it('no words, no effects to offer', async () => {
+      await openCover();
+      await press('cover-tab-text');
+      await act(async () => { byId('cover-title')!.props.onChangeText(''); });
+      await act(async () => { byId('cover-title')!.props.onBlur(); });
+      await refresh();
+      expect(has('cover-wordart')).toBe(false);
+    });
+
+    it('Outline: none or three thicknesses in any colour; first in the colour that stands out; the panel stays open', async () => {
+      await titled();
+      await press('cover-effect-outline');
+      expect(has('cover-effect-panel-outline')).toBe(true);
+      expect(has('cover-outline-color-picker')).toBe(false); // no outline: no colour to pick
+      await press('cover-outline-thick');
+      expect(element()).toMatchObject({ outlineWidth: OUTLINE_WIDTHS.thick, outlineColor: expect.any(String) });
+      await press('cover-outline-color-Gold');
+      expect(element().outlineColor).toBe('#C9A24B');
+      await press('cover-outline-thin');
+      expect(element()).toMatchObject({ outlineWidth: OUTLINE_WIDTHS.thin, outlineColor: '#C9A24B' }); // the colour stays
+      expect(has('cover-effect-panel-outline')).toBe(true);
+      expect(byId('cover-effect-outline')!.props.accessibilityState).toMatchObject({ selected: true, expanded: true });
+      await press('cover-outline-none');
+      expect(element().outlineWidth).toBeUndefined();
+      expect(element().outlineColor).toBeUndefined();
+    });
+
+    it('Two colours: the second colour, or none', async () => {
+      await titled();
+      await press('cover-effect-fill');
+      await press('cover-fill-color-Gold');
+      expect(element().fillTo).toBe('#C9A24B');
+      expect(has('cover-effect-panel-fill')).toBe(true);
+      await press('cover-fill-none');
+      expect(element().fillTo).toBeUndefined();
+    });
+
+    it('Glow takes the shadow\'s place; the Shadow button takes the glow off and puts the shadow back', async () => {
+      await titled();
+      expect(coverTitleOf(builder().coverFront).shadow).toBe(true);
+      await press('cover-effect-glow');
+      await press('cover-glow-color-Gold');
+      expect(element().glow).toBe('#C9A24B');
+      expect(coverTitleOf(builder().coverFront).shadow).toBe(false);
+      expect(byId('cover-title-shadow')!.props.accessibilityState).toMatchObject({ selected: false });
+      await press('cover-title-shadow');
+      expect(element().glow).toBeUndefined();
+      expect(coverTitleOf(builder().coverFront).shadow).toBe(true);
+    });
+
+    it('Shape: straight, arch, smile, wave; the words on a curve follow the finger on their curve', async () => {
+      await titled();
+      await press('cover-effect-shape');
+      await press('cover-shape-arch');
+      expect(element().curve).toBe('arch');
+      await press('cover-shape-wave');
+      expect(element().curve).toBe('wave');
+      await press('cover-shape-smile');
+      expect(element().curve).toBe('smile');
+      expect(has('cover-effect-panel-shape')).toBe(true);
+      await press('cover-shape-straight');
+      expect(element().curve).toBeUndefined();
+    });
+
+    it('the effects mix, and one panel is open at a time', async () => {
+      await titled();
+      await press('cover-effect-shape');
+      await press('cover-shape-arch');
+      await press('cover-effect-fill');
+      expect(has('cover-effect-panel-shape')).toBe(false);
+      expect(has('cover-effect-panel-fill')).toBe(true);
+      await press('cover-fill-color-Gold');
+      await press('cover-effect-outline');
+      await press('cover-outline-medium');
+      expect(element()).toMatchObject({ curve: 'arch', fillTo: '#C9A24B', outlineWidth: OUTLINE_WIDTHS.medium, text: 'Our Boracay Trip' });
+      await press('cover-effect-outline'); // the same button closes it
+      expect(has('cover-effect-panel-outline')).toBe(false);
+    });
   });
 
   it('warns about a title colour that wouldn\'t show, and a blank cover; says what is drawn more simply; Done goes back', async () => {
@@ -259,7 +360,7 @@ describe('the cover screen', () => {
     try {
       await openCover();
       expect(textOf(byId('cover-not-drawn')!)).toBe(NOT_DRAWN_LINE);
-      await press('cover-color-Yellow');
+      await press('cover-color-Cream');
       await press('cover-tab-text');
       expect(has('cover-title-hard-to-see')).toBe(false);
       await press('cover-title-color-White');
@@ -322,5 +423,101 @@ describe('the cover screen', () => {
     await act(async () => { byId('any-color-code')!.props.onChangeText('#3A6EA5'); });
     await press('any-color-use');
     expect(coverTitleOf(builder().coverFront).color.toUpperCase()).toBe('#3A6EA5');
+  });
+});
+
+describe('more words on the cover, with WordArt (owner, 2026-11-07: "applied in cover and pages picture editor")', () => {
+  const placedOnCover = () => (builder().coverFront.textElements ?? []).filter(isPlacedWords);
+  async function typeInEditor(text: string) {
+    const input = all((i) => i.props.testID === 'text-editor-input' && i.type === 'TextInput')[0];
+    if (!input) throw new Error('no Edit text');
+    await act(async () => { input.props.onChangeText(text); });
+    await refresh();
+  }
+  /** The letters inside the cover's safe print area (0.25" in from the trim). */
+  function expectInsideCover(t: TextElement) {
+    const area = wordsSafeArea(builder().albumSize, 0, true);
+    const ink = wordsInk(t, null);
+    expect(t.x + ink.left).toBeGreaterThanOrEqual(area.x - 1e-6);
+    expect(t.x + ink.right).toBeLessThanOrEqual(area.x + area.w + 1e-6);
+    expect(t.y + ink.top).toBeGreaterThanOrEqual(area.y - 1e-6);
+    expect(t.y + ink.bottom).toBeLessThanOrEqual(area.y + area.h + 1e-6);
+  }
+  async function wordsOnCover(text: string): Promise<TextElement> {
+    await press('cover-tab-text');
+    await press('cover-add-text');
+    expect(has('text-editor')).toBe(true);
+    await typeInEditor(text);
+    await press('text-editor-done');
+    expect(has('text-editor')).toBe(false);
+    return placedOnCover().find((t) => t.text === text)!;
+  }
+
+  it('"+ Add text" opens Edit text over the cover; Done puts the words on the cover (not a page), floating on the shadow, in the safe area, with a row of their own', async () => {
+    await openCover();
+    const pages = JSON.stringify(builder().albumPages);
+    expect(screenText()).not.toContain(W.MORE_WORDS); // the Background tab first
+    expect(has('cover-add-text-photo')).toBe(true); // the cover has its photo: "Add text" under it too
+    const w = await wordsOnCover('Est. 2026');
+    expect(w).toMatchObject({ placed: true, color: '#FFFFFF', outlineWidth: 2 });
+    expect(w.shadow).toBeUndefined(); // on the cover, words float unless switched off
+    expectInsideCover(w);
+    // Not on top of the title (the cover's middle may be where the title is).
+    const title = captionBoxRect(builder().coverFront, 0, builder().albumSize, 0, { coverMode: true });
+    if (title && coverTitleOf(builder().coverFront).text.trim()) {
+      const ink = wordsInk(w, null);
+      expect(w.x + ink.left < title.x + title.w && w.x + ink.right > title.x && w.y + ink.top < title.y + title.h && w.y + ink.bottom > title.y).toBe(false);
+    }
+    expect(screenText()).toContain(W.MORE_WORDS);
+    expect(byId(`cover-words-${w.id}`)!.props.accessibilityLabel).toBe(W.changeWords('Est. 2026'));
+    expect(JSON.stringify(builder().albumPages)).toBe(pages);
+    // The stage knows where they are, to drag them.
+    const stage = propsOf<{ words: { id: string }[] }>('cover-stage', CoverStage);
+    expect(stage.words.map((x) => x.id)).toEqual([w.id]);
+  });
+
+  it('Effects work on them as on a page: a wave and a glow', async () => {
+    await openCover();
+    const w = await wordsOnCover('Siargao');
+    await press(`cover-words-${w.id}`);
+    await press('text-effects-open');
+    await press('text-effect-shape');
+    await press('text-shape-wave');
+    await press('text-effect-glow');
+    await press('text-glow-color-Gold');
+    await press('text-editor-done');
+    expect(placedOnCover()[0]).toMatchObject({ curve: 'wave', glow: '#C9A24B' });
+    expectInsideCover(placedOnCover()[0]);
+  });
+
+  it('dragged on the cover: they follow the finger over the cover without them, stop at the dotted safe line (and it says why); a tap opens them; Remove takes them off', async () => {
+    await openCover();
+    const w = await wordsOnCover('Our Story');
+    const stage = () => propsOf<{ onDrag: (what: string, p: 'start' | 'move' | 'end', dx: number, dy: number) => void }>('cover-stage', CoverStage);
+    await act(async () => { stage().onDrag(`words:${w.id}`, 'start', 0, 0); stage().onDrag(`words:${w.id}`, 'move', 5, 0); });
+    await refresh();
+    expect(has('cover-safe-line')).toBe(true);
+    expect(has('cover-live-words')).toBe(true);
+    expect(screenText()).toContain(SAFE_LINE);
+    await act(async () => { stage().onDrag(`words:${w.id}`, 'end', 5, 0); });
+    await refresh();
+    const moved = placedOnCover()[0];
+    const area = wordsSafeArea(builder().albumSize, 0, true);
+    expect(moved.x + wordsInk(moved, null).right).toBeCloseTo(area.x + area.w, 6); // right up to the line, no further
+    expectInsideCover(moved);
+    // A tap opens them in Edit text, where Remove takes them off.
+    await act(async () => { stage().onDrag(`words:${w.id}`, 'start', 0, 0); stage().onDrag(`words:${w.id}`, 'end', 0, 0); });
+    await refresh();
+    expect(has('text-editor')).toBe(true);
+    await press('text-editor-remove');
+    expect(placedOnCover()).toHaveLength(0);
+  });
+
+  it('a finger on words drags them, before the title or the photo', () => {
+    const words = [{ id: 'a', rect: { x: 0.4, y: 0.4, w: 0.2, h: 0.1 } }];
+    const title = { x: 0.1, y: 0.35, w: 0.8, h: 0.2 };
+    expect(dragTarget(0.5, 0.45, title, true, words)).toBe('words:a');
+    expect(dragTarget(0.2, 0.45, title, true, words)).toBe('title');
+    expect(dragTarget(0.5, 0.9, title, true, words)).toBe('photo');
   });
 });

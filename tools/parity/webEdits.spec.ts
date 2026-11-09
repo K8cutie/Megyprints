@@ -64,6 +64,7 @@ vi.mock('../../src/lib/useIndexedDBPhotos', () => {
 });
 vi.mock('../../src/pages/builder/exif', () => ({
   readCaptureTime: async (file: File) => scenarioPhotos.get(file.name)?.capturedAt ?? null,
+  readCaptureLocation: async () => null, // made-up photos carry no place
 }));
 vi.mock('../../src/pages/builder/faceDetection', () => ({ initFaceApi: async () => {}, detectFaceCenter: async () => null }));
 

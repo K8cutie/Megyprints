@@ -4,7 +4,8 @@ import { X, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Trash2 } from 'lu
 import type { AlbumPage, UploadedPhoto, TemplateSlot, OrnamentTransform } from './types';
 import type { GuardReason } from './slotGeometry';
 import { slotRectPx } from './studioPhoneGeom';
-import { applyMask, MASKS, textureOverlayCss, type MaskId } from './masks';
+import { applyMask, MASKS, textureOverlayCss, maskArt, type MaskId } from './masks';
+import { MaskArtView } from './MaskArtDom';
 import { LOOKS, lookCss, type LookId } from './looks';
 import { slotShapeStyle } from './slotShapeStyle';
 import { pageInches } from './stickers';
@@ -55,6 +56,18 @@ export function StudioSheet({ kind, photo, currentMask, currentLook, onPickMask,
   const baseSlot = { id: 'thumb', x: 0, y: 0, width: 1, height: 1, ratio: '1:1' } as unknown as TemplateSlot;
   const thumb = (mask: MaskId | 'none', look: LookId | 'none') => {
     const applied = applyMask(baseSlot, mask === 'none' ? null : mask);
+    if (applied.art) {
+      const art = maskArt(applied.art, { x: 0, y: 0, w: THUMB, h: THUMB });
+      return (
+        <div style={{ width: THUMB, height: THUMB, position: 'relative' }}>
+          <MaskArtView art={art} w={THUMB} h={THUMB} style={{ left: 0, top: 0 }} photo={
+            <div style={{ position: 'absolute', left: art.photo.x, top: art.photo.y, width: art.photo.w, height: art.photo.h, background: '#EFE4D2' }}>
+              {photo && <img src={photo.previewUrl} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: look === 'none' ? undefined : lookCss(look) }} />}
+            </div>
+          } />
+        </div>
+      );
+    }
     const sh = slotShapeStyle(applied, THUMB, THUMB);
     return (
       <div style={{ width: THUMB, height: THUMB, position: 'relative' }}>

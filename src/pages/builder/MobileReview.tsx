@@ -28,7 +28,7 @@ import { isMaskId, edgeGuardMessage, type MaskId } from './masks';
 import { isLookId, type LookId } from './looks';
 import PageTurnBar from './PageTurnBar';
 import { PageColorSheet } from './PageColorPicker';
-import { pageColorOf } from './pageColors';
+import { pageFillOfKey } from './pageColors';
 import VideoMemoryButton from './VideoMemoryButton';
 import { useTesterStamp } from './useTesterStamp';
 import { useSampleAlbumNotes } from './useSampleAlbumNotes';
@@ -355,7 +355,7 @@ export default function MobileReview({ actions, onDone, onBackToPreview }: { act
           onPickAll={(hex) => {
             actions.applyPageColorToAllPages(hex);
             setColorSheet(false);
-            sayGuard(`Every page is ${pageColorOf({ type: 'solid', solid: hex })?.name.toLowerCase() ?? 'that colour'} now.`);
+            sayGuard(`Every page is ${pageFillOfKey(hex)?.name.toLowerCase() ?? 'that colour'} now.`);
           }}
           onClose={() => setColorSheet(false)} />
       )}

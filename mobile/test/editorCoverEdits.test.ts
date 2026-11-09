@@ -21,6 +21,8 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import type { AlbumPage } from '@web/pages/builder/types';
 import { getPrintDimensions } from '@web/pages/builder/printSize';
+import { getCanvasDimensions } from '@web/pages/builder/layouts';
+import { wordsSafeArea } from '@web/pages/builder/freeWords';
 import { PAGE_COLORS } from '@web/pages/builder/pageColors';
 import { DEFAULT_TITLE_FONT, fontNamed } from '@web/pages/builder/fontCatalog';
 import { fontSource } from '../src/editor/text/fonts/fontSources';
@@ -35,7 +37,6 @@ import {
   setTitleFont, setTitleSize, titleBoxOf, coverWithoutTitle, titleRectOf, toggleTitleBold, toggleTitleItalic,
   toggleTitleShadow, typeTitle, zoomCoverPhoto, type CoverBuilder,
 } from '../src/editor/cover/coverEdits';
-import { scrollToShow, TILE, TILE_GAP } from '../src/components/CoverPhotoRow';
 import { dragTarget } from '../src/editor/cover/CoverStage';
 import { snap } from '../src/editor/cover/Slider';
 import { act, builder, madeAlbum, useEditorBench } from './editorHarness';
@@ -334,20 +335,25 @@ describe('where the title is, and how far it moves', () => {
     }
   });
 
-  it('the title goes to every edge of the cover and never off it', async () => {
+  it('the title stops at the safe print area, 0.25" in from every edge of the cover (owner, 2026-11-07: words too close to an edge are cut off)', async () => {
     await madeAlbum(sc);
     await coverOn();
-    const box = titleBoxOf(builder().coverFront)!;
+    const size = builder().albumSize;
+    const box = titleBoxOf(builder().coverFront, size)!;
+    const ui = getCanvasDimensions(size);
+    const safe = wordsSafeArea(size, 0, true);
     const from = { offsetX: 0, offsetY: 0 };
     for (const [dx, dy, edge] of [[-5, 0, 'left'], [5, 0, 'right'], [0, -5, 'top'], [0, 5, 'bottom']] as const) {
       await act(async () => { moveCoverTitle(builder(), from, dx, dy); });
       const r = titleRectOf(builder().coverFront)!;
-      if (edge === 'left') expect(r.x).toBeCloseTo(0, 10);
-      if (edge === 'right') expect(r.x + r.w).toBeCloseTo(1, 10);
-      if (edge === 'top') expect(r.y).toBeCloseTo(0, 10);
-      if (edge === 'bottom') expect(r.y + r.h).toBeCloseTo(1, 10);
+      if (edge === 'left') expect(r.x).toBeCloseTo(safe.x / ui.width, 10);
+      if (edge === 'right') expect(r.x + r.w).toBeCloseTo((safe.x + safe.w) / ui.width, 10);
+      if (edge === 'top') expect(r.y).toBeCloseTo(safe.y / ui.height, 10);
+      if (edge === 'bottom') expect(r.y + r.h).toBeCloseTo((safe.y + safe.h) / ui.height, 10);
     }
-    expect(box.clampX(0.01)).toBe(0.01);
+    expect(box.clampX(0)).toBe(0); // where the layout puts it is inside
+    // Without the album's size (as before): to the cover's edges.
+    expect(titleBoxOf(builder().coverFront)!.clampX(-5)).toBeCloseTo(-box.baseX, 10);
     // No words, nothing to move.
     await act(async () => { typeTitle(builder(), ''); });
     const { b, calls } = recording(builder().coverFront);
@@ -386,16 +392,6 @@ describe('the small pieces', () => {
     expect(snap(0.4, 1, 3, 0.01)).toBe(1);
     expect(snap(3.7, 1, 3, 0.01)).toBe(3);
     expect(snap(44.6, 16, 96, 1)).toBe(45);
-  });
-
-  it('the photo row scrolls to the photo on the cover only when it is out of sight (the website\'s scrollIntoView, nearest)', () => {
-    // 64 px tiles 6 px apart, 16 px before the first: a 360 px row shows tiles 0 to 4 whole.
-    expect([TILE, TILE_GAP]).toEqual([64, 6]);
-    expect(scrollToShow(0, 360, 16)).toBeNull();
-    expect(scrollToShow(4, 360, 16)).toBeNull(); // 16 + 4 × 70 + 64 = 360: in sight
-    expect(scrollToShow(5, 360, 16)).toBe(16 + 5 * 70 + 64 - 360 + 16); // just enough: its right edge 16 px in
-    expect(scrollToShow(-1, 360, 16)).toBeNull(); // no album photo on the cover
-    expect(scrollToShow(9, 0, 16)).toBeNull(); // not laid out yet
   });
 
   it('a photo is on the cover after the app\'s steps (the cover step\'s tap)', async () => {

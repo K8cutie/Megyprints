@@ -134,6 +134,11 @@ export interface PhotoIntake {
    *  (Open PR #158 adds the file's own date as a fallback and says which one
    *  it was: whichever merges second widens this to { capturedAt, timeSource }.) */
   captureTime(this: void, photo: PickedPhoto): Promise<number | null>;
+  /** Where it was taken (EXIF GPS), or null when that isn't known. Optional:
+   *  the website reads the photo's EXIF; the app leaves it out (Android keeps
+   *  a photo's place behind ACCESS_MEDIA_LOCATION, which the app does not ask
+   *  for). With the capture time it splits a moment into scenes. */
+  captureLocation?(this: void, photo: PickedPhoto): Promise<{ lat: number; lon: number } | null>;
   /** A URL that shows this photo right now (website: a new blob: URL). It may
    *  stop working once the app is closed: see urlNeedsReload. */
   previewUrlOf(this: void, photo: PickedPhoto): string;

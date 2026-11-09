@@ -6,7 +6,7 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset } from './types';
 import { resolveSlotBox } from './slotGeometry';
 import { slotPhotoRect } from './slotPhotoFit';
-import { applyMask, isMaskId, archRy, starPoints, heartCurves, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha } from './masks';
+import { applyMask, isMaskId, archRy, starPoints, heartCurves, featherAlpha, isPathShape, maskPathD, loadMaskTexture, loadMaskOverlay, applyTextureAlpha, maskArt, artBox, paintArt } from './masks';
 import { applyLookPixels, isLookId } from './looks';
 import { CORNER_POSITIONS, cornerImageUrl, resolveBgImageSrc, bgCoverFit } from './types';
 import { PRINT_DPI, getPrintMultiplier, getPrintDimensions } from './printSize';
@@ -16,7 +16,7 @@ import { getTemplateById, adaptTemplateToOrientation } from './pageTemplates';
 import { marginForTemplate } from './binding';
 import { qrRect } from '../../lib/qrMemory';
 import { ornamentFit } from './ornaments';
-import { drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
+import { drawCurvedWordArtText, drawWordArtText, drawWrappedWordArtText, wrapTextLines, underlineTextLines, freeTextBoxWidth, resolveTextSlotAlign, TEXT_LINE_HEIGHT, CAPTION_PAD_X } from './wordArt';
 import { normalizeGradient, linearGradientEndpoints, radialGradientGeom } from './gradient';
 import { getCanvasDimensions } from './layouts';
 import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType, MaterialType } from './types';
@@ -251,7 +251,7 @@ async function drawPrintPage(
       const photo = photos[photoIdx];
       if (!photo) continue;
 
-      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, { x: W / uiW, y: H / uiH });
+      await renderSlotPhoto(ctx, photo, slot, sx, sy, sw, sh, page, i, adapted.fullBleed ?? false, { x: W / uiW, y: H / uiH }, { albumSize, pageIndex, coverMode });
     }
   }
 
@@ -595,12 +595,28 @@ async function renderSlotPhoto(
   slotIndex: number,
   fullBleed: boolean,
   printScale: { x: number; y: number },
+  where: { albumSize: AlbumSizePreset; pageIndex: number; coverMode: boolean },
 ) {
   // Load original photo at full resolution
   let img: HTMLImageElement;
   try {
     img = await loadImage(photo.previewUrl);
   } catch {
+    return;
+  }
+
+  // A mask that paints (maskArt): its card under the photo, the photo fitted
+  // to its window and clipped to its shape, its paint over. No frame: a mask
+  // draws none.
+  if (slot.art) {
+    const a = maskArt(slot.art, artBox({ x: sx, y: sy, w: sw, h: sh }, { ...where, fullBleed, kx: printScale.x, ky: printScale.y }));
+    paintArt(ctx, a.under);
+    ctx.save();
+    ctx.clip(new Path2D(a.clip));
+    drawSlotImage(ctx, img, slot, a.photo.x, a.photo.y, a.photo.w, a.photo.h, page, slotIndex, printScale);
+    paintArt(ctx, a.inside);
+    ctx.restore();
+    paintArt(ctx, a.over);
     return;
   }
 
@@ -772,6 +788,60 @@ async function renderSlotPhoto(
   }
 }
 
+/** A photo cover-fitted to the box (x, y, w, h) with the slot's turn, zoom,
+ *  pan and look: renderSlotPhoto's own steps, for a mask that paints (the
+ *  box is its window; such a mask has no soft or textured edge). The caller
+ *  has set the clip. */
+function drawSlotImage(
+  ctx: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  slot: any,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  page: AlbumPage,
+  slotIndex: number,
+  printScale: { x: number; y: number },
+) {
+  // The whole cover-fitted photo is turned (a template's turned slot), then
+  // the caller's clip cuts it. With a look, the turn happens inside the
+  // bake, which is the window's own size: the clip lies inside the window,
+  // so it is the same picture as without a look.
+  const rotation = slot.rotation || 0;
+  const turn = (c: CanvasRenderingContext2D, cx: number, cy: number) => {
+    if (rotation === 0) return;
+    c.translate(cx, cy);
+    c.rotate((rotation * Math.PI) / 180);
+    c.translate(-cx, -cy);
+  };
+  const fit = slotPhotoRect(
+    { w: img.naturalWidth, h: img.naturalHeight },
+    { w, h },
+    page.slotScales?.[slotIndex],
+    { x: (page.slotOffsetsX?.[slotIndex] ?? 0) * printScale.x, y: (page.slotOffsetsY?.[slotIndex] ?? 0) * printScale.y },
+  );
+  const rawLook = page.slotLooks?.[slotIndex];
+  const look = isLookId(rawLook) ? rawLook : null;
+  const t = look ? document.createElement('canvas') : null;
+  const tc = t?.getContext('2d');
+  if (t && tc && look) {
+    t.width = Math.max(1, Math.ceil(w));
+    t.height = Math.max(1, Math.ceil(h));
+    tc.save();
+    turn(tc, w / 2, h / 2);
+    tc.drawImage(img, fit.x, fit.y, fit.w, fit.h);
+    tc.restore();
+    applyLookPixels(tc, 0, 0, t.width, t.height, look);
+    ctx.drawImage(t, x, y);
+  } else {
+    ctx.save();
+    turn(ctx, x + w / 2, y + h / 2);
+    ctx.drawImage(img, x + fit.x, y + fit.y, fit.w, fit.h);
+    ctx.restore();
+  }
+}
+
 /** Apply clip path for special shapes.
  *  `cornerRadius` (print px) rounds the default rect clip — used by the
  *  `rounded` decorative frame so the photo corners match the DOM/Fabric
@@ -880,6 +950,12 @@ function renderTextElement(
     const pad = slot.w * CAPTION_PAD_X;
     const cx = align === 'left' ? slot.x + pad : align === 'right' ? slot.x + slot.w - pad : slot.x + slot.w / 2;
     const cy = slot.y + slot.h / 2;
+    if (text.curve) {
+      // On a curve: one line, not clipped to the box (a curve is taller than a line).
+      drawCurvedWordArtText(ctx, text.text, cx, cy, fontSize, align as 'left' | 'center' | 'right', text.curve, text, W / uiW, coverMode);
+      ctx.restore();
+      return;
+    }
     ctx.save();
     ctx.beginPath();
     ctx.rect(slot.x, slot.y, slot.w, slot.h);
@@ -904,6 +980,13 @@ function renderTextElement(
     const bw = freeTextBoxWidth(text) * eff;
     const cx = align === 'left' ? 0 : align === 'right' ? bw : bw / 2;
     const step = fontSize * TEXT_LINE_HEIGHT;
+    if (text.curve) {
+      // On a curve (words placed by hand, freeWords.ts): one line, its middle
+      // where a one-line straight text's middle is.
+      drawCurvedWordArtText(ctx, text.text, cx, step / 2, fontSize, align as 'left' | 'center' | 'right', text.curve, text, eff, coverMode);
+      ctx.restore();
+      return;
+    }
     const lines = wrapTextLines(ctx, text.text, bw);
     lines.forEach((line, i) => drawWordArtText(ctx, line, cx, step / 2 + i * step, text, eff, coverMode));
     if (text.underline) {
@@ -946,6 +1029,13 @@ function renderSlotText(
   const pad = w * CAPTION_PAD_X;
   const cx = align === 'left' ? x + pad : align === 'right' ? x + w - pad : x + w / 2;
   const cy = y + h / 2;
+
+  if (st.curve) {
+    // On a curve: one line, not clipped to the frame (the caption branch's rule).
+    drawCurvedWordArtText(ctx, st.text, cx, cy, fontSize, align as 'left' | 'center' | 'right', st.curve, st, W / uiW, coverMode);
+    ctx.restore();
+    return;
+  }
 
   // Wrapped + clipped to the slot, mirroring the DOM preview (see the caption
   // branch of renderTextElement). A themed quote is longer than a caption, so

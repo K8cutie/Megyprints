@@ -13,7 +13,7 @@
    they are); test/albumWords.test.ts fails if one stops matching the
    website's source.
    ══════════════════════════════════════════════════════════════════════════ */
-import type { BuilderActions, GenerateResult } from '@web/pages/builder/useBuilderState';
+import type { BuilderActions, GenerateResult, GeneratingPhase } from '@web/pages/builder/useBuilderState';
 import type { AlbumPage, AlbumSizeConfig, AlbumSizePreset, UploadedPhoto } from '@web/pages/builder/types';
 import { offerableSizesAmong } from '@web/pages/builder/sizeOffer';
 import { densityRangeLabel } from '@web/pages/builder/densities';
@@ -33,13 +33,27 @@ import { toPickedPhoto, type InspectPhotos } from './appPhotos';
  *  photos step's (TO_COVER; with a made album KEEP_PAGES or REMAKE_ALBUM)
  *  and the cover step's (MAKE_ALBUM, COVER_TO_PAGES, COVER_TO_PHOTOS). */
 export { COVER_TO_PAGES, COVER_TO_PHOTOS, KEEP_PAGES, MAKE_ALBUM, REMAKE_ALBUM, TO_COVER };
-/** GeneratingOverlay.tsx GENERATING_COPY, by the builder's `generating` phase. */
-export const GENERATING_COPY = {
-  measuring: 'Looking at your photos…',
-  laying_out: 'Arranging them across the pages…',
-  quotes: 'Choosing lines for your theme…',
-  finishing: 'Almost there…',
-} as const;
+/** GeneratingOverlay.tsx GENERATING_COPY, by the builder's `generating` phase:
+ *  what the phone is doing, named in plain words, with a count where the
+ *  step counts photos (owner, 2026-11-09: a wait is fine when the screen
+ *  says what is happening). */
+export const GENERATING_COPY: Record<GeneratingPhase, string> = {
+  measuring: 'Looking at your photos',
+  checking: 'Checking photos for blur',
+  faces: 'Finding the faces',
+  grouping: 'Grouping the moments',
+  laying_out: 'Laying out the pages',
+  quotes: 'Choosing the words',
+  finishing: 'Almost done',
+};
+/** GeneratingOverlay.tsx stageLine: "Checking photos for blur. 37 of 200". */
+export function stageLine(phase: GeneratingPhase, count: { done: number; total: number } | null): string {
+  return count && count.total > 0 ? `${GENERATING_COPY[phase]}. ${count.done} of ${count.total}` : GENERATING_COPY[phase];
+}
+/** GeneratingOverlay.tsx photosLine: "200 photos" under the title. */
+export function photosLine(n: number): string {
+  return `${n} photo${n === 1 ? '' : 's'}`;
+}
 /** BuilderSetup.tsx SizeCard: one line under each size. */
 export const SIZE_LINE: Partial<Record<AlbumSizePreset, string>> = {
   '6x6': 'Perfect for small gifts & keepsakes',

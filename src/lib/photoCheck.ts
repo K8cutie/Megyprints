@@ -330,3 +330,14 @@ export function checkProgress(photos: CheckablePhoto[]): { done: number; total: 
   const live = photos.filter((p) => !p.leftOut);
   return { done: live.filter((p) => p.check).length, total: live.length };
 }
+
+/** How far the face pass is: photos whose faces were looked for / photos
+ *  that get a face pass (every checked photo when the device finds faces
+ *  fast, else only the repeats — nextCheckJob's rule). For the "Finding the
+ *  faces 112 of 200" line while the album is made. */
+export function faceCheckProgress(photos: CheckablePhoto[], facesForAll = true): { done: number; total: number } {
+  const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0 && !!p.check);
+  const inRepeats = new Set(findRepeats(live).flat());
+  const wanted = facesForAll ? live : live.filter((p) => inRepeats.has(p.id));
+  return { done: wanted.filter((p) => p.check!.faces !== null || !!p.check!.facesTried).length, total: wanted.length };
+}

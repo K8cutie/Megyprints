@@ -55,6 +55,7 @@ vi.mock('./faceDetection', () => ({
 }));
 vi.mock('./exif', () => ({
   readCaptureTime: async () => { touched.push('EXIF'); return null; },
+  readCaptureLocation: async () => { touched.push('EXIF'); return null; },
 }));
 // The builder's default here is the APP's (defaultBuilderPlatform.native.ts:
 // none), so nothing can quietly fall back to the browser's pieces.

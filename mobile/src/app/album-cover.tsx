@@ -3,9 +3,8 @@
    "Make my album".
 
    One of the album's photos goes on the front cover with a tap (the builder's
-   setCoverToPhoto, as a tap in the website's cover step); the photos are one
-   row you swipe ABOVE the cover, as on the website since #235 (CoverPhotoRow),
-   and the title is
+   setCoverToPhoto, as a tap in the website's cover step); the photos are a
+   grid you scroll down, ABOVE the cover (CoverPhotoGrid), and the title is
    the album's name until the customer types their own (box 0 of the cover
    page). The front cover is drawn by the app's page renderer the way print
    draws it (coverMode). While this screen is open the builder edits the
@@ -24,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { coverTitleFit } from '@web/pages/builder/textFit';
 import { ALBUM_SIZES } from '@web/pages/builder/types';
 import { Button } from '../components/Button';
-import { CoverPhotoRow } from '../components/CoverPhotoRow';
+import { CoverPhotoGrid } from '../components/CoverPhotoGrid';
 import { useBuilder } from '../builder/BuilderProvider';
 import { albumMade, chooseCover, coverPhotoId, coverPhotos, coverStepNext, coverTitle, photosIn, saveStep, setCoverTitleText } from '../builder/albumFlow';
 import { NOT_DRAWN_LINE } from '../builder/screenWords';
@@ -32,6 +31,7 @@ import { forgetPhotoPictures, usePagePicture } from '../builder/usePagePicture';
 import { useGoToPreview } from '../builder/useGoToPreview';
 import { bundledFace, familyFaces } from '../render/fontTable';
 import { colors, space } from '../lib/theme';
+import { useOncePerVisit } from '../lib/useOncePerVisit';
 
 /** The cover picture waits this long after the last key typed in the title. */
 const TYPING_MS = 350;
@@ -92,6 +92,10 @@ export default function AlbumCover() {
     width: Math.round(coverW * 2), coverMode: true,
   } : null);
 
+  // Once per visit, and not while this screen comes on: a double tap on the
+  // Photos step's Next would land on Make my album, in the same spot
+  // (useOncePerVisit).
+  const once = useOncePerVisit();
   const goOn = () => {
     if (next.go === 'photos') { saveStep(platform.deviceStore, 'photos'); router.push('/photos'); return; }
     if (next.go === 'pages') { goToPreview(); return; }
@@ -104,10 +108,10 @@ export default function AlbumCover() {
         <Text style={styles.title}>Design your cover</Text>
         <Text style={styles.sub} testID="cover-one-photo">Pick 1 photo for the front cover</Text>
 
-        {/* The photos ABOVE the cover, one row you swipe (the website's #235). */}
+        {/* The photos ABOVE the cover, a grid you scroll down (owner, 2026-11-04). */}
         {photos.length > 0 && (
           <View style={styles.row}>
-            <CoverPhotoRow photos={photos} onCover={onCover} onPick={(p) => chooseCover(builder, p.id)} pad={space.lg} />
+            <CoverPhotoGrid photos={photos} onCover={onCover} onPick={(p) => chooseCover(builder, p.id)} pad={space.lg} />
           </View>
         )}
 
@@ -136,7 +140,7 @@ export default function AlbumCover() {
         )}
       </ScrollView>
       <SafeAreaView edges={['bottom']} style={styles.bar}>
-        <Button label={next.label} onPress={goOn} testID="cover-next" />
+        <Button label={next.label} onPress={once(goOn)} testID="cover-next" />
       </SafeAreaView>
     </View>
   );
@@ -151,7 +155,7 @@ const styles = StyleSheet.create({
   caption: { alignSelf: 'center', fontSize: 13, color: colors.muted },
   notDrawn: { fontSize: 13, color: colors.muted, textAlign: 'center' },
   label: { fontSize: 15, fontWeight: '700', color: colors.text, marginTop: space.md },
-  // Edge to edge: the row runs under the screen's margins, its own padding lines it up.
+  // Edge to edge: the grid runs under the screen's margins, its own padding lines it up.
   row: { marginHorizontal: -space.lg, marginBottom: space.sm },
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.card, paddingHorizontal: space.md, paddingVertical: 12, fontSize: 17, color: colors.text },
   warn: { borderWidth: 1, borderColor: '#F0D9A8', backgroundColor: '#FFF6E5', borderRadius: 10, padding: space.sm, gap: space.sm },

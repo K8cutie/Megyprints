@@ -34,6 +34,7 @@ import { getTemplateById, adaptTemplateToOrientation } from '@web/pages/builder/
 import { marginForTemplate } from '@web/pages/builder/binding';
 import { resolveSlotBox } from '@web/pages/builder/slotGeometry';
 import { applyMask, isMaskId, maskOverlayUrl, maskTextureUrl, type AppliedSlot } from '@web/pages/builder/maskShapes';
+import { artBox, maskArt, type MaskArt } from '@web/pages/builder/maskArt';
 import { dedupeSlotFills } from '@web/pages/builder/slotUtils';
 import { getCanvasDimensions } from '@web/pages/builder/layouts';
 import { getPrintDimensions, PRINT_DPI } from '@web/pages/builder/printSize';
@@ -93,6 +94,9 @@ export interface PhotoItem {
   frame: PhotoFrame;
   /** The photo's colour look (black & white, sepia…), or null. */
   look: LookId | null;
+  /** A mask that paints (film strip, instant photo…): what to draw, print
+   *  px (maskArt, in the box artBox gives). */
+  art?: MaskArt;
 }
 
 /** Words inside a box (a caption box, or a text in a photo frame). */
@@ -375,6 +379,7 @@ export function planPage({ page, albumSize, pageIndex, photoCount, photoIds = []
           isRect: slot.shape !== 'circle' && slot.shape !== 'oval',
         },
         look: isLookId(rawLook) ? rawLook : null,
+        ...(slot.art ? { art: maskArt(slot.art, artBox(box, { albumSize, pageIndex, coverMode, fullBleed, kx: W / uiW, ky: H / uiH })) } : {}),
       });
     }
   }
