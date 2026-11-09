@@ -49,6 +49,10 @@
    myOrders) and accountDeletionRules (what deleting an account touches and
    the call to the endpoint, split out of accountDeletion).
 
+   Look scenes (2026-11-09) added lib/photoLook (what a photo looks like, as
+   numbers: generateAlbum puts photos with no capture time next to the
+   photos they look like).
+
    A TWIN: a file listed as name.native.ts stands in for name.ts in the app.
    The app's bundler (Metro) and type check (tsconfig moduleSuffixes) pick
    the .native.ts file, so a listed file may import name.ts (the website's,
@@ -84,6 +88,7 @@ export const SHARED_MODULES = [
   'src/lib/passwordReset.ts',
   'src/lib/photoCheck.ts',
   'src/lib/photoKeeping.ts',
+  'src/lib/photoLook.ts',
   'src/lib/photoPresence.ts',
   'src/lib/photoRelink.ts',
   'src/lib/pickedFiles.ts',

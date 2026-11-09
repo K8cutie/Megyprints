@@ -1,5 +1,6 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll, QrFill } from './types';
 import { medianSharpness, isBlurry, photoQuality } from '../../lib/photoCheck';
+import { LOOK_ALIKE, LOOK_APART, likeness, lookOf, orderByLook, type Look } from '../../lib/photoLook';
 import { separateLookAlikes } from './lookAlikes';
 import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, orientationOfShape, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
 
@@ -85,11 +86,54 @@ export const TIME_ORDER_REACH = 12;
    promised before Generate, so a scene cannot end a page early; there the
    plan's counts are dealt in the order that fits the scenes instead (see
    nextPlanned).
+
+   LOOKS (2026-11-09, lib/photoLook): a photo downloaded from Facebook or
+   Messenger has no capture time and no place, so the clock can say nothing
+   about it: the owner's 196 Hong Kong photos were one scene, in file order.
+   Where the photo check's look pass has read the photos, their looks do
+   two things:
+     • PHOTOS WITH NO CAPTURE TIME are sorted so look-alikes sit together
+       (orderByLook), and each group whose likeness is at least LOOK_ALIKE
+       is a scene. A group that looks like a dated photo (LOOK_ALIKE again)
+       joins that photo's scene, right after it, instead of waiting at the
+       end of the album.
+     • A CHANGE OF PLACE splits a scene the clock did not: where the last
+       LOOK_WINDOW shots and the next LOOK_WINDOW have nothing alike across
+       them (every pair under LOOK_APART) and each side is a run of
+       look-alikes (the shot at the edge has one at least LOOK_ALIKE on its
+       own side). Both halves of that matter: any two photos of one trip
+       are only about 0.5 alike, so "the next shot looks different" alone
+       would cut every burst into single photos and the pages would stop
+       ending at the real pauses.
+   The page budget above still holds, against the album made WITHOUT the
+   looks: sorted by look and split into scenes, it never has more pages,
+   else the scenes merge and at last the look order is dropped. At a chosen
+   photos-per-page the count is promised from each moment's photos, so no
+   photo changes moment there: the photos with no capture time are sorted
+   by look where they are.
+   A page still holds one photo shape, and sorting by look scatters the
+   photos of a rare shape (the 13 upright Hong Kong photos sat together in
+   file order; by look they were spread among 183 squares, each too far from
+   the next for TIME_ORDER_REACH, so each took a page of its own and the
+   budget dropped the look order). That reach keeps photos in the order they
+   were TAKEN; photos with no capture time have no such order to keep, so in
+   their look-sorted moment a page takes the next photos of its shape from
+   anywhere in it. And one that joined a dated scene does not count toward
+   the reach there: counted, six forwarded photos pushed the next landscape
+   out of a landscape page's reach, the page came out short, and the album
+   ran a page or two over (so the budget dropped the look order again).
+   A photo with no look (the pass was skipped, too slow, or the 2.0 app,
+   which has no look model yet) is placed by the clock alone, as before.
    ══════════════════════════════════════════════════════════════════════════ */
 /** A new scene starts when consecutive shots are more than this apart. */
 export const SCENE_GAP_MS = 5 * 60 * 1000; // 5 minutes
 /** ...or were taken more than this far apart (metres), when both have a place. */
 export const SCENE_MOVE_M = 200;
+/** ...or where this many shots before and this many after share no look. */
+export const LOOK_WINDOW = 3;
+/** How many fresh deals the look order gets when it lands a page over the
+ *  budget, before the album is made without it. */
+const LOOK_DEALS = 3;
 
 /** Metres between two places (haversine). */
 export function distanceM(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
@@ -110,26 +154,165 @@ function sceneBreak(prev: Placed, next: Placed): boolean {
   return false;
 }
 
+/** Each photo's scene by id (planScenes). Where the photos' looks placed
+ *  photos with no capture time, it also says where those go. */
+export type ScenePlan = Map<string, number> & {
+  /** The photos with no capture time, by id, in the order the album takes
+   *  them: look-alikes together. Set when at least one of them has a look. */
+  untimed?: string[];
+  /** A photo with no capture time that looks like a dated one, by id: the
+   *  id of the dated photo it goes right after. */
+  after?: Map<string, string>;
+};
+
+/** The photos with no capture time, placed by look: their order (look-alikes
+ *  together, the ones with no look last, as they came), each one's group,
+ *  and the dated photo a group joins (the one it looks like most, when that
+ *  is at least LOOK_ALIKE). */
+function placeByLook(photos: UploadedPhoto[], looks: (Look | null)[], untimed: number[]): {
+  order: number[]; groupOf: Map<number, number>; after: Map<number, number>;
+} {
+  const groupOf = new Map<number, number>();
+  const after = new Map<number, number>();
+  const seen = untimed.filter((i) => looks[i]);
+  if (seen.length === 0) return { order: untimed, groupOf, after };
+  const sorted = orderByLook(seen.map((i) => looks[i]!));
+  const dated = photos.map((_, i) => i).filter((i) => typeof photos[i].capturedAt === 'number' && looks[i]);
+  sorted.groups.forEach((group, g) => {
+    const members = group.map((k) => seen[k]);
+    let best = -1;
+    let bestSim = -1;
+    for (const u of members) {
+      groupOf.set(u, g);
+      for (const t of dated) {
+        const s = likeness(looks[u]!, looks[t]!);
+        if (s > bestSim) { bestSim = s; best = t; }
+      }
+    }
+    if (best >= 0 && bestSim >= LOOK_ALIKE) for (const u of members) after.set(u, best);
+  });
+  return { order: [...sorted.order.map((k) => seen[k]), ...untimed.filter((i) => !looks[i])], groupOf, after };
+}
+
+/** The scene of each photo in one moment's sequence (0, 1, 2…): a new one
+ *  at a pause or a move (sceneBreak, between dated photos; a photo with no
+ *  capture time that joined by look stays with the photo before it), and
+ *  at a change of place the looks show (see LOOKS above). */
+function scenesInMoment(seq: number[], photos: UploadedPhoto[], looks: (Look | null)[]): number[] {
+  const n = seq.length;
+  const paused = new Array<boolean>(n).fill(false);
+  let prevDated: UploadedPhoto | null = null;
+  seq.forEach((i, k) => {
+    const p = photos[i];
+    if (typeof p.capturedAt !== 'number') return;
+    if (prevDated && sceneBreak(prevDated, p)) paused[k] = true;
+    prevDated = p;
+  });
+  const out = new Array<number>(n).fill(0);
+  let scene = 0;
+  let start = 0; // where the scene being walked began
+  const changedPlace = (k: number): boolean => {
+    if (!looks[seq[k - 1]] || !looks[seq[k]]) return false;
+    const before: Look[] = []; // the last shots of this scene, the latest first
+    for (let j = k - 1; j >= start && before.length < LOOK_WINDOW; j--) { const l = looks[seq[j]]; if (l) before.push(l); }
+    const next: Look[] = []; // the next shots, up to the next pause
+    for (let j = k; j < n && next.length < LOOK_WINDOW; j++) {
+      if (j > k && paused[j]) break;
+      const l = looks[seq[j]];
+      if (l) next.push(l);
+    }
+    if (before.length < LOOK_WINDOW || next.length < LOOK_WINDOW) return false;
+    if (!before.slice(1).some((x) => likeness(before[0], x) >= LOOK_ALIKE)) return false;
+    if (!next.slice(1).some((x) => likeness(next[0], x) >= LOOK_ALIKE)) return false;
+    return before.every((x) => next.every((y) => likeness(x, y) < LOOK_APART));
+  };
+  for (let k = 1; k < n; k++) {
+    if (paused[k] || changedPlace(k)) { scene++; start = k; }
+    out[k] = scene;
+  }
+  return out;
+}
+
 /** Each photo's scene (a number; equal = same scene), by photo id. Walks the
  *  moments in time order (groupPhotosByMoment), so a scene never crosses a
- *  moment; photos without a capture time are one scene of their own. The
- *  builder works this out under "Grouping the moments" and hands it to
+ *  moment. Photos without a capture time: placed by their looks where the
+ *  look pass has read them (see LOOKS above), else one scene of their own.
+ *  The builder works this out under "Grouping the moments" and hands it to
  *  generateAlbum (options.scenes); generateAlbum works it out itself when
  *  it isn't handed one. */
-export function planScenes(photos: UploadedPhoto[]): Map<string, number> {
-  const scenes = new Map<string, number>();
+export function planScenes(photos: UploadedPhoto[]): ScenePlan {
+  const scenes: ScenePlan = new Map<string, number>();
+  const looks = photos.map((p) => lookOf(p));
+  const dated = (i: number) => typeof photos[i].capturedAt === 'number';
+  const untimed = photos.map((_, i) => i).filter((i) => !dated(i));
+  const placed = placeByLook(photos, looks, untimed);
+  /** The photos with no capture time that go right after each dated photo. */
+  const joining = new Map<number, number[]>();
+  for (const u of placed.order) {
+    const t = placed.after.get(u);
+    if (t !== undefined) joining.set(t, [...(joining.get(t) ?? []), u]);
+  }
   let scene = 0;
   for (const group of groupPhotosByMoment(photos)) {
-    let prev: UploadedPhoto | null = null;
-    for (const i of group) {
-      const p = photos[i];
-      if (prev && sceneBreak(prev, p)) scene++;
-      scenes.set(p.id, scene);
-      prev = p;
-    }
-    scene++;
+    if (!group.some(dated)) continue; // the photos with no capture time: below
+    const seq = group.flatMap((i) => [i, ...(joining.get(i) ?? [])]);
+    const inMoment = scenesInMoment(seq, photos, looks);
+    seq.forEach((i, k) => scenes.set(photos[i].id, scene + inMoment[k]));
+    scene += inMoment[inMoment.length - 1] + 1;
+  }
+  // The rest of the photos with no capture time: each look group a scene,
+  // the ones with no look one scene.
+  let last: number | undefined;
+  let any = false;
+  for (const u of placed.order) {
+    if (placed.after.has(u)) continue;
+    const g = placed.groupOf.get(u) ?? -1;
+    if (any && g !== last) scene++;
+    scenes.set(photos[u].id, scene);
+    last = g;
+    any = true;
+  }
+  if (placed.groupOf.size > 0) {
+    scenes.untimed = placed.order.map((i) => photos[i].id);
+    scenes.after = new Map([...placed.after].map(([u, t]) => [photos[u].id, photos[t].id]));
   }
   return scenes;
+}
+
+/** The moments (groupPhotosByMoment) with the photos that have no capture
+ *  time where the plan's looks put them: sorted so look-alikes sit together
+ *  and, when `across`, the ones that look like a dated photo moved right
+ *  after it (after the last photo of its scene when that photo is not among
+ *  these: it has a full page of its own). Once some have moved, the ones
+ *  left close the last dated moment instead of making a moment of their
+ *  own: a moment is dealt by itself, and two photos left behind took a page
+ *  each, a page more than the album without looks. The same array when the
+ *  plan moves nothing. */
+function momentsByLook(moments: number[][], photos: UploadedPhoto[], plan: ScenePlan, across: boolean): number[][] {
+  const last = moments[moments.length - 1];
+  if (!plan.untimed || !last || last.some((i) => typeof photos[i].capturedAt === 'number')) return moments;
+  const rank = new Map(plan.untimed.map((id, k) => [id, k]));
+  const sorted = [...last].sort((x, y) => (rank.get(photos[x].id) ?? Infinity) - (rank.get(photos[y].id) ?? Infinity) || x - y);
+  const timed = moments.slice(0, -1);
+  const joining = new Map<number, number[]>();
+  let stay = sorted;
+  if (across && plan.after?.size && timed.length > 0) {
+    const indexOf = new Map(photos.map((p, i) => [p.id, i]));
+    const sceneEnd = new Map<number, number>();
+    for (const m of timed) for (const i of m) { const s = plan.get(photos[i].id); if (s !== undefined) sceneEnd.set(s, i); }
+    stay = [];
+    for (const u of sorted) {
+      const to = plan.after.get(photos[u].id);
+      const t = to === undefined ? undefined : (indexOf.get(to) ?? sceneEnd.get(plan.get(photos[u].id) ?? -1));
+      if (t === undefined) stay.push(u);
+      else joining.set(t, [...(joining.get(t) ?? []), u]);
+    }
+  }
+  if (joining.size === 0 && sorted.every((i, k) => i === last[k])) return moments;
+  const out = timed.map((m) => m.flatMap((i) => [i, ...(joining.get(i) ?? [])]));
+  if (joining.size > 0) out[out.length - 1].push(...stay);
+  else if (stay.length) out.push(stay);
+  return out;
 }
 
 /** A moment's photos (time order) split where their scene changes. */
@@ -149,16 +332,27 @@ function splitByScene(group: number[], sceneOf: (i: number) => number | undefine
 
 /** The scenes closest in time merged (the smallest quarter of the gaps, at
  *  least one), moment by moment; null when there is nothing left to merge.
- *  A change of place counts as a long gap, so place splits merge last. */
+ *  A change of place counts as a long gap, so place splits merge last; and
+ *  the less two scenes look alike where they meet, the longer their gap
+ *  counts (up to SCENE_GAP_MS more), so among scenes the clock can't tell
+ *  apart, the ones most alike merge first. The time between two scenes is
+ *  between their dated photos (a photo with no capture time that joined a
+ *  scene by its look has none). */
 function mergeClosestScenes(groups: number[][][], photos: UploadedPhoto[]): number[][][] | null {
   const gaps: { m: number; k: number; score: number }[] = [];
+  const isDated = (i: number) => typeof photos[i].capturedAt === 'number';
   groups.forEach((scenes, m) => {
     for (let k = 0; k + 1 < scenes.length; k++) {
-      const a = photos[scenes[k][scenes[k].length - 1]];
-      const b = photos[scenes[k + 1][0]];
-      const dt = typeof a.capturedAt === 'number' && typeof b.capturedAt === 'number' ? b.capturedAt - a.capturedAt : 0;
-      const moved = a.location && b.location && distanceM(a.location, b.location) > SCENE_MOVE_M;
-      gaps.push({ m, k, score: dt + (moved ? 2 * SCENE_GAP_MS : 0) });
+      const endsAt = [...scenes[k]].reverse().find(isDated);
+      const startsAt = scenes[k + 1].find(isDated);
+      const a = endsAt === undefined ? undefined : photos[endsAt];
+      const b = startsAt === undefined ? undefined : photos[startsAt];
+      const dt = a && b ? (b.capturedAt as number) - (a.capturedAt as number) : 0;
+      const moved = a?.location && b?.location && distanceM(a.location, b.location) > SCENE_MOVE_M;
+      const la = lookOf(photos[scenes[k][scenes[k].length - 1]]);
+      const lb = lookOf(photos[scenes[k + 1][0]]);
+      const apart = la && lb ? (1 - likeness(la, lb)) * SCENE_GAP_MS : 0;
+      gaps.push({ m, k, score: dt + (moved ? 2 * SCENE_GAP_MS : 0) + apart });
     }
   });
   if (gaps.length === 0) return null;
@@ -778,8 +972,11 @@ function insertMemoryPages(
   options?: { border?: { color: string; width: number }; cornerBase?: string },
   badges?: Map<number, CarriedMemory[]>,
   floor = 0,
+  /** The album's order when it is not the clock's alone (the photos with
+   *  no capture time sorted by look: momentsByLook). */
+  albumOrder?: number[],
 ): void {
-  const order = groupPhotosByMoment(photos).flat();
+  const order = albumOrder ?? groupPhotosByMoment(photos).flat();
   const pos = new Map(order.map((idx, p) => [idx, p]));
   const pagePos = (p: AlbumPage) => {
     let m = Infinity;
@@ -1369,8 +1566,9 @@ export interface GenerateOptions {
   fullPageShare?: number;
   /** Each photo's scene by id (planScenes), worked out by the builder under
    *  "Grouping the moments". Left out: worked out here. false: no scenes
-   *  (pages fill across the moment as before 2026-11-09). */
-  scenes?: Map<string, number> | false;
+   *  and no look order (pages fill across the moment, and photos with no
+   *  capture time come last as they were added, as before 2026-11-09). */
+  scenes?: ScenePlan | false;
 }
 
 /**
@@ -1478,17 +1676,25 @@ function generateAlbumWith(
   }
   const taken = new Set([...reserved, ...opening]);
   const restMap = photos.map((_, i) => i).filter((i) => !taken.has(i));
+  const used = { byLook: false };
   const pages = layoutAlbum(restMap.map((i) => photos[i]), albumSize, photosPerPage, background,
     { ...options, minPages: Math.max(1, minPages - reserved.length - opening.length) },
     // Fill mode is a property of the WHOLE album (its photos vs its 40
     // pages); deciding it on what's left after reserving would flip the
     // density cap at the boundary (119 photos at 2/page dealt 3s).
     { photos: photos.length, minPages },
-    opening.length && solo ? solo : undefined);
+    opening.length && solo ? solo : undefined,
+    used);
+  // LOOKS: where the pages were laid out with the undated photos sorted by
+  // look, the full pages go back by that order too, so a full-page photo
+  // sits with the photos it looks like, not where it was added.
+  const plan = options?.scenes;
+  const promised = !(options?.randomize ?? false) && photosPerPage != null && photosPerPage > 1;
+  const albumOrder = used.byLook && plan ? momentsByLook(groupPhotosByMoment(photos), photos, plan, !promised).flat() : undefined;
   remapSlotFills(pages, restMap);
   pages.unshift(...opening.map((photo, i) =>
     asFullPage(createEmptyPage(i, albumSize, background, options?.border, options?.cornerBase), solo!, photo)));
-  insertMemoryPages(pages, reserved, solo, photos, albumSize, background, options, badges, opening.length);
+  insertMemoryPages(pages, reserved, solo, photos, albumSize, background, options, badges, opening.length, albumOrder);
   // Two shots of the same moment the customer kept never share a page (and
   // never swap a memory page's photo out from under its QR).
   separateLookAlikes(pages, photos, isMemoryReady);
@@ -1527,19 +1733,41 @@ function layoutAlbum(
   /** The layout of the page right before this layout's first one (the
    *  opening full pages): the look and rhythm guards start from it. */
   after?: PageTemplate,
+  /** Told back: the pages were laid out with the photos that have no
+   *  capture time sorted by look (not when the budget dropped that order). */
+  used?: { byLook: boolean },
 ): AlbumPage[] {
   // SCENES and the page budget (see SCENE_GAP_MS above).
   const moments = groupPhotosByMoment(photos);
   const sceneOf = options?.scenes === false ? null : (options?.scenes ?? planScenes(photos));
-  const lay = (groups: number[][][]) => layoutAlbumWith(photos, albumSize, photosPerPage, background, options, basis, after, groups);
-  const plain = moments.map((m) => [m]);
-  if (!sceneOf) return lay(plain);
-  let groups = moments.map((m) => splitByScene(m, (i) => sceneOf.get(photos[i].id)));
-  if (groups.every((g) => g.length <= 1)) return lay(plain);
-  // A chosen photos-per-page (2+) promises its page count: the plan's counts
-  // are dealt scene by scene (nextPlanned), the count can't change, one pass.
+  const layPlain = () => layoutAlbumWith(photos, albumSize, photosPerPage, background, options, basis, after, moments.map((m) => [m]));
+  if (!sceneOf) return layPlain();
+  // A chosen photos-per-page (2+) promises its page count from each moment's
+  // photos (chosenQueuePlans), so no photo changes moment there.
   const randomize = options?.randomize ?? false;
-  if (!randomize && photosPerPage != null && photosPerPage > 1) return lay(groups);
+  const promised = !randomize && photosPerPage != null && photosPerPage > 1;
+  // LOOKS: the photos with no capture time, where their looks put them.
+  const placed = momentsByLook(moments, photos, sceneOf, !promised);
+  // Their moment (the last, sorted by look): its pages take a shape's next
+  // photos from anywhere in it. The ones that joined a dated moment: not
+  // counted in a page's reach there (see LOOKS above).
+  const isDated = (i: number) => typeof photos[i].capturedAt === 'number';
+  const byLook: LookPlacement = { sorted: new Set(), joined: new Set() };
+  if (placed !== moments) {
+    placed.forEach((m, k) => {
+      if (!m.some(isDated)) byLook.sorted.add(k);
+      else for (const i of m) if (!isDated(i)) byLook.joined.add(i);
+    });
+  }
+  const lay = (groups: number[][][]) => layoutAlbumWith(photos, albumSize, photosPerPage, background, options, basis, after, groups, byLook);
+  let groups = placed.map((m) => splitByScene(m, (i) => sceneOf.get(photos[i].id)));
+  if (placed === moments && groups.every((g) => g.length <= 1)) return layPlain();
+  // The promised count: the plan's counts are dealt scene by scene
+  // (nextPlanned), the count can't change, one pass.
+  if (promised) {
+    if (used) used.byLook = placed !== moments;
+    return lay(groups);
+  }
   // The budget: the album without scenes. Every layout after it REPLAYS the
   // random draws the budget's made (then draws on), so two layouts differ
   // only by the scenes: the deal's own swing between two tries (two or
@@ -1548,7 +1776,7 @@ function layoutAlbum(
   const real = Math.random;
   Math.random = () => { const v = real(); drawn.push(v); return v; };
   let base: AlbumPage[];
-  try { base = lay(plain); } finally { Math.random = real; }
+  try { base = layPlain(); } finally { Math.random = real; }
   const replay = (f: () => AlbumPage[]): AlbumPage[] => {
     let k = 0;
     Math.random = () => (k < drawn.length ? drawn[k++] : real());
@@ -1561,9 +1789,31 @@ function layoutAlbum(
     groups = merged;
     pages = replay(() => lay(groups));
   }
-  // Fully merged and still a page over (the deal's own randomness): the
-  // budget's own album, so scenes never cost a page.
-  return pages.length > base.length ? base : pages;
+  // Sorted by look, with every scene merged, and still a page over: another
+  // order deals other layouts, so the count can land a page either side of
+  // the budget's. A few fresh deals of the look order (its scenes merged:
+  // look-alikes still sit together), keeping the first that fits.
+  if (pages.length > base.length && placed !== moments) {
+    const sorted = placed.map((m) => [m]);
+    for (let deal = 0; deal < LOOK_DEALS && pages.length > base.length; deal++) pages = lay(sorted);
+  }
+  // Still a page over (the deal's own randomness, or the look order's): the
+  // budget's own album, so scenes and looks never cost a page.
+  if (pages.length > base.length) return base;
+  if (used) used.byLook = placed !== moments;
+  return pages;
+}
+
+/** Where the looks put the photos with no capture time (momentsByLook), as
+ *  the dealer needs it. */
+interface LookPlacement {
+  /** The moments (by index) whose photos have no capture time and were
+   *  sorted by look: a page there takes its shape's next photos from
+   *  anywhere in the moment, not only from the next TIME_ORDER_REACH. */
+  sorted: Set<number>;
+  /** The photos (by index) that joined a dated moment: not counted in
+   *  TIME_ORDER_REACH there. */
+  joined: Set<number>;
 }
 
 function layoutAlbumWith(
@@ -1577,6 +1827,8 @@ function layoutAlbumWith(
   /** The photos moment by moment, each moment scene by scene (indices into
    *  photos, time order). Every moment is one scene when scenes are off. */
   sceneGroups: number[][][],
+  /** Where the looks put the photos with no capture time, when they did. */
+  byLook?: LookPlacement,
 ): AlbumPage[] {
   // STUDIO: when the caller keeps some pages out of the reshuffle it asks for
   // fewer fresh pages, so the merged album still lands on the minimum.
@@ -1932,7 +2184,19 @@ function layoutAlbumWith(
     //       anywhere in the moment, so each shape's planned pages still come
     //       out full. ──
     const remaining = [...group];
-    const ahead = () => remaining.slice(0, TIME_ORDER_REACH);
+    const joined = byLook?.joined.size ? byLook.joined : null;
+    /** The photos a page may reach: the next TIME_ORDER_REACH, not counting
+     *  the ones that joined this moment by their look (they come along). */
+    const ahead = () => {
+      if (!joined) return remaining.slice(0, TIME_ORDER_REACH);
+      let end = 0;
+      for (let counted = 0; end < remaining.length; end++) {
+        if (joined.has(remaining[end])) continue;
+        if (counted === TIME_ORDER_REACH) break;
+        counted++;
+      }
+      return remaining.slice(0, end);
+    };
     // SCENES: the leading scene's photos still to place (the scene of the
     // earliest unplaced photo; the scenes sit one after another in
     // remaining). A page is one shape (no mixed pages in fill mode), so a
@@ -1951,9 +2215,10 @@ function layoutAlbumWith(
     };
     const ratioIn = (i: number): PhotoRatio => ratioOf[i] ?? dominantRatio;
     /** Photos of `ratio` a page may take right now: the whole moment's at a
-     *  chosen photos-per-page, else only those within reach. */
+     *  chosen photos-per-page or in a moment sorted by look, else only
+     *  those within reach. */
     const availableOf = (ratio: PhotoRatio): number =>
-      (exactPlan ? remaining : ahead()).filter((i) => ratioIn(i) === ratio).length;
+      (exactPlan || byLook?.sorted.has(moment) ? remaining : ahead()).filter((i) => ratioIn(i) === ratio).length;
     /** Pull the next `n` photos of `ratio` (oldest first) out of the moment. */
     const takeOf = (ratio: PhotoRatio, n: number): number[] => {
       const out: number[] = [];

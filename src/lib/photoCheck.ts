@@ -33,6 +33,22 @@ export interface PhotoCheck {
   eyesClosed: boolean;
   /** The face pass ran (faces stays null when the face models couldn't load). */
   facesTried?: boolean;
+  /** What the photo looks like, as text (lib/photoLook): photos that show
+   *  the same scene have looks that are alike, so a photo with no capture
+   *  time can be put next to the photos it belongs with. Made by the look
+   *  pass, where the device can (the website with a fast graphics chip).
+   *  Stays on this device: never saved to the account (checkForAccount). */
+  look?: string;
+}
+
+/** The check as the account keeps it: everything but the look, which is
+ *  1,280 letters a photo and means nothing on another device until that
+ *  device has looked at the photo itself. */
+export function checkForAccount(check: PhotoCheck): PhotoCheck {
+  if (check.look === undefined) return check;
+  const rest = { ...check };
+  delete rest.look;
+  return rest;
 }
 
 /** The long side the runner decodes to for sharpness. Big enough that a
@@ -292,19 +308,25 @@ export function suggestLeaveOut(photos: CheckablePhoto[]): LeaveOutSuggestion {
 
 /* ── Scheduling: which photo to check next ─────────────────────────────── */
 
-export type CheckStage = 'basic' | 'faces';
+export type CheckStage = 'basic' | 'faces' | 'look';
 
-/** The next photo to check, in two passes:
+/** The next photo to check, in passes:
  *    1. 'basic' (blur + fingerprint, ~20 ms) for every measured photo;
  *    2. 'faces' (closed eyes) — the members of a set of repeats first, because
  *       that picks which shot Megy keeps; then every other photo, for the
- *       full pages. Left-out photos are skipped; `tried` holds what already
- *       ran (or failed) this visit, so nothing loops. */
+ *       full pages;
+ *    3. 'look' (what the photo shows: for photos with no capture time, and
+ *       for a change of place) for every checked photo, where the device
+ *       does the look pass (`looks`).
+ *  Left-out photos are skipped; `tried` holds what already ran (or failed)
+ *  this visit, so nothing loops. */
 export function nextCheckJob(
   photos: CheckablePhoto[], tried: ReadonlySet<string>,
   /** False on a device without fast (WebGL) face detection: there each face
    *  pass blocks the screen for about a second, so only the repeats get one. */
   facesForAll = true,
+  /** The device does the look pass now (PhotoChecker.looksForPhotos). */
+  looks = false,
 ): { id: string; stage: CheckStage } | null {
   const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0);
   const basic = live.find((p) => !p.check && !tried.has(`basic:${p.id}`));
@@ -312,7 +334,9 @@ export function nextCheckJob(
   const needsFaces = (p: CheckablePhoto) => !!p.check && p.check.faces === null && !p.check.facesTried && !tried.has(`faces:${p.id}`);
   const inRepeats = new Set(findRepeats(live).flat());
   const first = live.find((p) => inRepeats.has(p.id) && needsFaces(p)) ?? (facesForAll ? live.find(needsFaces) : undefined);
-  return first ? { id: first.id, stage: 'faces' } : null;
+  if (first) return { id: first.id, stage: 'faces' };
+  const look = looks ? live.find((p) => !!p.check && !p.check.look && !tried.has(`look:${p.id}`)) : undefined;
+  return look ? { id: look.id, stage: 'look' } : null;
 }
 
 /** The check is ready to suggest: every measured photo has its basic check and
@@ -340,4 +364,11 @@ export function faceCheckProgress(photos: CheckablePhoto[], facesForAll = true):
   const inRepeats = new Set(findRepeats(live).flat());
   const wanted = facesForAll ? live : live.filter((p) => inRepeats.has(p.id));
   return { done: wanted.filter((p) => p.check!.faces !== null || !!p.check!.facesTried).length, total: wanted.length };
+}
+
+/** How far the look pass is: photos with a look / checked photos. For the
+ *  "Sorting by place. 37 of 200" line while the album is made. */
+export function lookProgress(photos: CheckablePhoto[]): { done: number; total: number } {
+  const live = photos.filter((p) => !p.leftOut && p.width > 0 && p.height > 0 && !!p.check);
+  return { done: live.filter((p) => !!p.check!.look).length, total: live.length };
 }

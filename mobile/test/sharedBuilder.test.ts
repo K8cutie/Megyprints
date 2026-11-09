@@ -103,6 +103,8 @@ function makePhone() {
       facesForAllPhotos: () => false,
       readable: () => false,
       check: async () => ({ v: 1, sharp: 50, hash: '0'.repeat(16), faces: null, eyesClosed: false }),
+      looksForPhotos: () => false,
+      look: async () => null,
     },
     lifecycle: { onLeave: () => () => {}, onReturn: () => () => {} },
     textMeasurer: () => measurer,

@@ -15,7 +15,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { PhotoCheck } from './photoCheck';
+import { checkForAccount, type PhotoCheck } from './photoCheck';
 import { useState, useCallback } from 'react';
 import { cleanAlbumTheme } from './albumThemeRules';
 import { liveAlbumSize, liftRetiredPage, liftRetiredPages } from '../pages/builder/retiredSizes';
@@ -145,8 +145,9 @@ export function serializeAlbum(albumData: AlbumData): Record<string, unknown> {
     ...(p.width && p.height ? { width: p.width, height: p.height } : {}),
     ...(p.capturedAt ? { capturedAt: p.capturedAt } : {}),
     // No cloudUrl, no storagePath, no previewUrl — all local-only now.
-    // The photo check and the keep / leave-out choice are tiny and travel with it.
-    ...(p.check ? { check: p.check } : {}),
+    // The photo check and the keep / leave-out choice are tiny and travel with
+    // it. Not the photo's look (1,280 letters): it stays on the device.
+    ...(p.check ? { check: checkForAccount(p.check) } : {}),
     ...(p.kept ? { kept: true } : {}),
     ...(p.leftOut ? { leftOut: true } : {}),
   }));

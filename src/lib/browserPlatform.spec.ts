@@ -2,7 +2,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 // Face finding loads TensorFlow, which none of this needs.
 vi.mock('../pages/builder/faceDetection', () => ({ initFaceApi: async () => {}, detectFaceCenter: async () => null }));
-vi.mock('./photoCheckRunner', () => ({ checkPhoto: async () => null, facesForAllPhotos: () => false }));
+vi.mock('./photoCheckRunner', () => ({ checkPhoto: async () => null, facesForAllPhotos: () => false, looksForPhotos: () => false, lookOfPhoto: async () => null }));
 // The canvas text measure (null under jsdom) and the website's Supabase
 // client, made up, so the pieces built on them can be checked here.
 const canvas = vi.hoisted(() => ({ font: '', measureText: (text: string) => ({ width: text.length * 10 }) }));

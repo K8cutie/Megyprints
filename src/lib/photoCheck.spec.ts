@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   grayscale, tileSharpness, dHash, hamming, eyeAspectRatio, eyesClosedIn,
   isBlurry, medianSharpness, photoQuality, findRepeats, suggestLeaveOut,
-  nextCheckJob, checkIsReady, checkProgress, faceCheckProgress, checkCopySize, basicCheck, checkFrom, faceVerdict,
+  nextCheckJob, checkIsReady, checkProgress, faceCheckProgress, lookProgress, checkForAccount, checkCopySize, basicCheck, checkFrom, faceVerdict,
   BLUR_ABS, REPEAT_BITS, CHECK_LONG_SIDE, type CheckablePhoto, type PhotoCheck,
 } from './photoCheck';
 
@@ -353,5 +353,50 @@ describe('scheduling the check (two passes)', () => {
     expect(faceCheckProgress(ps, true)).toEqual({ done: 2, total: 3 });
     // No fast face finding: only the repeats get one, and these are not repeats.
     expect(faceCheckProgress(ps, false)).toEqual({ done: 0, total: 0 });
+  });
+
+  it('pass 3 reads each checked photo\'s look, after the faces, only where the device does the look pass', () => {
+    const ps = [
+      photo('a', { ...basicOnly(1500, other(1)), facesTried: true }),
+      photo('b', { ...basicOnly(1500, other(2)), facesTried: true, look: 'a look' }),
+      photo('c', basicOnly(1500, other(3))), // its face pass is still to do
+      photo('gone', { ...basicOnly(1500, other(4)), facesTried: true }, { leftOut: true }),
+    ];
+    // Faces first; then the photos with no look yet, in order.
+    expect(nextCheckJob(ps, new Set(), true, true)).toEqual({ id: 'c', stage: 'faces' });
+    expect(nextCheckJob(ps, new Set(['faces:c']), true, true)).toEqual({ id: 'a', stage: 'look' });
+    expect(nextCheckJob(ps, new Set(['faces:c', 'look:a']), true, true)).toEqual({ id: 'c', stage: 'look' });
+    expect(nextCheckJob(ps, new Set(['faces:c', 'look:a', 'look:c']), true, true)).toBeNull(); // tried: no loop
+    // A device that does no look pass (the default) is never given one.
+    expect(nextCheckJob(ps, new Set(['faces:c']))).toBeNull();
+    expect(nextCheckJob(ps, new Set(['faces:c']), true, false)).toBeNull();
+    // A photo with no blur check yet gets that first, whatever else waits.
+    expect(nextCheckJob([...ps, photo('new', undefined)], new Set(['faces:c']), true, true)).toEqual({ id: 'new', stage: 'basic' });
+    // The look pass never holds the leave-out suggestion back.
+    expect(checkIsReady(ps)).toBe(true);
+  });
+
+  it('lookProgress counts the checked photos that have a look ("Sorting by place. 1 of 3")', () => {
+    const ps = [
+      photo('a', { ...basicOnly(1500, other(1)), look: 'a look' }),
+      photo('b', basicOnly(1500, other(2))),
+      photo('c', basicOnly(1500, other(3))),
+      photo('unchecked', undefined),
+      photo('gone', { ...basicOnly(1500, other(4)), look: 'a look' }, { leftOut: true }),
+    ];
+    expect(lookProgress(ps)).toEqual({ done: 1, total: 3 });
+    expect(lookProgress([])).toEqual({ done: 0, total: 0 });
+  });
+});
+
+describe('the look stays on the device', () => {
+  it('checkForAccount: the check the account keeps is everything but the look', () => {
+    const full: PhotoCheck = { v: 1, sharp: 1500, hash: H0, faces: 2, eyesClosed: true, facesTried: true, look: 'x'.repeat(1280) };
+    expect(checkForAccount(full)).toEqual({ v: 1, sharp: 1500, hash: H0, faces: 2, eyesClosed: true, facesTried: true });
+    expect('look' in checkForAccount(full)).toBe(false);
+    expect(full.look).toHaveLength(1280); // the photo's own check is not touched
+    // A check with no look is handed on as it is.
+    const plain: PhotoCheck = { v: 1, sharp: 10, hash: H0, faces: null, eyesClosed: false };
+    expect(checkForAccount(plain)).toBe(plain);
   });
 });

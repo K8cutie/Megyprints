@@ -9,7 +9,7 @@ import path from 'node:path';
 import * as wizardSteps from '@web/assistant/wizardSteps';
 import { remakeLosesMessage } from '@web/assistant/rebuildQuestion';
 import { WEBSITE_YOUR_PHOTOS } from '../src/editor/cover/words';
-import { COVER_TO_PAGES, COVER_TO_PHOTOS, GENERATING_COPY, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MAKE_ALBUM, remakeQuestion, REMAKE_ALBUM, SIZE_LINE, startNewNote, TO_COVER } from '../src/builder/albumFlow';
+import { COVER_TO_PAGES, COVER_TO_PHOTOS, GENERATING_COPY, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MAKE_ALBUM, remakeQuestion, REMAKE_ALBUM, SIZE_LINE, stageLine, startNewNote, TO_COVER } from '../src/builder/albumFlow';
 
 const REPO = path.resolve(__dirname, '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(REPO, rel), 'utf8');
@@ -74,6 +74,11 @@ describe("the app's album steps use the website's words", () => {
 
   it('"Making your album" (GeneratingOverlay.tsx)', () => {
     for (const w of Object.values(GENERATING_COPY)) expect(web.making).toContain(`'${w}'`);
+    // The look pass (photos sorted by what they show) has its own line, with
+    // its count: "Sorting by place. 37 of 200".
+    expect(GENERATING_COPY.places).toBe('Sorting by place');
+    expect(web.making).toContain("places: 'Sorting by place'");
+    expect(stageLine('places', { done: 37, total: 200 })).toBe('Sorting by place. 37 of 200');
     for (const w of ['Making your album']) {
       expect(web.making).toContain(w);
       expect(app.making).toContain(w);
