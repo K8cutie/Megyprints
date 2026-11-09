@@ -151,10 +151,24 @@ export function openChanceFromEar(ear: number): number {
   return Math.min(1, EYE_SHUT_BELOW + ((ear - EYE_CLOSED_EAR) * (1 - EYE_SHUT_BELOW)) / (OPEN_EAR - EYE_CLOSED_EAR));
 }
 
-/** ML Kit's open chance when it gave one (Android), else the chance from the
- *  eye's measured aspect ratio (iPhone), else null. */
+/** Are the iPhone's eye shapes (Apple Vision's eye outline) used to judge
+ *  shut eyes? Not yet. The iPhone comparison (tools/photo-check on the
+ *  simulator, 2026-11-09): Vision's outline put 8 test pictures "eyes shut",
+ *  none of them the website's 2 nor Android ML Kit's 10 (which ARE shut:
+ *  laughing, looking down), and read open eyes as shut (megy-sample-04: the
+ *  website measures 0.25 and 0.29). Its ratio to the website's measure ran
+ *  from 1.0 to 2.8 face by face, so no single correction fits. A wrong
+ *  "shut" gives a good photo a smaller place and loses it the cover; a
+ *  missed one is how the website mostly behaves. So iPhone faces count as
+ *  faces (blur, repeats, centring, the face share) with their eyes not
+ *  judged, until a better eye reading is proven on the same comparison. */
+export const IPHONE_EYES_JUDGED = false;
+
+/** ML Kit's open chance when it gave one (Android); the chance from the
+ *  eye's measured aspect ratio only if IPHONE_EYES_JUDGED; else null (not
+ *  judged). */
 const openChance = (open: number | null | undefined, ear: number | null | undefined) =>
-  probability(open) ?? (typeof ear === 'number' && Number.isFinite(ear) && ear >= 0 ? openChanceFromEar(ear) : null);
+  probability(open) ?? (IPHONE_EYES_JUDGED && typeof ear === 'number' && Number.isFinite(ear) && ear >= 0 ? openChanceFromEar(ear) : null);
 
 /** The module's face, found on a copy `sx` × `sy` times the small copy (1
  *  when ML Kit looked at the small copy itself) → a PhoneFace in the small

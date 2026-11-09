@@ -5,8 +5,8 @@
 import { basicCheck, checkCopySize, checkIsReady, EYE_CLOSED_EAR, faceVerdict, findRepeats, MIN_FACE_SHARE } from '@web/lib/photoCheck';
 import { faceGroupCentre } from '@web/pages/builder/faceCentre';
 import type { StoredPhoto } from '@web/shared/platform';
-import { createPhoneChecks, PHONE_CHECK_AT_ONCE, type PhoneCheckDevice } from '../src/lib/phonePhotoCheck';
-import { earFromOpenChance, EYE_SHUT_BELOW, eyesJudged, fromNative, MIN_EYE_FACE_PX, openChanceFromEar, phoneEyesShut, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
+import { checkable, createPhoneChecks, PHONE_CHECK_AT_ONCE, type PhoneCheckDevice } from '../src/lib/phonePhotoCheck';
+import { earFromOpenChance, EYE_SHUT_BELOW, eyesJudged, fromNative, IPHONE_EYES_JUDGED, MIN_EYE_FACE_PX, openChanceFromEar, phoneEyesShut, toCheckFace, type PhoneFace } from '../src/lib/phoneFaces';
 import { FACE_COPY_SCALE, faceCopyScale } from '../src/lib/faceModel';
 
 jest.mock('expo', () => ({ requireOptionalNativeModule: () => null }));
@@ -144,19 +144,26 @@ describe("the iPhone's eye shapes on ML Kit's scale", () => {
     expect(openChanceFromEar(0.9)).toBe(1);
   });
 
-  it("an iPhone report: eye shapes become open chances; ML Kit's own chance wins when there is one", () => {
+  it("an iPhone report: a face that counts, its eyes NOT judged yet (IPHONE_EYES_JUDGED: the comparison's numbers); ML Kit's own chance still read", () => {
+    expect(IPHONE_EYES_JUDGED).toBe(false);
     const f = fromNative({
       x: 0, y: 0, width: 120, height: 130, leftEye: { x: 40, y: 50 }, rightEye: { x: 80, y: 50 },
       leftEyeOpen: null, rightEyeOpen: null, leftEyeEar: 0.05, rightEyeEar: 0.3,
     });
-    expect(f.leftEyeOpen).toBeCloseTo(openChanceFromEar(0.05), 12);
-    expect(f.leftEyeOpen!).toBeLessThan(EYE_SHUT_BELOW);
-    // A typical open eye (the website's 0.3) is wide open on ML Kit's scale.
-    expect(f.rightEyeOpen).toBeCloseTo(1, 12);
-    // Both shut on the iPhone: the same rule as ML Kit's.
-    expect(phoneEyesShut(fromNative({ x: 0, y: 0, width: 120, height: 130, leftEye: null, rightEye: null, leftEyeOpen: null, rightEyeOpen: null, leftEyeEar: 0.04, rightEyeEar: 0.06 }))).toBe(true);
+    expect(f).toMatchObject({ box: { x: 0, y: 0, width: 120, height: 130 }, leftEyeOpen: null, rightEyeOpen: null });
+    expect(eyesJudged(f)).toBe(false);
+    expect(phoneEyesShut(fromNative({ x: 0, y: 0, width: 120, height: 130, leftEye: null, rightEye: null, leftEyeOpen: null, rightEyeOpen: null, leftEyeEar: 0.04, rightEyeEar: 0.06 }))).toBe(false);
     expect(fromNative({ x: 0, y: 0, width: 120, height: 130, leftEye: null, rightEye: null, leftEyeOpen: 0.5, rightEyeOpen: null, leftEyeEar: 0.01 }).leftEyeOpen).toBe(0.5);
-    expect(fromNative({ x: 0, y: 0, width: 120, height: 130, leftEye: null, rightEye: null, leftEyeOpen: null, rightEyeOpen: null, leftEyeEar: NaN, rightEyeEar: -1 })).toMatchObject({ leftEyeOpen: null, rightEyeOpen: null });
+  });
+});
+
+describe('which photo addresses the phone can check', () => {
+  it("Android's, iPhone's Photos and files: yes; web addresses: no", () => {
+    expect(checkable('content://media/external/images/media/12')).toBe(true);
+    expect(checkable('ph://ABC-123/L0/001')).toBe(true);
+    expect(checkable('file:///var/mobile/photo.jpg')).toBe(true);
+    expect(checkable('https://example.supabase.co/photo.jpg')).toBe(false);
+    expect(checkable('blob:abc')).toBe(false);
   });
 });
 
