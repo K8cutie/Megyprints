@@ -136,11 +136,11 @@ const sample = (phase) => { const m = memoryNow(); if (m?.rss != null) memory.pu
 
 try { simctl('terminate', udid, APP); } catch { /* not running */ }
 started = Date.now();
-// iPhone asks "Open in …?" before following the app's own link: Maestro
-// (installed by the workflow) opens the link and taps Open
-// (mobile/maestro/ios-open-link.yaml). Not waited for: this server must
-// answer the screen meanwhile.
-execFile('maestro', ['--device', udid, 'test', '-e', 'LINK=megyprints-dev://photo-check-lab', path.join(HERE, '..', '..', 'mobile', 'maestro', 'ios-open-link.yaml')],
+// Maestro (installed by the workflow) opens the test screen through the app
+// (mobile/maestro/ios-photo-check-lab.yaml): opening it by its link makes
+// iPhone ask "Open in …?", which could not be answered reliably. Not waited
+// for: this server must answer the screen meanwhile.
+execFile('maestro', ['--device', udid, 'test', path.join(HERE, '..', '..', 'mobile', 'maestro', 'ios-photo-check-lab.yaml')],
   { env: { ...process.env, MAESTRO_DRIVER_STARTUP_TIMEOUT: process.env.MAESTRO_DRIVER_STARTUP_TIMEOUT ?? '300000' } },
   (e, out) => {
     process.stdout.write(out ?? '');

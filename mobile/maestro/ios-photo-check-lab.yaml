@@ -1,0 +1,26 @@
+# Opens the photo check test screen on an iPhone simulator, the way a person
+# would, in the test build: Home's test card → Shared code check → Open the
+# photo check test (it starts by itself and talks to the computer's
+# tools/photo-check/phoneServerIos.mjs). Opening it by its link makes iPhone
+# ask "Open in …?", which the checks could not answer reliably.
+appId: com.megyprints.app.dev
+---
+- launchApp
+- scrollUntilVisible:
+    element:
+      id: go-check
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: go-check
+- scrollUntilVisible:
+    element:
+      id: open-photo-check-lab
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: open-photo-check-lab
+- extendedWaitUntil:
+    visible:
+      id: lab-status
+    timeout: 30000

@@ -1,0 +1,31 @@
+# Starts the golden pages on an iPhone simulator, the way a person would, in
+# the golden TEST build: Home's test card → Shared code check → Open golden
+# pages → Draw. (Opening the screen by its link makes iPhone ask "Open in …?",
+# which the checks could not answer reliably.) Used by ios-golden.yml.
+appId: com.megyprints.app.dev
+---
+- launchApp
+- scrollUntilVisible:
+    element:
+      id: go-check
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: go-check
+- scrollUntilVisible:
+    element:
+      id: open-golden
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: open-golden
+- extendedWaitUntil:
+    visible:
+      id: golden-run
+    timeout: 30000
+- tapOn:
+    id: golden-run
+- extendedWaitUntil:
+    visible:
+      id: golden-progress
+    timeout: 30000

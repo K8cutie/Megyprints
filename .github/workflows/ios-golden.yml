@@ -170,13 +170,15 @@ jobs:
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
           xcrun simctl install "$UDID" "$APP"
-          # iPhone asks "Open in …?" before following the app's own link:
-          # Maestro opens it and taps Open (its iPhone helper needs minutes to
-          # start the first time on a fresh simulator).
+          # Maestro starts the golden pages through the app (Home's test card →
+          # Shared code check → Open golden pages → Draw): opening the screen
+          # by its link makes iPhone ask "Open in …?", which could not be
+          # answered reliably. Its iPhone helper needs minutes to start the
+          # first time on a fresh simulator.
           curl -fsSL "https://get.maestro.mobile.dev" | bash
           export PATH="$PATH:$HOME/.maestro/bin"
           export MAESTRO_DRIVER_STARTUP_TIMEOUT=300000
-          maestro --device "$UDID" test -e LINK='megyprints-dev://golden-pages?run=1' mobile/maestro/ios-open-link.yaml
+          maestro --device "$UDID" test mobile/maestro/ios-golden-run.yaml
           DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
           OUTDIR="$DATA/Documents/golden-phone"
           mkdir -p out/screens
