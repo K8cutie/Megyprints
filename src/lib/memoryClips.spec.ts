@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import {
   clipExtFor, clipMimeFor, clipObjectPath, publicClipUrl, isHostedClipUrl, checkClipMeta,
   MAX_CLIP_BYTES, MAX_INPUT_BYTES, MAX_CLIP_SECONDS, CLIP_BUCKET,
-  versionedClipUrl,
+  versionedClipUrl, withUploadedClipExt,
 } from './memoryClips';
 import { targetDimensions, transcodeSupported, QUALITY_TARGETS } from './videoTranscode';
 
@@ -185,5 +185,30 @@ describe('a replaced clip gets a new link (1-star testers round 2)', () => {
   it('My Memories re-points EVERY replace to a new versioned link (source guard)', () => {
     const src = readFileSync(resolve(__dirname, '../pages/MyMemories.tsx'), 'utf8');
     expect(src).toMatch(/const next = versionedClipUrl\(row\.code, v\.ext, Date\.now\(\)\);\s*const ok = await updateMemoryDestination\(row\.code, next\);/);
+  });
+});
+
+describe('a clip fill names the file checkout uploaded (a .mov the phone shrank to an MP4, 2026-11-02)', () => {
+  const BASE = 'https://proj.supabase.co';
+  const fill = (ext: 'mp4' | 'mov', dest = publicClipUrl('k7m2p9qz', ext, BASE)) =>
+    ({ code: 'k7m2p9qz', kind: 'clip' as const, clipExt: ext, destination: dest, memoryUrl: 'https://megyprints.test/m/k7m2p9qz' });
+  it('<code>.mov becomes <code>.mp4, and only that part changes', () => {
+    expect(withUploadedClipExt(fill('mov'), 'mp4')).toEqual({ ...fill('mov'), clipExt: 'mp4', destination: publicClipUrl('k7m2p9qz', 'mp4', BASE) });
+  });
+  it('a ?v= version is kept', () => {
+    const out = withUploadedClipExt(fill('mov', versionedClipUrl('k7m2p9qz', 'mov', 7, BASE)), 'mp4');
+    expect(out.destination).toBe(versionedClipUrl('k7m2p9qz', 'mp4', 7, BASE));
+  });
+  it('already right, no ext, or not a clip: the same fill back', () => {
+    const right = fill('mp4');
+    expect(withUploadedClipExt(right, 'mp4')).toBe(right);
+    const mov = fill('mov');
+    expect(withUploadedClipExt(mov, undefined)).toBe(mov);
+    const link = { code: 'k7m2p9qz', kind: 'link' as const, destination: 'https://youtu.be/k7m2p9qz.mov' };
+    expect(withUploadedClipExt(link, 'mp4')).toBe(link);
+  });
+  it('only the code\'s own file name is touched (not another code that starts with it, not a path elsewhere)', () => {
+    const other = fill('mov', publicClipUrl('k7m2p9qzxx', 'mov', BASE));
+    expect(withUploadedClipExt(other, 'mp4')).toBe(other);
   });
 });

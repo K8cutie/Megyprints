@@ -15,10 +15,10 @@ import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
 import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
-import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
+import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, withUploadedClipExt, type ClipUploadPhase, type ClipQuality, type ClipExt } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
-import { updateMemoryDestination } from '../lib/qrMemories';
+import { updateMemoryDestination, moveMemoryDestination } from '../lib/qrMemories';
 import { getPriceSchedule, isStoreSettingsReady, storeSettingsReady, onStoreSettingsChange, retryStoreSettings } from '../lib/storeSettings';
 import { ensureMemoriesForFills } from '../lib/qrMemories';
 import { reportError } from '../lib/report';
@@ -717,6 +717,9 @@ export default function Order() {
       //     the customer stays on Pay and retries (idempotent: finished clips
       //     are skipped, an existing object counts as done).
       let replacedCodes: string[] = [];
+      // The file each video went up as. A .mov the phone shrank went up as
+      // <code>.mp4, while its QR still names <code>.mov (step 4 fixes that).
+      let clipExts: Record<string, ClipExt> = {};
       if (clipCodes.length) {
         setPrepMsg('Uploading your memory videos…');
         advance(PLACE_AT.videos);
@@ -728,6 +731,7 @@ export default function Order() {
             : `Uploading memory video ${d + 1} of ${t}…`);
         });
         replacedCodes = r.replaced;
+        clipExts = { ...r.exts };
       }
 
       // 3. REQUIRED: build + upload the print PDF. If gen throws or the upload
@@ -757,6 +761,7 @@ export default function Order() {
         setPrepMsg('Checking your memory videos…');
         const again = await uploadStagedClips(clipCodes);
         replacedCodes = [...new Set([...replacedCodes, ...again.replaced])];
+        clipExts = { ...clipExts, ...again.exts };
       }
 
       // 4. Reliability belt (best-effort, non-blocking): ensure every QR "living
@@ -767,7 +772,11 @@ export default function Order() {
       //    throttled cloud save hasn't flushed it. INSERT-only; never clobbers a relink.
       //    For hosted CLIPS this belt is REQUIRED (the row is created only here,
       //    stamped with the paid term); for legacy links it stays best-effort.
-      const jobFills = printJob.pages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+      //    Each clip row names the file that went up, not the one picked: the
+      //    scan page plays exactly the row's destination, so a row left at
+      //    <code>.mov beside <code>.mp4 played nothing.
+      const printedFills = printJob.pages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
+      const jobFills = printedFills.map((f) => (f ? withUploadedClipExt(f, clipExts[f.code]) : f));
       const hasClips = jobFills.some((f) => f?.kind === 'clip');
       try {
         if (jobFills.length) {
@@ -782,6 +791,16 @@ export default function Order() {
           for (const code of replacedCodes) {
             const f = jobFills.find((x) => x?.code === code);
             if (f) await updateMemoryDestination(code, f.destination);
+          }
+          // A row an earlier checkout made at the picked file's ext (the
+          // order went unpaid, so the phone kept its copy) moves to the file
+          // that's there. Only while it still names that missing file.
+          for (const [i, f] of printedFills.entries()) {
+            const fixed = jobFills[i];
+            if (!f || !fixed || fixed.destination === f.destination || replacedCodes.includes(f.code)) continue;
+            if (!(await moveMemoryDestination(f.code, f.destination, fixed.destination))) {
+              throw new Error('Could not save your memory videos to your account. Please try again.');
+            }
           }
         }
       } catch (e) {

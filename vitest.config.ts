@@ -11,6 +11,6 @@ export default defineConfig({
     // re-runs the entire suite once per worktree against old code and
     // eventually fails the build on a snapshot nobody is working on.
     // (The Kraken auditor and its class-parity test moved to K8cutie/Overseer.)
-    include: ['src/**/*.spec.ts', 'api/**/*.spec.mjs'],
+    include: ['src/**/*.spec.ts', 'api/**/*.spec.mjs', 'scripts/**/*.spec.mjs'],
   },
 });
