@@ -67,6 +67,21 @@ export async function updateMemoryDestination(code: string, destination: string)
   return true;
 }
 
+/** Move a memory from `from` to `to`, but only while it still points at
+ *  `from`. Checkout uses it for a row an earlier checkout made at the picked
+ *  file's ext (`<code>.mov`) when the phone uploaded `<code>.mp4`. A row
+ *  re-pointed on purpose since (a new video from My Memories) no longer
+ *  matches `from`, so it is left alone. Owner-only via RLS; never inserts. */
+export async function moveMemoryDestination(code: string, from: string, to: string): Promise<boolean> {
+  const { error } = await supabase
+    .from('qr_memories')
+    .update({ destination: to })
+    .eq('code', code)
+    .eq('destination', from);
+  if (error) { console.error('QR re-point failed:', error.message); return false; }
+  return true;
+}
+
 /** List the signed-in owner's memories (for the management screen). */
 /** A longer hosting term bought with an order that isn't confirmed yet: the
  *  memory still shows the included term until the shop marks the order paid

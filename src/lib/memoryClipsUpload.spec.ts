@@ -100,7 +100,14 @@ describe('uploading at checkout', () => {
   });
   it('not on the phone but in the bucket: fine', async () => {
     h.bucket.add('w4n8r2ta.mov');
-    await expect(uploadStagedClips(['w4n8r2ta'])).resolves.toEqual({ uploaded: [], replaced: [] });
+    await expect(uploadStagedClips(['w4n8r2ta'])).resolves.toEqual({ uploaded: [], replaced: [], exts: {} });
+  });
+  it('says which file each video went up as (a .mov the phone shrank is <code>.mp4)', async () => {
+    stage('k7m2p9qz', { ext: 'mov' });
+    stage('w4n8r2ta', { ext: 'mp4', name: 'IMG_0042.MOV' });
+    const r = await uploadStagedClips(['k7m2p9qz', 'w4n8r2ta']);
+    expect(r.exts).toEqual({ k7m2p9qz: 'mov', w4n8r2ta: 'mp4' });
+    expect(h.uploads).toEqual(['k7m2p9qz.mov', 'w4n8r2ta.mp4']);
   });
   it('neither on the phone nor in the bucket: checkout stops and names the codes', async () => {
     stage('k7m2p9qz');

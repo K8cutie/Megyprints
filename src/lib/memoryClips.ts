@@ -94,6 +94,22 @@ export function versionedClipUrl(code: string, ext: ClipExt, version: number, ba
   return `${publicClipUrl(code, ext, base)}?v=${Math.max(0, Math.floor(version))}`;
 }
 
+/** A clip fill pointed at the file checkout really uploaded. The Add QR box
+ *  names the destination after the PICKED file (an iPhone's `.mov`) because
+ *  the QR is placed at once. The phone then shrinks the video to an MP4 in the
+ *  background, and checkout uploads `<code>.mp4`. Only the `<code>.<ext>` part
+ *  changes: the origin and any `?v=` version stay as they were. A link, a clip
+ *  with no uploaded ext, or one already right comes back as it is. */
+export function withUploadedClipExt<F extends { code: string; kind?: string; destination: string; clipExt?: ClipExt }>(
+  fill: F, ext: ClipExt | undefined,
+): F {
+  if (!ext || fill.kind !== 'clip' || !/^[a-z2-9]{4,32}$/.test(fill.code)) return fill;
+  const at = fill.destination.match(new RegExp(`/${fill.code}\\.(${CLIP_EXTS.join('|')})(?=\\?|$)`));
+  if (!at || at.index === undefined || (at[1] === ext && fill.clipExt === ext)) return fill;
+  const destination = `${fill.destination.slice(0, at.index)}/${clipObjectPath(fill.code, ext)}${fill.destination.slice(at.index + at[0].length)}`;
+  return { ...fill, clipExt: ext, destination };
+}
+
 /** Is this destination one of OUR hosted clips (vs a legacy link)? */
 export function isHostedClipUrl(url: string, base: string = SUPABASE_URL): boolean {
   if (!base) return false;
@@ -374,6 +390,18 @@ export async function stagedClipBytes(codes: string[]): Promise<number> {
   return clips.reduce((n, c) => n + (c?.size ?? 0), 0);
 }
 
+/** What an upload run did. `exts` is the ext each clip on this phone is
+ *  stored under in the bucket, which can differ from the fill's: a `.mov`
+ *  the phone shrank is uploaded as `<code>.mp4`. Checkout points the memory
+ *  rows at these (withUploadedClipExt). A code that is only in the cloud has
+ *  no entry: this phone can't tell which file its row should name, so
+ *  checkout leaves that row as it is. */
+export interface ClipUploadResult {
+  uploaded: string[];
+  replaced: string[];
+  exts: Record<string, ClipExt>;
+}
+
 /** Compress anything still pending, then upload every staged clip referenced
  *  by these codes. Reports progress as (done, total). Skips clips already
  *  marked uploaded. Throws on the first hard failure. Serialized app-wide —
@@ -381,7 +409,7 @@ export async function stagedClipBytes(codes: string[]): Promise<number> {
 export function uploadStagedClips(
   codes: string[],
   onProgress?: ClipUploadProgress,
-): Promise<{ uploaded: string[]; replaced: string[] }> {
+): Promise<ClipUploadResult> {
   if (onProgress) progressTaps.add(onProgress);
   return serializeUploads(() => runUploadStagedClips(codes, fanOut))
     .finally(() => { if (onProgress) progressTaps.delete(onProgress); });
@@ -435,7 +463,7 @@ export async function clipInBucket(code: string, ext?: ClipExt): Promise<boolean
 async function runUploadStagedClips(
   codes: string[],
   onProgress?: ClipUploadProgress,
-): Promise<{ uploaded: string[]; replaced: string[] }> {
+): Promise<ClipUploadResult> {
   const unique = [...new Set(codes)];
   await ensureClipsTranscoded(unique, (d, t) => onProgress?.(d, t, 'compress'));
 
@@ -446,6 +474,7 @@ async function runUploadStagedClips(
   onProgress?.(0, total, 'upload');
   const uploaded: string[] = [];
   const replaced: string[] = [];
+  const exts: Record<string, ClipExt> = {};
   const missing: string[] = [];
   for (const code of unique) {
     const clip = stagedByCode.get(code);
@@ -461,11 +490,12 @@ async function runUploadStagedClips(
     if (needsUpload) await uploadClip(clip.code, clip.ext, clip.blob, { replace: !!clip.replace });
     await markClipUploaded(clip.code);
     uploaded.push(clip.code);
+    exts[clip.code] = clip.ext;
     if (clip.replace) replaced.push(clip.code);
     onProgress?.(++done, total, 'upload');
   }
   if (missing.length) throw new MissingClipError(missing);
-  return { uploaded, replaced };
+  return { uploaded, replaced, exts };
 }
 
 /** The tier these codes' kept clips were encoded for: 'hd' if any is HD,
