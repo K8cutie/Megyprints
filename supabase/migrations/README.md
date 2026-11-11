@@ -8,6 +8,7 @@ Megy Prints schema. Run them in numeric order; each file is idempotent (safe to 
 | 0001 | `0001_init.sql` | `user_profiles` + `albums` tables, signup & `updated_at` triggers, album-photo storage policies, base RLS. |
 | 0002 | `0002_orders.sql` | `orders` table (order-number sequence, frozen `album_snapshot`), owner-scoped RLS with the customer pricing lock. Run after 0001. |
 | 0003 | `0003_rls_lockdown.sql` | Idempotent re-lockdown of RLS across all customer-facing tables, with a verification query at the bottom. Re-run any time you suspect drift. |
+| 0061 | `0061_function_grants_lockdown.sql` | Function grants: signed-out visitors run only the allow-listed public functions; trigger functions are the database's; `search_path` pinned on `handle_new_user` / `handle_updated_at`; new functions/tables/sequences are no longer handed to anon/authenticated by default. Checked by GUARD 15 in `supabase/security/regression-checks.sql`. |
 
 ## How to apply
 
