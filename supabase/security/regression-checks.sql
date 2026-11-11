@@ -439,5 +439,71 @@ begin
   raise notice 'PASS: only orders keep a memory video; the cleanup is the server''s alone';
 end $$;
 
+-- ── GUARD 15: signed-out visitors run only the allow-listed functions (0061) ─
+-- Supabase gives every new public function to anon by default, and `revoke
+-- all ... from public` does not take that back (0018's trigger functions
+-- stayed callable by anyone). A function anon needs goes on this list in the
+-- same change that makes it; anything else anon can run is a regression.
+-- Also: no trigger function is callable by customers (a trigger fires without
+-- it), every SECURITY DEFINER function pins its search_path, and the RLS /
+-- storage policies can still reach the functions they call.
+do $$
+declare bad text;
+begin
+  select string_agg(p.oid::regprocedure::text, ', ' order by 1) into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.prokind in ('f', 'p')
+     and has_function_privilege('anon', p.oid, 'EXECUTE')
+     and p.oid::regprocedure::text not in (
+       -- QR memory page (api/m.mjs) and the price list
+       'resolve_memory(text)', 'public_price_schedule()', 'included_hosting_years()',
+       -- the guest camera (no account: code + token)
+       'event_public(text)', 'event_join(text,text,integer,boolean)', 'event_me(text,text)',
+       'event_feed(text,text,timestamp with time zone,integer,boolean)', 'event_screen(text,text,integer)',
+       'event_media_begin(text,text,text,text,bigint,integer,integer,numeric)',
+       'event_media_ready(text,text,uuid)', 'event_media_delete(text,text,uuid)',
+       'event_copy_offer(text)',
+       -- storage policy event_uploads_named_by_begin (anon, authenticated)
+       'event_upload_allowed(text,text)');
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): anon can run function(s) not on the allow-list -> %', bad;
+  end if;
+
+  select string_agg(p.oid::regprocedure::text, ', ' order by 1) into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.prorettype = 'trigger'::regtype
+     and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): trigger function(s) callable by anon/authenticated -> %', bad;
+  end if;
+
+  select string_agg(p.oid::regprocedure::text, ', ' order by 1) into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and p.prosecdef
+     and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%');
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): SECURITY DEFINER function(s) with no pinned search_path -> %', bad;
+  end if;
+
+  if not has_function_privilege('authenticated', 'public.is_owner()', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.operator_role()', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.included_hosting_years()', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.event_host_owns_path(text)', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.booking_proof_names(uuid,text)', 'EXECUTE')
+     or not has_function_privilege('authenticated', 'public.event_upload_allowed(text,text)', 'EXECUTE') then
+    raise exception 'REGRESSION (function grants): a function an RLS/storage policy calls is no longer callable by authenticated (those queries would fail)';
+  end if;
+
+  if exists (select 1 from pg_default_acl d, aclexplode(d.defaclacl) a
+              where d.defaclrole = 'postgres'::regrole and d.defaclobjtype = 'f'
+                and (d.defaclnamespace = 'public'::regnamespace or d.defaclnamespace = 0)
+                and a.grantee in (0, 'anon'::regrole, 'authenticated'::regrole))
+     or not exists (select 1 from pg_default_acl d
+                     where d.defaclrole = 'postgres'::regrole and d.defaclobjtype = 'f' and d.defaclnamespace = 0) then
+    raise exception 'REGRESSION (function grants): new public functions are handed to anon/authenticated/PUBLIC by default again';
+  end if;
+  raise notice 'PASS: anon runs only the allow-listed functions; triggers are the database''s; definer functions pin search_path';
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;
