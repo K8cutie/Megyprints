@@ -233,12 +233,13 @@ select 'signed-in customers and operators lost nothing',
     'public.unpaid_order_limit()']::regprocedure[]) f
  where not has_function_privilege('authenticated', f, 'EXECUTE')
 union all
-select 'every policy anon is subject to can run its functions',
-  coalesce('false: ' || string_agg(distinct format('%s on %s needs %s', pol.polname, pol.polrelid::regclass, d.refobjid::regprocedure), '; '), 'true')
+select 'every policy can run the functions it calls (anon and signed-in)',
+  coalesce('false: ' || string_agg(distinct format('%s on %s needs %s (as %s)', pol.polname, pol.polrelid::regclass, d.refobjid::regprocedure, r.role), '; '), 'true')
   from pg_policy pol
   join pg_depend d on d.classid = 'pg_policy'::regclass and d.objid = pol.oid and d.refclassid = 'pg_proc'::regclass
- where (0::oid = any (pol.polroles) or 'anon'::regrole::oid = any (pol.polroles))
-   and not has_function_privilege('anon', d.refobjid, 'EXECUTE')
+  cross join (values ('anon'), ('authenticated')) r(role)
+ where (0::oid = any (pol.polroles) or to_regrole(r.role)::oid = any (pol.polroles))
+   and not has_function_privilege(r.role, d.refobjid, 'EXECUTE')
 union all
 select 'handle_new_user and handle_updated_at pin search_path = ''''',
   ((select proconfig from pg_proc where oid = 'public.handle_new_user()'::regprocedure) = array['search_path=""']

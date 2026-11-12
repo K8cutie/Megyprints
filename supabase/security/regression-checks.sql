@@ -506,13 +506,16 @@ begin
     raise exception 'REGRESSION (function grants): public function(s) with no pinned search_path -> %', bad;
   end if;
 
-  select string_agg(distinct format('%s on %s needs %s', pol.polname, pol.polrelid::regclass, d.refobjid::regprocedure), '; ') into bad
+  -- pg_depend records every function a policy expression calls (subqueries
+  -- included), so this needs no list to keep up to date.
+  select string_agg(distinct format('%s on %s needs %s (as %s)', pol.polname, pol.polrelid::regclass, d.refobjid::regprocedure, r.role), '; ') into bad
     from pg_policy pol
     join pg_depend d on d.classid = 'pg_policy'::regclass and d.objid = pol.oid and d.refclassid = 'pg_proc'::regclass
-   where (0::oid = any (pol.polroles) or 'anon'::regrole::oid = any (pol.polroles))
-     and not has_function_privilege('anon', d.refobjid, 'EXECUTE');
+    cross join (values ('anon'), ('authenticated')) r(role)
+   where (0::oid = any (pol.polroles) or to_regrole(r.role)::oid = any (pol.polroles))
+     and not has_function_privilege(r.role, d.refobjid, 'EXECUTE');
   if bad is not null then
-    raise exception 'REGRESSION (function grants): a policy anon is subject to calls a function anon can''t run (anon''s queries would fail 42501; scope the policy `to authenticated`) -> %', bad;
+    raise exception 'REGRESSION (function grants): a policy calls a function the role it applies to can''t run, so that role''s queries fail 42501 (anon: scope the policy `to authenticated`) -> %', bad;
   end if;
 
   raise notice 'PASS: anon runs only the % allow-listed functions; triggers and generators are nobody''s; search_path pinned everywhere', array_length(allowed, 1);
