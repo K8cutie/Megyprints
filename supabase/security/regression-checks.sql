@@ -439,5 +439,87 @@ begin
   raise notice 'PASS: only orders keep a memory video; the cleanup is the server''s alone';
 end $$;
 
+-- ── GUARD 15: anon runs only the functions it is meant to (0061) ───────────
+-- Supabase's default privileges give anon EXECUTE on every NEW public
+-- function, and `revoke all ... from public` doesn't take that back. So a
+-- function nobody revoked from anon is callable by anyone with the
+-- publishable key: live had 41 of them (2026-11-11). Signed-out visitors may
+-- run the allow-list below and nothing else. Adding a guest or public RPC?
+-- Add it here, in the same PR, with the reason.
+-- Also: no client role runs a trigger function or an id generator, every
+-- public function pins its search_path, and no policy anon is subject to
+-- calls a function anon can't run (0058 kept is_owner/operator_role anon's
+-- for that reason; a policy that names them must say `to authenticated`).
+do $$
+declare
+  bad text;
+  allowed_names text[] := array[
+    'public.resolve_memory(text)',                 -- /m: a printed QR opens it signed out
+    'public.public_price_schedule()',              -- the public price list
+    'public.included_hosting_years()',             -- 0031; the qr_memories insert policy (to public) calls it
+    'public.event_public(text)',                   -- guest camera (0044): guests have no account
+    'public.event_join(text, text, integer, boolean)',
+    'public.event_me(text, text)',
+    'public.event_feed(text, text, timestamptz, integer, boolean)',
+    'public.event_media_begin(text, text, text, text, bigint, integer, integer, numeric)',
+    'public.event_media_ready(text, text, uuid)',
+    'public.event_media_delete(text, text, uuid)',
+    'public.event_screen(text, text, integer)',    -- the venue screen
+    'public.event_copy_offer(text)',               -- the guest page asks if copies are on offer (0045)
+    'public.event_upload_allowed(text, text)'      -- the anon storage INSERT policy calls it
+  ];
+  allowed oid[];
+begin
+  select string_agg(x, ', ') into bad from unnest(allowed_names) x where to_regprocedure(x) is null;
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): allow-list names a function that doesn''t exist (renamed? update GUARD 15): %', bad;
+  end if;
+  select array_agg(to_regprocedure(x)::oid) into allowed from unnest(allowed_names) x;
+
+  select string_agg(p.oid::regprocedure::text, ', ' order by p.proname) into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and has_function_privilege('anon', p.oid, 'EXECUTE')
+     and p.oid <> all (allowed)
+     and not exists (select 1 from pg_depend e where e.classid = 'pg_proc'::regclass and e.objid = p.oid and e.deptype = 'e');
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): anon can run public function(s) outside the allow-list -> %  (revoke execute ... from anon, or allow-list it with a reason)', bad;
+  end if;
+
+  select string_agg(p.oid::regprocedure::text, ', ' order by p.proname) into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and (p.prorettype = 'trigger'::regtype
+          or p.oid = any (array[to_regprocedure('public.gen_order_number()'), to_regprocedure('public.gen_booking_number()'),
+                                to_regprocedure('public.gen_event_code(integer)')]::oid[]))
+     and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): a client role can run trigger/generator function(s) -> %', bad;
+  end if;
+
+  select string_agg(p.oid::regprocedure::text, ', ' order by p.proname) into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname = 'public'
+     and not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%')
+     and not exists (select 1 from pg_depend e where e.classid = 'pg_proc'::regclass and e.objid = p.oid and e.deptype = 'e');
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): public function(s) with no pinned search_path -> %', bad;
+  end if;
+
+  -- pg_depend records every function a policy expression calls (subqueries
+  -- included), so this needs no list to keep up to date.
+  select string_agg(distinct format('%s on %s needs %s (as %s)', pol.polname, pol.polrelid::regclass, d.refobjid::regprocedure, r.role), '; ') into bad
+    from pg_policy pol
+    join pg_depend d on d.classid = 'pg_policy'::regclass and d.objid = pol.oid and d.refclassid = 'pg_proc'::regclass
+    cross join (values ('anon'), ('authenticated')) r(role)
+   where (0::oid = any (pol.polroles) or to_regrole(r.role)::oid = any (pol.polroles))
+     and not has_function_privilege(r.role, d.refobjid, 'EXECUTE');
+  if bad is not null then
+    raise exception 'REGRESSION (function grants): a policy calls a function the role it applies to can''t run, so that role''s queries fail 42501 (anon: scope the policy `to authenticated`) -> %', bad;
+  end if;
+
+  raise notice 'PASS: anon runs only the % allow-listed functions; triggers and generators are nobody''s; search_path pinned everywhere', array_length(allowed, 1);
+end $$;
+
 -- ── ALL CLEAR ───────────────────────────────────────────────────────────────
 do $$ begin raise notice '✅ Megy Prints security regression guard: ALL CHECKS PASSED'; end $$;
