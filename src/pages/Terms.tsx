@@ -9,7 +9,7 @@ import { LegalPage, LegalSection } from '../components/LegalPage';
 import { LEGAL_CONTACT, MIN_AGE } from '../lib/legal';
 import { UNPAID_ORDER_DAYS } from '../lib/orderExpiry';
 
-const UPDATED = 'October 2026';
+const UPDATED = 'November 2026';
 
 const mail = <a className="text-rust underline" href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a>;
 
@@ -39,6 +39,23 @@ export default function Terms() {
         <p>
           Only use photos you took yourself or have permission to use. If a photo shows other
           people, make sure they are okay with it being printed.
+        </p>
+        <p data-testid="terms-no-screening">
+          We don't check every photo before we print it. You are responsible for the photos, videos
+          and words you add.
+        </p>
+        <p data-testid="terms-celebrities">
+          Photos you took yourself of a famous person, like at a concert, are fine for your own
+          album. Official photos, album covers, logos and artwork you found online belong to
+          someone else, so don't add them.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Your album is for personal use">
+        <p data-testid="terms-personal-use">
+          Albums are for you, your family and your friends. Don't sell them or use them to promote
+          a business. This matters most when an album shows a famous person or someone else's
+          brand or artwork.
         </p>
       </LegalSection>
 
@@ -91,6 +108,29 @@ export default function Terms() {
         <p>
           Some lines in your album can be written by AI, like the line Megy writes for a photo. AI
           can get things wrong. Read every line before you order, and change any you don't like.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="If someone says an album breaks their rights">
+        <p data-testid="terms-complaints">
+          If you own a photo, artwork or brand and think an album uses it without permission, email{' '}
+          {mail} with what it is and why it's yours. We'll look into it, and we may stop or cancel the
+          order. We may also ask the customer to show they have permission.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="If your photos cause a claim">
+        <p data-testid="terms-indemnity">
+          If someone makes a claim against Megyprints because of photos, videos or words you added
+          without the right to use them, you agree to cover our costs from that claim, including
+          legal costs.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="What we are responsible for">
+        <p data-testid="terms-liability">
+          As far as the law allows, the most we will owe you for an order is what you paid for that
+          order. This doesn't take away any rights you have under Philippine consumer law.
         </p>
       </LegalSection>
 
