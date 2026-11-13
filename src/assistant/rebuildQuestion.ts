@@ -100,7 +100,7 @@ export function remakeLosesMessage(memories: number): string {
  *  before it loads: pages, no pesos). */
 export function rebuildQuestion(
   intent: AssistantIntent,
-  album: { albumPages: AlbumPage[]; albumSize: AlbumSizePreset; uploadedPhotos?: UploadedPhoto[]; photosPerPage?: number },
+  album: { albumPages: AlbumPage[]; albumSize: AlbumSizePreset; uploadedPhotos?: UploadedPhoto[]; photosPerPage?: number; textBoxes?: boolean },
   extraCost?: ((size: AlbumSizePreset, pages: number) => number) | null,
 ): string | null {
   if (!albumIsMade(album.albumPages)) return null;
@@ -118,7 +118,7 @@ export function rebuildQuestion(
     // What the new size makes of these photos at the photos-per-page picked,
     // when that's more pages than included: the same note as the upload step.
     const note = photosPerPageNote(album.uploadedPhotos ?? [], size, album.photosPerPage,
-      extraCost ? (pages) => extraCost(size, pages) : null);
+      extraCost ? (pages) => extraCost(size, pages) : null, album.textBoxes !== false);
     const grows = note && /more than the \d+ included/.test(note) ? ` ${note}` : '';
     const { carried, lost } = memoriesAcrossSize(album.albumPages, album.uploadedPhotos ?? [], album.albumSize, size);
     const memories = resizeMemoriesLine(carried.length + lost.length, lost.length, size);

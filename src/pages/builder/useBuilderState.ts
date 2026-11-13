@@ -18,7 +18,7 @@ import type {
   FrameStyle,
   TextStyle,
 } from './types';
-import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, type QrCorner } from './pageTemplates';
+import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages, qrBadgeTemplate, qrBadgeCornerOf, qrCornerAwayFromFace, photoSlotCount, DEFAULT_COVER_TEMPLATE_ID, withBoxes, pagesHaveBoxes, type QrCorner } from './pageTemplates';
 import { recolorPage } from './pageColors';
 import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { placePhoto } from './slotSwap';
@@ -421,6 +421,9 @@ interface SerializedState {
   currentPageIndex: number;
   rejectedTemplateIds: string[];
   photosPerPage: number | undefined;
+  /** Text & AI boxes on the pages (Step 3's switch, off for a new album).
+   *  Absent in drafts before 2026-11-13: read from the pages (pagesHaveBoxes). */
+  textBoxes?: boolean;
   coverDesign: CoverDesign;
   /** Front cover PAGE (cover-as-pages). Optional in stored drafts: old drafts
    *  predate it and are migrated from coverDesign on restore. (A stored
@@ -577,6 +580,7 @@ function getInitialState(): SerializedState {
       currentPageIndex: 0,
       rejectedTemplateIds: [],
       photosPerPage: undefined,
+      textBoxes: false,
       coverDesign: DEFAULT_COVER_DESIGN,
       coverFront: createCoverPage('8x8'),
       title: '',
@@ -611,21 +615,24 @@ function getInitialState(): SerializedState {
   // from IndexedDB. Intentional "start fresh" is handled explicitly by the
   // `megy-fresh-start` signal (Home → New Album) and by reset().
 
+  // Heal pages laid out under a RETIRED template set (see migrateRetiredPages):
+  // their templateId still resolves, so without this they would keep rendering
+  // scrapped geometry forever.
+  const albumPages = migrateRetiredPages(
+    bindStrandedCaptions(stripDefaultThemeTitles(effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize)))),
+    (effectiveSaved?.albumSize ?? defaultSize) as AlbumSizePreset,
+  );
   return {
     albumType: effectiveSaved?.albumType ?? 'standard',
     albumSize: effectiveSaved?.albumSize ?? defaultSize,
     selectedTemplate: effectiveSaved?.selectedTemplate ?? 'classic',
     uploadedPhotos: effectiveSaved?.uploadedPhotos ?? [],
-      // Heal pages laid out under a RETIRED template set (see migrateRetiredPages):
-    // their templateId still resolves, so without this they would keep rendering
-    // scrapped geometry forever.
-    albumPages: migrateRetiredPages(
-      bindStrandedCaptions(stripDefaultThemeTitles(effectiveSaved?.albumPages ?? Array.from({ length: MIN_PAGES }, (_, i) => createEmptyPage(i, defaultSize)))),
-      (effectiveSaved?.albumSize ?? defaultSize) as AlbumSizePreset,
-    ),
+    albumPages,
     currentPageIndex: effectiveSaved?.currentPageIndex ?? 0,
     rejectedTemplateIds: effectiveSaved?.rejectedTemplateIds ?? [],
     photosPerPage: effectiveSaved?.photosPerPage ?? undefined,
+    // A draft from before the switch: an album made with boxes keeps them.
+    textBoxes: typeof effectiveSaved?.textBoxes === 'boolean' ? effectiveSaved.textBoxes : pagesHaveBoxes(albumPages),
     coverDesign: effectiveSaved?.coverDesign ?? DEFAULT_COVER_DESIGN,
     coverFront: effectiveSaved?.coverFront
       ?? (effectiveSaved?.coverDesign ? coverDesignToFront(effectiveSaved.coverDesign, effectiveSaved?.albumSize ?? defaultSize) : createCoverPage(effectiveSaved?.albumSize ?? defaultSize)),
@@ -922,6 +929,10 @@ export interface BuilderActions {
   // Slot count filter
   photosPerPage: number | undefined;
   setPhotosPerPage: (count: number | undefined) => void;
+  /** Text & AI boxes on the pages (Step 3's switch; a new album's are off).
+   *  Off: the album is made, and its layouts offered, from the box-free deck. */
+  textBoxes: boolean;
+  setTextBoxes: (on: boolean) => void;
 
   // Snapshots
   setPageSnapshot: (pageId: string, dataUrl: string) => void;
@@ -1067,6 +1078,7 @@ export function useBuilderState(): BuilderActions {
   const [currentPageIndex, setCurrentPageIndex] = useState(() => getInitialState().currentPageIndex);
   const [rejectedTemplateIds, setRejectedTemplateIds] = useState<string[]>(() => getInitialState().rejectedTemplateIds);
   const [photosPerPage, setPhotosPerPage] = useState<number | undefined>(() => getInitialState().photosPerPage);
+  const [textBoxes, setTextBoxes] = useState<boolean>(() => getInitialState().textBoxes ?? false);
   // Designed front·spine·back cover artwork (see CoverDesign). Persisted with the
   // album; the physical spine geometry is resolved at print time from the
   // checkout's cover material + actual page count (coverGeometry.ts).
@@ -1289,6 +1301,10 @@ export function useBuilderState(): BuilderActions {
     else if (!sameAlbum) writeAlbumTheme('');
     if (a.photosPerPage != null) setPhotosPerPage(a.photosPerPage);
     else if (!sameAlbum) setPhotosPerPage(undefined);
+    // The boxes switch isn't a column: an album from the cloud reads it from
+    // its pages (made with boxes, it keeps them). The same album reopened
+    // keeps what this device has for it.
+    if (!sameAlbum) setTextBoxes(pagesHaveBoxes(a.pages ?? []));
   }, []);
 
   /* ── Persistence strategy ──
@@ -1365,7 +1381,7 @@ export function useBuilderState(): BuilderActions {
     justLoaded: () => boolean;
   } | null>(null);
   persistRef.current = {
-    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, title: albumTitle, albumId: albumIdRef.current, accountId: draftAccountRef.current },
+    local: { albumType, albumSize, selectedTemplate, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, textBoxes, coverDesign, coverFront, title: albumTitle, albumId: albumIdRef.current, accountId: draftAccountRef.current },
     serializeAlbum,
     saveToCloud,
     userId: user?.id,
@@ -1470,7 +1486,7 @@ export function useBuilderState(): BuilderActions {
     if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current);
     autoSaveTimerRef.current = setTimeout(flushLocal, 30000);
     return () => { if (autoSaveTimerRef.current !== null) clearTimeout(autoSaveTimerRef.current); };
-  }, [albumType, albumSize, selectedTemplate, albumTitle, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, coverDesign, coverFront, flushLocal, localAlbumKey, settleEdited]);
+  }, [albumType, albumSize, selectedTemplate, albumTitle, uploadedPhotos, albumPages, currentPageIndex, rejectedTemplateIds, photosPerPage, textBoxes, coverDesign, coverFront, flushLocal, localAlbumKey, settleEdited]);
 
   // Cloud save once the album goes quiet (see the persistence strategy). Only
   // what the saved row holds counts: turning pages changes nothing in it.
@@ -2229,7 +2245,7 @@ export function useBuilderState(): BuilderActions {
         }
       } catch { /* no faces known → least-crop order */ }
     }
-    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length), boxes: textBoxes });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     // Bank quotes are off (DEAL_BANK_QUOTES): quote boxes are made empty, so
@@ -2278,7 +2294,7 @@ export function useBuilderState(): BuilderActions {
     } finally {
       setGenerating(null);
     }
-  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate]);
+  }, [uploadedPhotos, albumSize, photosPerPage, textBoxes, selectedTemplate]);
 
   /** Does the current page carry a video memory? Then its layout stays the
    *  full photo with the QR badge (see relayPageOnTemplate), and the layout
@@ -2306,13 +2322,15 @@ export function useBuilderState(): BuilderActions {
       )];
 
       // ── 2. Pick a random template different from current (and matched to
-      //       THIS album's size, so we don't pull a 6x6 template onto an 8x8). ──
-      let pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
+      //       THIS album's size, so we don't pull a 6x6 template onto an 8x8),
+      //       from the album's deck (boxes off: no box comes back this way). ──
+      const all = withBoxes(textBoxes, () => getTemplatesForAlbum(albumSize));
+      let pool = all.filter((t) => t.id !== page.templateId);
       if (photosPerPage !== undefined) {
         pool = pool.filter((t) => t.slotCount === photosPerPage);
       }
-      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
-      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize);
+      if (pool.length === 0) pool = all.filter((t) => t.id !== page.templateId);
+      if (pool.length === 0) pool = all;
       const newTemplateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
       const template = pool.find(t => t.id === newTemplateId) ?? pool[0];
       const slotCount = template.slots.length;
@@ -2394,7 +2412,7 @@ export function useBuilderState(): BuilderActions {
       next[currentPageIndex] = newPage;
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage, currentPageHasMemory]);
+  }, [currentPageIndex, albumSize, uploadedPhotos, photosPerPage, textBoxes, currentPageHasMemory]);
 
   const shuffleLayout = useCallback(() => {
     if (currentPageHasMemory()) return;
@@ -2404,12 +2422,13 @@ export function useBuilderState(): BuilderActions {
       const page = next[currentPageIndex];
       if (!page) return prev;
 
-      let pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
+      const all = withBoxes(textBoxes, () => getTemplatesForAlbum(albumSize));
+      let pool = all.filter((t) => t.id !== page.templateId);
       if (photosPerPage !== undefined) {
         pool = pool.filter((t) => t.slotCount === photosPerPage);
       }
-      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize).filter((t) => t.id !== page.templateId);
-      if (pool.length === 0) pool = getTemplatesForAlbum(albumSize);
+      if (pool.length === 0) pool = all.filter((t) => t.id !== page.templateId);
+      if (pool.length === 0) pool = all;
       const newTemplateId = templateTracker.pick(pool.map(t => t.id), page.templateId) ?? pool[Math.floor(Math.random() * pool.length)].id;
       const template = pool.find(t => t.id === newTemplateId) ?? pool[0];
 
@@ -2419,7 +2438,7 @@ export function useBuilderState(): BuilderActions {
 
       return next;
     });
-  }, [currentPageIndex, photosPerPage, albumSize, currentPageHasMemory]);
+  }, [currentPageIndex, photosPerPage, textBoxes, albumSize, currentPageHasMemory]);
 
   /* Cycle the current page through the layouts that hold its photos (same
      photo count, no bad crop — nextLayoutInCycle), in order, looping — powers
@@ -2427,7 +2446,7 @@ export function useBuilderState(): BuilderActions {
   const cycleLayout = useCallback(() => {
     if (currentPageHasMemory()) return;
     const before = albumPagesRef.current[currentPageIndex];
-    const template = before && nextLayoutInCycle(before, uploadedPhotos, albumSize);
+    const template = before && withBoxes(textBoxes, () => nextLayoutInCycle(before, uploadedPhotos, albumSize));
     if (!template) return; // nothing else holds these photos: no undo step for nothing
     pushSnapshot();
     setAlbumPages((prev) => {
@@ -2437,7 +2456,7 @@ export function useBuilderState(): BuilderActions {
       next[currentPageIndex] = relayPageOnTemplate(page, template);
       return next;
     });
-  }, [currentPageIndex, albumSize, uploadedPhotos, currentPageHasMemory]);
+  }, [currentPageIndex, albumSize, uploadedPhotos, textBoxes, currentPageHasMemory]);
 
   /** The layouts the picker offers for the current page: its own first ("✓
    *  Current"), then the ones that hold its photos (layoutChoicesForPage).
@@ -2456,8 +2475,10 @@ export function useBuilderState(): BuilderActions {
       if (current && layoutHoldsMemory(current)) return [current];
       return memories.length === 1 ? getTemplatesForAlbum(albumSize).filter(layoutHoldsMemory) : [];
     }
-    return layoutChoicesForPage(page, uploadedPhotos, albumSize);
-  }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
+    // The album's deck: boxes off, the picker offers no box layouts (turning
+    // the boxes on in Step 3 brings them back here, page by page).
+    return withBoxes(textBoxes, () => layoutChoicesForPage(page, uploadedPhotos, albumSize));
+  }, [albumPages, currentPageIndex, uploadedPhotos, albumSize, textBoxes]);
 
   /** Apply a SPECIFIC template to the current page (the picker's choice), keeping
    *  the existing photos (re-filled into the new slots — unlike setPageTemplate
@@ -2493,10 +2514,10 @@ export function useBuilderState(): BuilderActions {
       const page = next[currentPageIndex];
       if (!page) return prev;
       next[currentPageIndex] = relayPageOnTemplate(page, template);
-      if (spare.length) next.splice(currentPageIndex + 1, 0, ...pagesForPhotos(spare, albumSize, assignments));
+      if (spare.length) next.splice(currentPageIndex + 1, 0, ...withBoxes(textBoxes, () => pagesForPhotos(spare, albumSize, assignments)));
       return next;
     });
-  }, [albumPages, currentPageIndex, uploadedPhotos, albumSize]);
+  }, [albumPages, currentPageIndex, uploadedPhotos, albumSize, textBoxes]);
 
   /* ── Face-centred auto-pan ──
      detectFaceCenter gives the face as a 0–1 point on the photo; every renderer
@@ -3678,6 +3699,7 @@ export function useBuilderState(): BuilderActions {
     setPreviewSeen(false); // a new album hasn't been previewed
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
+    setTextBoxes(false); // a new album's boxes are off
     // A new album is a new occasion (Step 1 asks it again).
     writeAlbumTheme('');
     setCoverDesign(DEFAULT_COVER_DESIGN);
@@ -4012,6 +4034,8 @@ export function useBuilderState(): BuilderActions {
     unhideAllTemplates,
     photosPerPage,
     setPhotosPerPage,
+    textBoxes,
+    setTextBoxes,
     coverDesign,
     setCoverDesign,
     setCoverFront,

@@ -1337,7 +1337,88 @@ export function setInactiveTemplateIds(ids: Set<string>): void {
   INACTIVE_TEMPLATE_IDS = ids;
 }
 function isActive(t: PageTemplate): boolean {
-  return !INACTIVE_TEMPLATE_IDS.has(t.id) && !RETIRED_TEMPLATE_IDS.has(t.id);
+  // A box-free twin is on exactly while the layout it was made from is: an
+  // operator who hides a box layout in /admin hides its twin with it.
+  const own = t.boxFreeOf ?? t.id;
+  return !INACTIVE_TEMPLATE_IDS.has(own) && !RETIRED_TEMPLATE_IDS.has(own) && !INACTIVE_TEMPLATE_IDS.has(t.id);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   TEXT & AI BOXES ARE OPTIONAL (owner, 2026-11-13: "make text box and AI box
+   optional … off by default … to maximize the pages for the users pictures").
+   An album's boxes are on or off (Step 3's switch, off for a new album). Off,
+   the layouts dealt and offered are the BOX-FREE DECK:
+     • every layout without a box, as before;
+     • a BOX-FREE TWIN of each box layout whose box is a band along an edge:
+       the same photo frames, the box taken off, the frames centred on the
+       page. So a landscape on a square page, a portrait on an 8×6 — photos
+       whose only one-photo layout carried a box — still have a page, at no
+       crop, and 40 photos still fill 40 pages. The generator then gives such
+       a page the whole sheet when the photo fills it safely (generateAlbum,
+       FULL PAGE WHEN IT FITS); the twin is what is left for the ones that
+       don't (owner's pick: "Full page if safe", else own shape + paper).
+     • a box that sat INSIDE a grid (three squares + a box cell) gets no
+       twin: an empty cell reads as a missing photo, and the deck has a
+       4-up or a single for those photos.
+   Twins live outside PAGE_TEMPLATES, so /admin, the old Templates tab and
+   the boxes-on deck never see them; getTemplateById resolves them, so a page
+   made on one prints like any other layout.
+   ══════════════════════════════════════════════════════════════════════════ */
+export const BOX_FREE_SUFFIX = '~nobox';
+
+function boxFreeTwin(t: PageTemplate): PageTemplate | null {
+  if (!t.textSlots?.length || hasQrSlot(t) || t.slots.length === 0) return null;
+  const minX = Math.min(...t.slots.map((s) => s.x)), maxX = Math.max(...t.slots.map((s) => s.x + s.width));
+  const minY = Math.min(...t.slots.map((s) => s.y)), maxY = Math.max(...t.slots.map((s) => s.y + s.height));
+  // The photos already span the page both ways: the box sat in a grid cell.
+  if (maxX - minX > 0.99 && maxY - minY > 0.99) return null;
+  const dx = (1 - minX - maxX) / 2, dy = (1 - minY - maxY) / 2;
+  // "Landscape + Box Below" → "Landscape"; "Two Portraits + Box" → "Two Portraits".
+  const name = t.name.replace(/\s*[+·]\s*(two\s+)?(boxes|box|band|caption)\b.*$/i, '').trim() || t.name;
+  const twin: PageTemplate = {
+    ...t,
+    id: `${t.id}${BOX_FREE_SUFFIX}`,
+    name,
+    boxFreeOf: t.id,
+    slots: t.slots.map((s) => ({ ...s, x: s.x + dx, y: s.y + dy })),
+  };
+  delete twin.textSlots;
+  return twin;
+}
+
+const BOX_FREE_TWINS: PageTemplate[] = PAGE_TEMPLATES.map(boxFreeTwin).filter((t): t is PageTemplate => t != null);
+
+/** Which deck the lookups below read: boxes on (every live layout, no twins)
+ *  or off (the box-free deck). Set only for the length of withBoxes(). */
+let boxesOn = true;
+
+/** Run `fn` with the album's boxes on or off: every layout lookup inside it
+ *  (generation, the photos-per-page notes, the layout picker) reads that
+ *  deck. Synchronous, and restored on the way out, so nothing outside `fn`
+ *  ever sees it. */
+export function withBoxes<T>(on: boolean, fn: () => T): T {
+  const was = boxesOn;
+  boxesOn = on;
+  try {
+    return fn();
+  } finally {
+    boxesOn = was;
+  }
+}
+
+/** The layouts the current deck holds, before any size/ratio filter. */
+function deck(): PageTemplate[] {
+  return boxesOn ? PAGE_TEMPLATES : [...PAGE_TEMPLATES.filter((t) => !t.textSlots?.length), ...BOX_FREE_TWINS];
+}
+
+/** Does any page of this album carry a box layout? How an album opened
+ *  without its own boxes choice (another device, before 2026-11-13) reads
+ *  it: made with boxes, it keeps them. */
+export function pagesHaveBoxes(pages: readonly unknown[]): boolean {
+  return pages.some((p) => {
+    const id = (p as { templateId?: unknown } | null)?.templateId;
+    return typeof id === 'string' && !!getTemplateById(id)?.textSlots?.length;
+  });
 }
 
 /* ── Geometry dedupe ─────────────────────────────────────────────────────────
@@ -1391,7 +1472,7 @@ export function photoSlotCount(t: PageTemplate): number {
 /** Get templates filtered by album size (auto-generation + layout picker). QR
  *  templates are excluded here on purpose — see hasQrSlot. */
 export function getTemplatesForAlbum(albumSize: AlbumSizePreset): PageTemplate[] {
-  return dedupeByGeometry(PAGE_TEMPLATES.filter(t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize)));
+  return dedupeByGeometry(deck().filter(t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize)));
 }
 
 /* ── ORIENTATION matching ─────────────────────────────────────────────────────
@@ -1415,7 +1496,7 @@ export function getTemplatesForOrientation(
   albumSize: AlbumSizePreset,
   o: PhotoOrientation,
 ): PageTemplate[] {
-  return dedupeByGeometry(PAGE_TEMPLATES.filter(
+  return dedupeByGeometry(deck().filter(
     t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize)
       && orientationOfRatio(t.targetRatio) === o,
   ));
@@ -1426,7 +1507,7 @@ export function getTemplatesForRatio(
   albumSize: AlbumSizePreset,
   targetRatio: PhotoRatio,
 ): PageTemplate[] {
-  return dedupeByGeometry(PAGE_TEMPLATES.filter(
+  return dedupeByGeometry(deck().filter(
     t => isActive(t) && !hasQrSlot(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio,
   ));
 }
@@ -1437,13 +1518,13 @@ export function getTemplatesForCount(
   targetRatio: PhotoRatio,
   slotCount: number,
 ): PageTemplate[] {
-  return dedupeByGeometry(PAGE_TEMPLATES.filter(
+  return dedupeByGeometry(deck().filter(
     t => isActive(t) && t.albumSizes.includes(albumSize) && t.targetRatio === targetRatio && t.slotCount === slotCount,
   ));
 }
 
 export function getTemplateById(id: string): PageTemplate | undefined {
-  return PAGE_TEMPLATES.find(t => t.id === id) ?? COVER_TEMPLATES.find(t => t.id === id);
+  return PAGE_TEMPLATES.find(t => t.id === id) ?? BOX_FREE_TWINS.find(t => t.id === id) ?? COVER_TEMPLATES.find(t => t.id === id);
 }
 
 export const TEMPLATE_CATEGORIES: { id: PageTemplate['category']; label: string }[] = [

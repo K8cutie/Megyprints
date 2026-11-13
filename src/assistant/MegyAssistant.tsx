@@ -794,6 +794,34 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                     </button>
                   </div>
                 </div>
+                {/* TEXT & AI BOXES (owner, 2026-11-13): optional, off for a new
+                    album, so every page goes to the photos. On, some pages get
+                    a box for the customer's words or a line Megy writes from
+                    the page's photos. It decides the deck the album is made
+                    from (and the layouts the picker offers), so on a made
+                    album it takes effect when the album is made again. */}
+                <div className="mt-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-ink-mid leading-relaxed" id="text-boxes-label">Text &amp; AI boxes</p>
+                    <p className="text-xs text-taupe leading-relaxed" data-testid="text-boxes-note">
+                      {builder.textBoxes
+                        ? 'On: some pages get a box for your words, or a line Megy writes from the photos.'
+                        : 'Off: every page is your photos.'}
+                      {albumIsMade(builder.albumPages) ? ' Your pages change when you make the album again.' : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={builder.textBoxes}
+                    aria-labelledby="text-boxes-label"
+                    data-testid="text-boxes-switch"
+                    onClick={() => builder.setTextBoxes(!builder.textBoxes)}
+                    className={`relative shrink-0 mt-0.5 inline-flex h-6 w-11 items-center rounded-full border transition-colors ${builder.textBoxes ? 'bg-peach border-peach' : 'bg-line border-line'}`}
+                  >
+                    <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${builder.textBoxes ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                  </button>
+                </div>
                 {(() => {
                   // THE 40-PHOTO GATE (albumMinimum): under 40 there is no
                   // Generate — the card's button is "Add N more photos". At 40+
@@ -805,7 +833,8 @@ export default function MegyAssistant({ collapsed: collapsedProp, onToggleCollap
                   // ₱513 of extra pages with no word: 1-star testers round 3).
                   const schedule = getPriceSchedule();
                   const note = photosPerPageNote(livePhotos, builder.albumSize, builder.photosPerPage,
-                    schedule ? (pages) => extraPagesCharge(schedule, builder.albumSize, 'soft', pages).amount : null);
+                    schedule ? (pages) => extraPagesCharge(schedule, builder.albumSize, 'soft', pages).amount : null,
+                    builder.textBoxes);
                   return short === 0 ? (
                     <>
                       <p className="text-xs text-success mt-3" data-testid="photo-minimum-met">✓ Enough for a full {MIN_ALBUM_PAGES}-page album.</p>

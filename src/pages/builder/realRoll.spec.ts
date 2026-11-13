@@ -153,6 +153,7 @@ describe('the upload step says when the photos\' SHAPES can\'t take the chosen p
   });
   it('the upload card shows the note, with what the extra pages add on the live schedule (source guard)', () => {
     const src = readFileSync(resolve(__dirname, '../../assistant/MegyAssistant.tsx'), 'utf8');
-    expect(src).toMatch(/const note = photosPerPageNote\(livePhotos, builder\.albumSize, builder\.photosPerPage,\s+schedule \? \(pages\) => extraPagesCharge\(schedule, builder\.albumSize, 'soft', pages\)\.amount : null\);/);
+    // …and from the deck the album will be made from (its text & AI boxes on or off).
+    expect(src).toMatch(/const note = photosPerPageNote\(livePhotos, builder\.albumSize, builder\.photosPerPage,\s+schedule \? \(pages\) => extraPagesCharge\(schedule, builder\.albumSize, 'soft', pages\)\.amount : null,\s+builder\.textBoxes\);/);
   });
 });

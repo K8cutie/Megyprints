@@ -98,6 +98,10 @@ export interface PageTemplate {
    *  this many photos per page. Absent → dealt at every density, AUTO included.
    *  The layout picker and manual swaps ignore it. */
   minDensity?: number;
+  /** A box-free twin's source: the box layout it was made from, its box
+   *  taken off and its photos centred (pageTemplates, BOX-FREE TWINS). Dealt
+   *  only while an album's text & AI boxes are off. */
+  boxFreeOf?: string;
 }
 
 export interface FilledSlot {

@@ -1,7 +1,7 @@
 import type { AlbumPage, UploadedPhoto, AlbumSizePreset, LayoutStyle, PageTemplate, TextElement, BoxRoll, QrFill } from './types';
 import { medianSharpness, isBlurry, photoQuality } from '../../lib/photoCheck';
 import { separateLookAlikes } from './lookAlikes';
-import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, orientationOfShape, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, type QrCorner } from './pageTemplates';
+import { getTemplateById, getTemplatesForRatio, getTemplatesForAlbum, getTemplatesForOrientation, orientationOfRatio, orientationOfShape, photoSlotCount, qrBadgeTemplate, qrBadgeCornerOf, withBoxes, type QrCorner } from './pageTemplates';
 
 /* ── Ratio LOOSENING budget ───────────────────────────────────────────────────
    Ratio matching is loosened, not removed: a photo still prefers its own ratio,
@@ -1120,6 +1120,15 @@ function extraPagesClause(pages: number, extraCost: ExtraPagesCost): string {
  *  past the included 40; or, with too few photos, why pages get fewer. */
 export function photosPerPageNote(
   photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraCost?: ExtraPagesCost,
+  /** The album's text & AI boxes (Step 3's switch): the note reads the deck
+   *  the album will be made from. */
+  boxes = true,
+): string | null {
+  return withBoxes(boxes, () => perPageNoteIn(photos, albumSize, perPage, extraCost));
+}
+
+function perPageNoteIn(
+  photos: UploadedPhoto[], albumSize: AlbumSizePreset, perPage: number | undefined, extraCost?: ExtraPagesCost,
 ): string | null {
   const shape = perPageShapeNote(photos, albumSize, perPage, extraCost);
   if (shape) return shape;
@@ -1262,6 +1271,11 @@ export interface GenerateOptions {
   /** The share of Surprise pages that are full pages (FULL_PAGE_SHARE).
    *  0 = only the opening and memory pages, as before 2026-10-26. */
   fullPageShare?: number;
+  /** The album's text & AI boxes (Step 3's switch; a new album's are off).
+   *  false = the box-free deck (pageTemplates, TEXT & AI BOXES ARE OPTIONAL)
+   *  and a one-photo page over the whole sheet wherever its photo fills it
+   *  safely (FULL PAGE WHEN IT FITS). Absent = on, every layout as before. */
+  boxes?: boolean;
 }
 
 /**
@@ -1286,6 +1300,16 @@ export function generateAlbum(
   photosPerPage?: number | undefined,
   background?: AlbumPage['background'] | undefined,
   options?: GenerateOptions,
+): AlbumPage[] {
+  return withBoxes(options?.boxes !== false, () => generateAlbumIn(photos, albumSize, photosPerPage, background, options));
+}
+
+function generateAlbumIn(
+  photos: UploadedPhoto[],
+  albumSize: AlbumSizePreset,
+  photosPerPage: number | undefined,
+  background: AlbumPage['background'] | undefined,
+  options: GenerateOptions | undefined,
 ): AlbumPage[] {
   const made = (memoryPages: number) => generateAlbumWith(photos, albumSize, photosPerPage, background, options, memoryPages);
   const base = made(MIN_MEMORY_PAGES);
@@ -1361,6 +1385,7 @@ function generateAlbumWith(
   if (reserved.length === 0 && opening.length === 0) {
     const plain = layoutAlbum(photos, albumSize, photosPerPage, background, options);
     separateLookAlikes(plain, photos, isMemoryReady);
+    if (options?.boxes === false) fillWholePageWhenSafe(plain, photos, albumSize, options.faceCenters);
     return plain;
   }
   const taken = new Set([...reserved, ...opening]);
@@ -1379,8 +1404,42 @@ function generateAlbumWith(
   // Two shots of the same moment the customer kept never share a page (and
   // never swap a memory page's photo out from under its QR).
   separateLookAlikes(pages, photos, isMemoryReady);
+  // After the look-alike swaps: a swap could move a photo onto a page that
+  // was made full for another one.
+  if (options?.boxes === false) fillWholePageWhenSafe(pages, photos, albumSize, options.faceCenters);
   pages.forEach((p, i) => { p.id = makePageId(i); });
   return pages;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FULL PAGE WHEN IT FITS (owner, 2026-11-13, boxes off: "Full page if safe").
+   With the boxes off, a photo whose shape isn't the page's gets a box-free
+   twin: its own shape, centred, plain paper beside it. Where the photo can
+   fill the whole sheet safely, it does instead: the memory pages' own rule
+   (fitsFullPage: a landscape on a square page loses its sides, never more
+   than a sliver off the top and bottom), and past it only where a known
+   face stays inside the crop. A portrait on a landscape page never does: it
+   would lose half. Mutates; the page stays one photo, so the page count and
+   the 40-photo minimum are untouched.
+   ══════════════════════════════════════════════════════════════════════════ */
+function fillWholePageWhenSafe(
+  pages: AlbumPage[], photos: UploadedPhoto[], size: AlbumSizePreset,
+  faces?: Record<number, { x: number; y: number }>,
+): void {
+  const solo = memorySingleTemplate(size);
+  if (!solo) return;
+  const aspect = PAGE_ASPECT[size] ?? 1;
+  for (const page of pages) {
+    const t = page.templateId ? getTemplateById(page.templateId) : undefined;
+    if (!t?.boxFreeOf || t.slots.length !== 1 || hasActiveQr(page)) continue;
+    const i = page.slotFills?.[0];
+    const photo = i != null ? photos[i] : undefined;
+    if (i == null || !photo) continue;
+    const face = faces?.[i];
+    if (fitsFullPage(photo, aspect) || (!!face && allowedOnFullPage(photo, aspect) && fullPageCost(photo, aspect, face) < 4)) {
+      asFullPage(page, solo, i);
+    }
+  }
 }
 
 /** pickMemoryPhotos, from the photos not already spoken for (a memory's own
@@ -1605,7 +1664,10 @@ function layoutAlbum(
   // next 3 pages are restricted to box-FREE layouts, WHEN any exist for that
   // ratio (else the box is allowed through so no photo is ever stranded).
   // Starts mid-cycle so page 1 isn't always a box.
-  const hasBox = (t: PageTemplate): boolean => (t.textSlots?.length ?? 0) > 0;
+  // Boxes off (the box-free deck): a multi-photo twin's paper band is the
+  // same open space its box left, so it keeps the box's ration. A one-photo
+  // twin doesn't: most of them go over the whole page (FULL PAGE WHEN IT FITS).
+  const hasBox = (t: PageTemplate): boolean => (t.textSlots?.length ?? 0) > 0 || (!!t.boxFreeOf && t.slots.length > 1);
   let captionCooldown = Math.floor(Math.random() * 4);
   // Quote cadence across consecutive pages (see QUOTE_CADENCE).
   let prevPageHadQuote = false;
