@@ -15,6 +15,8 @@ const quickLinks = [
   { label: 'Events', path: '/events' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
+  // Affiliates (0061): the page explains it and asks visitors to sign in.
+  { label: 'Become an affiliate', path: '/affiliate' },
 ];
 
 export default function Footer() {
