@@ -1,13 +1,13 @@
 /* ══════════════════════════════════════════════════════════════════════════
    /admin — the OPERATOR CONSOLE. Separate from the customer app; gated by ROLE.
-     • owner       — Overview · Album stats · Orders (full, incl. price) · Bookings · Templates · Team · Errors
+     • owner       — Overview · Album stats · Orders (full, incl. price) · Bookings · Templates · Pricing · Affiliates · Team · Errors
      • fulfillment — Orders only, status changes only (no money, no overview)
    Role resolution + the DB functions in migration 0007 are the real guard.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, TriangleAlert, BadgePercent, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
@@ -24,8 +24,9 @@ import MessagesPanel from './admin/MessagesPanel';
 import BookingsPanel from './admin/BookingsPanel';
 import AlbumStatsPanel from './admin/AlbumStatsPanel';
 import ErrorsPanel from './admin/ErrorsPanel';
+import AffiliatesPanel from './admin/AffiliatesPanel';
 
-type Tab = 'overview' | 'stats' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team' | 'errors';
+type Tab = 'overview' | 'stats' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'affiliates' | 'team' | 'errors';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
   { id: 'stats', label: 'Album stats', icon: Images, ownerOnly: true },
@@ -34,6 +35,7 @@ const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }
   { id: 'messages', label: 'Messages', icon: Mail, ownerOnly: true },
   { id: 'templates', label: 'Templates', icon: LayoutGrid, ownerOnly: true },
   { id: 'pricing', label: 'Pricing', icon: Calculator, ownerOnly: true },
+  { id: 'affiliates', label: 'Affiliates', icon: BadgePercent, ownerOnly: true },
   { id: 'team', label: 'Team', icon: Users, ownerOnly: true },
   { id: 'errors', label: 'Errors', icon: TriangleAlert, ownerOnly: true },
 ];
@@ -227,6 +229,7 @@ export default function Admin() {
         {tab === 'messages' && isOwner && <MessagesPanel />}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}
+        {tab === 'affiliates' && isOwner && <AffiliatesPanel />}
         {tab === 'team' && isOwner && <TeamPanel />}
         {tab === 'errors' && isOwner && <ErrorsPanel orders={orders} />}
       </main>

@@ -21,6 +21,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { TesterCode } from './testerCode';
+import type { AffiliateCode } from './affiliates';
 import type { AlbumSizePreset, CoverType, MaterialType } from '../pages/builder/types';
 import { isEmptyAddress, type AddressValue } from './contact';
 
@@ -50,6 +51,9 @@ export interface CheckoutOrder {
   /** The tester code it was placed with (0057): a free one finishes without
    *  the payment screen, even after a reload. */
   tester?: TesterCode | null;
+  /** The affiliate code it was placed with (0061): the summary keeps its
+   *  line after a reload. */
+  affiliate?: AffiliateCode | null;
 }
 
 export interface CheckoutForm {
