@@ -19,6 +19,7 @@ import StartNewAlbumPrompt from '../components/StartNewAlbumPrompt';
 import { requestSampleAlbum } from '../lib/samplePhotos';
 import { HOME_FEATURES, HOW_IT_WORKS, type HomeFeatureKey } from './homeCopy';
 import { AlbumsCard, EventsCard } from './home/HomeCards';
+import { EVENTS_ON } from '../lib/eventsSwitch';
 import TodaysSampleAlbum from './home/TodaysSampleAlbum';
 import KeepAlbumAsk, { asksBeforeNewAlbum } from './home/KeepAlbumAsk';
 import { skipSoftAuthThisVisit } from '../lib/softAuthNudge';
@@ -33,6 +34,8 @@ const gentle = 'cubic-bezier(0.16, 1, 0.3, 1)';
    Two cards built the same way, Megyprints Albums and Megyprints Events
    (the owner's canvas board, HomeCards.tsx): stacked on a phone, side by side
    from a tablet up. The photo shows through a light veil, as on the board.
+   While Events is off (lib/eventsSwitch.ts, owner 2026-11-16), the Albums
+   card stands alone, centred, as wide as it is beside the Events card.
    In the Android app while testing, "Make today's sample album" comes first
    (`top`, home/TodaysSampleAlbum).
    ═══════════════════════════════════════════════════════════════════════ */
@@ -56,10 +59,13 @@ function HeroSection({ onStart, top }: { onStart: () => void; top?: React.ReactN
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 lg:gap-8 md:items-stretch max-w-[480px] md:max-w-none mx-auto"
+          className={EVENTS_ON
+            ? 'grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-6 lg:gap-8 md:items-stretch max-w-[480px] md:max-w-none mx-auto'
+            : 'grid grid-cols-1 max-w-[480px] lg:max-w-[600px] mx-auto'}
+          data-testid="home-cards"
         >
           <AlbumsCard onStart={onStart} />
-          <EventsCard />
+          {EVENTS_ON && <EventsCard />}
         </motion.div>
 
         {/* Scroll Indicator */}

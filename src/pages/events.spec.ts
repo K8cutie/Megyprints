@@ -21,6 +21,9 @@ const h = vi.hoisted(() => ({
   insertResult: { data: { id: 'new-1' } as unknown, error: null as unknown },
   calls: [] as [string, ...unknown[]][],
 }));
+// Events on (as built) or off (owner, 2026-11-16: lib/eventsSwitch.ts), per test.
+const sw = vi.hoisted(() => ({ on: true }));
+vi.mock('../lib/eventsSwitch', async (orig) => ({ ...(await orig<typeof import('../lib/eventsSwitch')>()), get EVENTS_ON() { return sw.on; } }));
 vi.mock('../lib/authContext', () => ({ useAuth: () => ({ user: h.user, logout: vi.fn(), loading: false }) }));
 vi.mock('../components/AuthModalProvider', () => ({ useAuthModal: () => ({ openLogin: () => h.openLogin(), openSignup: vi.fn() }) }));
 vi.mock('../lib/supabase', () => {
@@ -65,6 +68,7 @@ beforeEach(() => {
   h.openLogin = vi.fn();
   h.bookings = []; h.inserted = null; h.calls = [];
   h.insertResult = { data: { id: 'new-1' }, error: null };
+  sw.on = true;
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); });
 
@@ -277,12 +281,56 @@ describe('/events/book: the request', () => {
 
 describe('the way in', () => {
   const src = (p: string) => readFileSync(resolve(__dirname, p), 'utf8');
-  it('both routes are in the app, open to everyone (the form asks for sign-in when sending)', () => {
+  it('both routes are in the app, open to everyone (the form asks for sign-in when sending); the form only while Events is on', () => {
     expect(src('../App.tsx')).toContain('<Route path="/events" element={<Events />} />');
-    expect(src('../App.tsx')).toContain('<Route path="/events/book" element={<EventBook />} />');
+    expect(src('../App.tsx')).toContain('<Route path="/events/book" element={EVENTS_ON ? <EventBook /> : <Navigate to="/events" replace />} />');
   });
-  it('Events is in the menu and the footer', () => {
-    expect(src('../components/Navbar.tsx')).toContain("{ label: 'Events', path: '/events' }");
-    expect(src('../components/Footer.tsx')).toContain("{ label: 'Events', path: '/events' }");
+  it('Events is in the menu and the footer while it is on', () => {
+    for (const f of ['../components/Navbar.tsx', '../components/Footer.tsx']) {
+      expect(src(f)).toContain("{ label: 'Events', path: '/events' }");
+      expect(src(f)).toContain(".filter((l) => EVENTS_ON || l.path !== '/events');");
+    }
+  });
+});
+
+describe('while Events is off (owner, 2026-11-16: "for now events is disabled as a feature until we work something out")', () => {
+  it('it is off now, and nothing is deleted: turning it back on is one line', async () => {
+    const real = await vi.importActual<typeof import('../lib/eventsSwitch')>('../lib/eventsSwitch');
+    expect(real.EVENTS_ON).toBe(false);
+  });
+
+  it('/events says it is paused, takes no request, and leads to making an album', async () => {
+    sw.on = false;
+    await render('/events');
+    expect($('events-paused')).not.toBeNull();
+    expect($('events-title')!.textContent).toBe('Megyprints Events is paused for now');
+    expect($('events-book')).toBeNull();
+    expect($('events-how')).toBeNull();
+    expect(buttonByText(/Book your event/)).toBeUndefined();
+    expect($('events-paused-albums')!.getAttribute('href')).toBe('/');
+  });
+
+  it('a host who already sent a request still sees it, and can cancel it', async () => {
+    sw.on = false;
+    h.bookings = [booking({})];
+    await render('/events');
+    expect(h.calls).toContainEqual(['eq', 'user_id', 'user-1']);
+    expect($$('booking-card')).toHaveLength(1);
+    expect(buttonByText(/Cancel/)).toBeDefined();
+  });
+
+  it('signed in with no bookings: no "Your bookings" section (nothing to book)', async () => {
+    sw.on = false;
+    await render('/events');
+    expect($('events-none')).toBeNull();
+    expect(host.textContent).not.toContain('Your bookings');
+  });
+
+  it('signed out: a way to sign in to see a request already sent', async () => {
+    sw.on = false;
+    h.user = null;
+    await render('/events');
+    expect($('events-signed-out')).not.toBeNull();
+    expect(h.calls.filter((c) => c[0] === 'from')).toEqual([]);
   });
 });

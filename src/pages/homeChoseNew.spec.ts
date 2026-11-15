@@ -21,6 +21,9 @@ vi.mock('../lib/authContext', () => ({ useAuth: () => ({ user: { id: 'u1' }, loa
 vi.mock('../lib/supabase', () => ({ supabase: { from: () => ({}) }, supabaseConfigured: false }));
 vi.mock('../components/UserProjectsSection', () => ({ UserProjectsSection: () => null, formatRelativeTime: () => '' }));
 vi.mock('./BuilderDemoSection', () => ({ default: () => null }));
+// Events on or off (lib/eventsSwitch.ts), per test.
+const sw = vi.hoisted(() => ({ on: false }));
+vi.mock('../lib/eventsSwitch', async (orig) => ({ ...(await orig<typeof import('../lib/eventsSwitch')>()), get EVENTS_ON() { return sw.on; } }));
 
 import Home from './Home';
 import { DRAFT_STORAGE_KEY } from '../lib/localDraft';
@@ -62,9 +65,19 @@ describe('Home after "Start a new album" in Welcome back', () => {
     expect(sessionStorage.getItem('megy-fresh-start')).toBe('1'); // a NEW album, not the one in progress
   });
 
-  it('Book your event is right there too', async () => {
+  it('Book your event is right there too, while Events is on', async () => {
+    sw.on = true;
     await mount({ pathname: '/', state: { choseNew: true } });
     expect($('home-events-book')!.getAttribute('href')).toBe('/events');
+  });
+
+  it('while Events is off (owner, 2026-11-16): the Albums card alone, no Events card', async () => {
+    sw.on = false;
+    await mount({ pathname: '/', state: { choseNew: true } });
+    expect($('home-albums-card')).not.toBeNull();
+    expect($('home-events-card')).toBeNull();
+    expect($('home-events-book')).toBeNull();
+    expect($('home-cards')!.className).not.toContain('md:grid-cols-2');
   });
 
   it('coming to Home any other way, Start Creating still asks about the album in progress', async () => {

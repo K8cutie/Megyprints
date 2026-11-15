@@ -36,6 +36,7 @@ import ResumePrompt from './components/ResumePrompt';
 import PaidClipSweep from './components/PaidClipSweep';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
+import { EVENTS_ON } from './lib/eventsSwitch';
 
 export default function App() {
   // Load operator template overrides + the store price multiple once on start.
@@ -85,7 +86,8 @@ export default function App() {
           <Route path="/terms" element={<Terms />} />
           <Route path="/order" element={<Order />} />
           <Route path="/events" element={<Events />} />
-          <Route path="/events/book" element={<EventBook />} />
+          {/* While Events is off (lib/eventsSwitch.ts), no new request: /events says it is paused. */}
+          <Route path="/events/book" element={EVENTS_ON ? <EventBook /> : <Navigate to="/events" replace />} />
           <Route path="/events/:id" element={<ProtectedRoute><EventManage /></ProtectedRoute>} />
           <Route path="/e/:code/copy" element={<EventCopy />} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />

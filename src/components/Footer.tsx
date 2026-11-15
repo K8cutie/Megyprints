@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
+import { EVENTS_ON } from '../lib/eventsSwitch';
 
 /* Only REAL ways to reach us (1-star testers, 2026-10-04: on the thank-you
    page, just after paying, the footer said "123 Main St, City" and
@@ -10,12 +11,13 @@ const SOCIAL_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
   // { label: 'Facebook', href: 'https://facebook.com/<page>', icon: Facebook },
 ];
 
+// Events only while it is on (lib/eventsSwitch.ts).
 const quickLinks = [
   { label: 'Home', path: '/' },
   { label: 'Events', path: '/events' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
-];
+].filter((l) => EVENTS_ON || l.path !== '/events');
 
 export default function Footer() {
   return (
