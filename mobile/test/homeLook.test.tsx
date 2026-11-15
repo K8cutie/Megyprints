@@ -5,12 +5,13 @@
    (src/pages/Home.tsx, src/pages/home/HomeCards.tsx, src/pages/homeCopy.ts):
      • the albums photo behind it all, under the website's veil, slowly
        zooming; "Megy · Prints" and the menu over it;
-     • the Albums and Events cards in the website's words, word for word,
-       each with its five slides: one every 4 s (Albums half a beat later),
-       dots to jump, Pause/Play, "Here's how ›" to the first step;
+     • the Albums card in the website's words, word for word, with its five
+       slides: one every 4 s, dots to jump, Pause/Play, "Here's how ›" to
+       the first step;
+     • no Events anywhere: no Events card, no Events in the menu (owner,
+       2026-11-16: "Remove event completely from there");
      • Start Creating starts an album; with one in progress, Continue my
-       album and Start a new album, as before; Book your event › opens the
-       website's Events page;
+       album and Start a new album, as before;
      • signed out, Sign in at the top; signed in, the account's places in a
        card and in the menu;
      • the pictures move only while the screen is on top, and hold still
@@ -27,8 +28,7 @@ import Start from '../src/app/index';
 import { qrCells, SLIDE_MS } from '../src/home/HomeCards';
 import { HOME_FACES } from '../src/home/homeFonts';
 import { HomeMotionProvider, MOTION_MS, useHomeMotion } from '../src/home/homeMotion';
-import { ALBUMS_CARD, EVENT_MIN_GUESTS, EVENTS_CARD, HOME } from '../src/home/homeWords';
-import { EVENTS_PAGE } from '../src/lib/events';
+import { ALBUMS_CARD, HOME } from '../src/home/homeWords';
 import { FONT_ASSETS } from '../src/builder/fontAssets';
 import { useFonts } from 'expo-font';
 
@@ -36,8 +36,7 @@ import { useFonts } from 'expo-font';
    homeCopy.ts reaches the website's server client (import.meta.env), which
    the app's typecheck can't read; its stand-in is below. */
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { ALBUMS_CARD: WEB_ALBUMS, EVENTS_CARD: WEB_EVENTS } = require('@web/pages/homeCopy') as { ALBUMS_CARD: unknown; EVENTS_CARD: unknown };
-const { EVENT_MIN_GUESTS: WEB_MIN_GUESTS } = require('@web/lib/eventBookings') as { EVENT_MIN_GUESTS: number };
+const { ALBUMS_CARD: WEB_ALBUMS } = require('@web/pages/homeCopy') as { ALBUMS_CARD: unknown };
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 jest.mock('../../src/lib/supabase', () => ({ supabase: {} }));
@@ -79,10 +78,8 @@ beforeEach(() => {
 afterEach(() => { jest.restoreAllMocks(); jest.useRealTimers(); });
 
 describe('the website\'s words, word for word', () => {
-  it('the Albums card and the Events card', () => {
+  it('the Albums card', () => {
     expect(ALBUMS_CARD).toEqual(WEB_ALBUMS);
-    expect(EVENTS_CARD).toEqual(WEB_EVENTS);
-    expect(EVENT_MIN_GUESTS).toBe(WEB_MIN_GUESTS);
   });
 });
 
@@ -116,26 +113,27 @@ describe('the look', () => {
     expect(screen.getByTestId('home-menu')).toBeOnTheScreen();
   });
 
-  it('both cards: their labels and headlines', async () => {
+  it('the Albums card: its label and headline; no Events card', async () => {
     await render(<Start />);
     expect(screen.getByText('MEGYPRINTS ALBUMS')).toBeOnTheScreen();
     expect(screen.getByText(ALBUMS_CARD.title)).toBeOnTheScreen();
-    expect(screen.getByText('MEGYPRINTS EVENTS')).toBeOnTheScreen();
-    expect(screen.getByText('NEW')).toBeOnTheScreen();
-    expect(screen.getByText(EVENTS_CARD.title)).toBeOnTheScreen();
-    expect(screen.getByText(EVENTS_CARD.who)).toBeOnTheScreen();
+    const all = { includeHiddenElements: true };
+    expect(screen.queryByTestId('home-events-card', all)).toBeNull();
+    expect(screen.queryByText('MEGYPRINTS EVENTS', all)).toBeNull();
+    expect(screen.queryByText(/event/i, all)).toBeNull();
+    expect(SCREEN).not.toMatch(/EventsCard|lib\/events/);
   });
 
   it('every step on its slide, with the website\'s pictures\' words', async () => {
     await render(<Start />);
     // Every slide is there; a screen reader reads only the one in view.
     const all = { includeHiddenElements: true };
-    for (const s of [...ALBUMS_CARD.steps, ...EVENTS_CARD.steps]) expect(screen.getByText(s.desc, all)).toBeOnTheScreen();
+    for (const s of ALBUMS_CARD.steps) expect(screen.getByText(s.desc, all)).toBeOnTheScreen();
     expect(screen.getByText(ALBUMS_CARD.hook)).toBeOnTheScreen();
     expect(screen.queryByText(ALBUMS_CARD.steps[0].desc)).toBeNull();
-    for (const w of ['40+', 'To your door', 'On its way', 'TABLE 7', 'QR ready', 'Our album', 'Ana & Ben']) {
+    for (const w of ['40+', 'To your door']) {
       expect(screen.getByText(w, all)).toBeOnTheScreen();
-      expect(WEB_CARDS).toContain(w.replace('&', '&amp;'));
+      expect(WEB_CARDS).toContain(w);
     }
     expect(screen.getAllByText('Add a video memory', all).length).toBe(2);
   });
@@ -184,37 +182,35 @@ describe('the look', () => {
 });
 
 describe('the slides', () => {
-  const now = (card: 'albums' | 'events') => [0, 1, 2, 3, 4].find((k) => screen.getByTestId(`home-${card}-slides-dot-${k}`).props.accessibilityState?.selected);
+  const now = () => [0, 1, 2, 3, 4].find((k) => screen.getByTestId(`home-albums-slides-dot-${k}`).props.accessibilityState?.selected);
 
-  it('five each; one every 4 s; the Albums half a beat after the Events', async () => {
+  it('five slides; one every 4 s, the website\'s', async () => {
     jest.useFakeTimers();
     await render(<Start />);
-    expect([now('albums'), now('events')]).toEqual([0, 0]);
+    expect(now()).toBe(0);
+    // One card, so no half beat (that kept the website's two cards from sliding together).
     await act(async () => { jest.advanceTimersByTime(SLIDE_MS); });
-    expect([now('albums'), now('events')]).toEqual([0, 1]);
-    await act(async () => { jest.advanceTimersByTime(SLIDE_MS / 2); });
-    expect([now('albums'), now('events')]).toEqual([1, 1]);
+    expect(now()).toBe(1);
     await act(async () => { jest.advanceTimersByTime(SLIDE_MS * 4); });
-    expect([now('albums'), now('events')]).toEqual([0, 0]);
+    expect(now()).toBe(0);
     expect(WEB_CARDS).toContain('export const SLIDE_MS = 4000;');
-    expect(WEB_CARDS).toContain('startDelayMs={SLIDE_MS / 2}');
   });
 
-  it('a dot jumps there; "Here\'s how ›" goes to step 1; Pause holds them, Play goes on', async () => {
+  it('"Here\'s how ›" goes to step 1; a dot jumps there; Pause holds them, Play goes on', async () => {
     jest.useFakeTimers();
     await render(<Start />);
+    await fireEvent.press(screen.getByTestId('home-albums-how'));
+    expect(now()).toBe(1);
     await fireEvent.press(screen.getByTestId('home-albums-slides-dot-3'));
-    expect(now('albums')).toBe(3);
-    await fireEvent.press(screen.getByTestId('home-events-how'));
-    expect(now('events')).toBe(1);
+    expect(now()).toBe(3);
     await fireEvent.press(screen.getByTestId('home-albums-slides-pause'));
     expect(screen.getByTestId('home-albums-slides-pause')).toHaveTextContent(HOME.play);
     expect(screen.getByLabelText(HOME.playSlides(ALBUMS_CARD.label))).toBeOnTheScreen();
     await act(async () => { jest.advanceTimersByTime(SLIDE_MS * 3); });
-    expect(now('albums')).toBe(3);
+    expect(now()).toBe(3);
     await fireEvent.press(screen.getByTestId('home-albums-slides-pause'));
     await act(async () => { jest.advanceTimersByTime(SLIDE_MS); });
-    expect(now('albums')).toBe(4);
+    expect(now()).toBe(4);
   });
 
   it('the words wrap inside the slide (beta testers 2026-11-04: lines ran past the card\'s right edge on the phone)', async () => {
@@ -242,11 +238,11 @@ describe('the slides', () => {
     const track = screen.getByTestId('home-albums-slides-track');
     await fireEvent(track, 'scrollBeginDrag');
     await act(async () => { jest.advanceTimersByTime(SLIDE_MS * 3); });
-    expect(now('albums')).toBe(0);
+    expect(now()).toBe(0);
     await fireEvent(screen.getByTestId('home-albums-slides').children[0] as never, 'layout', { nativeEvent: { layout: { width: 300, height: 150 } } });
     await fireEvent(track, 'scrollEndDrag');
     await fireEvent(track, 'momentumScrollEnd', { nativeEvent: { contentOffset: { x: 600, y: 0 } } });
-    expect(now('albums')).toBe(2);
+    expect(now()).toBe(2);
   });
 });
 
@@ -273,27 +269,25 @@ describe('the buttons', () => {
     expect(CARDS).toContain('<View style={styles.cardButtons}>{children}</View>');
   });
 
-  it('Book your event › opens the website\'s Events page', async () => {
+  it('no Book your event: nothing on the screen opens the website\'s Events page', async () => {
     await render(<Start />);
-    expect(screen.getByTestId('go-events')).toHaveTextContent(`${EVENTS_CARD.cta} ›`);
-    await fireEvent.press(screen.getByTestId('go-events'));
-    expect(openUrl).toHaveBeenCalledWith(EVENTS_PAGE);
+    expect(screen.queryByTestId('go-events')).toBeNull();
+    expect(screen.queryByText(/Book your event/)).toBeNull();
+    expect(openUrl).not.toHaveBeenCalled();
   });
 });
 
 describe('signed out and signed in', () => {
-  it('signed out: Sign in at the top; the menu has Sign in and Events', async () => {
+  it('signed out: Sign in at the top; the menu has Sign in, and no Events', async () => {
     await render(<Start />);
     await fireEvent.press(screen.getByTestId('go-sign-in'));
     expect(router.push).toHaveBeenCalledWith('/sign-in');
     expect(screen.queryByTestId('home-account-card')).toBeNull();
     await fireEvent.press(screen.getByTestId('home-menu'));
     expect(screen.getByTestId('menu-sign-in')).toHaveTextContent(HOME.signIn);
-    expect(screen.getByTestId('menu-events')).toHaveTextContent(EVENTS_CARD.label);
+    expect(screen.queryByTestId('menu-events')).toBeNull();
     expect(screen.queryByTestId('menu-orders')).toBeNull();
-    await fireEvent.press(screen.getByTestId('menu-events'));
-    expect(openUrl).toHaveBeenCalledWith(EVENTS_PAGE);
-    expect(screen.queryByTestId('home-menu-page')).toBeNull();
+    expect(openUrl).not.toHaveBeenCalled();
   });
 
   it('signed in: no Sign in; the account\'s places in their card and in the menu', async () => {
@@ -307,7 +301,8 @@ describe('signed out and signed in', () => {
     }
     await fireEvent.press(screen.getByTestId('home-menu'));
     expect(screen.getAllByText(HOME.signedInAs('maria@example.test')).length).toBe(2);
-    for (const id of ['menu-albums', 'menu-orders', 'menu-profile', 'menu-memories', 'menu-events', 'menu-sign-out']) expect(screen.getByTestId(id)).toBeOnTheScreen();
+    for (const id of ['menu-albums', 'menu-orders', 'menu-profile', 'menu-memories', 'menu-sign-out']) expect(screen.getByTestId(id)).toBeOnTheScreen();
+    expect(screen.queryByTestId('menu-events')).toBeNull();
     await fireEvent.press(screen.getByTestId('menu-orders'));
     expect(router.push).toHaveBeenLastCalledWith('/orders');
     expect(screen.queryByTestId('home-menu-page')).toBeNull();
@@ -328,7 +323,7 @@ describe('the movement', () => {
   }
 
   it('the website\'s timings', () => {
-    for (const [cls, ms] of [['home-float', MOTION_MS.float], ['home-scan', MOTION_MS.scan], ['home-twinkle', MOTION_MS.twinkle], ['home-fly', MOTION_MS.fly], ['home-rise', MOTION_MS.rise], ['home-pop', MOTION_MS.pop], ['home-drive', MOTION_MS.drive]] as const) {
+    for (const [cls, ms] of [['home-float', MOTION_MS.float], ['home-twinkle', MOTION_MS.twinkle], ['home-rise', MOTION_MS.rise], ['home-pop', MOTION_MS.pop], ['home-drive', MOTION_MS.drive]] as const) {
       expect(CSS).toMatch(new RegExp(`\\.${cls} \\{ animation: \\w+ ${ms / 1000}s `));
     }
     expect(CSS).toContain(`animation: ken-burns ${MOTION_MS.kenBurns / 1000}s ease-in-out infinite alternate;`);

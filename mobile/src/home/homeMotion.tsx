@@ -1,8 +1,10 @@
 /* ══════════════════════════════════════════════════════════════════════════
    THE START SCREEN'S LITTLE MOVEMENTS: the website's home animations
-   (src/index.css .home-float, .home-twinkle, .home-scan, .home-fly,
-   .home-rise, .home-pop, .home-drive and the photo's slow .animate-ken-burns),
-   same timings. One clock each, shared by every picture that uses it, run on
+   (src/index.css .home-float, .home-twinkle, .home-rise, .home-pop,
+   .home-drive and the photo's slow .animate-ken-burns), same timings. The
+   website's .home-scan and .home-fly move only its Events card's pictures,
+   which the app doesn't have (owner, 2026-11-16), so they don't run here.
+   One clock each, shared by every picture that uses it, run on
    the native side (Animated, native driver), and only while the start screen
    is on top. With the phone's "reduce motion" on they hold still, in the
    pose the website holds them in (prefers-reduced-motion).
@@ -11,13 +13,13 @@ import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode }
 import { Animated, Easing } from 'react-native';
 
 /** Each clock's length, from src/index.css. */
-export const MOTION_MS = { float: 3200, twinkle: 1800, scan: 1400, fly: 2200, rise: 1500, pop: 2600, drive: 1600, kenBurns: 20000 } as const;
+export const MOTION_MS = { float: 3200, twinkle: 1800, rise: 1500, pop: 2600, drive: 1600, kenBurns: 20000 } as const;
 type Clock = keyof typeof MOTION_MS;
 /** These go there and back, easing each way: `alternate` in the CSS (each
  *  way the whole length), or a 0% = 100% keyframe (each way half of it).
  *  The rest start over. */
 const THERE_AND_BACK: Partial<Record<Clock, number>> = {
-  scan: MOTION_MS.scan, drive: MOTION_MS.drive, kenBurns: MOTION_MS.kenBurns,
+  drive: MOTION_MS.drive, kenBurns: MOTION_MS.kenBurns,
   float: MOTION_MS.float / 2, twinkle: MOTION_MS.twinkle / 2,
 };
 
@@ -29,10 +31,6 @@ export interface HomeMotion {
   float: AnimatedStyle;
   /** Swells and fades (the sparkles). */
   twinkle: AnimatedStyle;
-  /** The scan line, 18% to 76% of the phone's 100 px screen. */
-  scan: AnimatedStyle;
-  /** A photo flies into the album. */
-  fly: AnimatedStyle;
   /** The upload arrow rises. */
   rise: AnimatedStyle;
   /** The QR / tick pops in. */
@@ -50,16 +48,6 @@ function poses(v: Record<Clock, Animated.Value>): Omit<HomeMotion, 'still'> {
       opacity: v.twinkle.interpolate({ inputRange: [0, 1], outputRange: [0.55, 1] }),
       transform: [{ scale: v.twinkle.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1.1] }) }],
     },
-    scan: { transform: [{ translateY: v.scan.interpolate({ inputRange: [0, 1], outputRange: [18, 76] }) }] },
-    fly: {
-      opacity: v.fly.interpolate({ inputRange: [0, 0.25, 0.75, 1], outputRange: [0, 1, 1, 0] }),
-      transform: [
-        { translateX: v.fly.interpolate({ inputRange: [0, 0.75, 1], outputRange: [-58, 0, 0] }) },
-        { translateY: v.fly.interpolate({ inputRange: [0, 0.75, 1], outputRange: [22, 0, 0] }) },
-        { scale: v.fly.interpolate({ inputRange: [0, 0.75, 1], outputRange: [0.45, 0.75, 0.75] }) },
-        { rotate: v.fly.interpolate({ inputRange: [0, 0.75, 1], outputRange: ['-14deg', '6deg', '6deg'] }) },
-      ],
-    },
     rise: {
       opacity: v.rise.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 0] }),
       transform: [{ translateY: v.rise.interpolate({ inputRange: [0, 1], outputRange: [10, -12] }) }],
@@ -74,8 +62,6 @@ function poses(v: Record<Clock, Animated.Value>): Omit<HomeMotion, 'still'> {
 const STILL: Omit<HomeMotion, 'still'> = {
   float: {},
   twinkle: {},
-  scan: { transform: [{ translateY: 46 }] },
-  fly: { transform: [{ scale: 0.75 }, { rotate: '6deg' }] },
   rise: {},
   pop: {},
   drive: {},

@@ -1,15 +1,16 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   THE START SCREEN'S TWO CARDS, the website's home cards
+   THE START SCREEN'S CARD, the website's Albums home card
    (src/pages/home/HomeCards.tsx, the owner's board "Home with Albums and
-   Events"), drawn the same way at the same sizes (owner, 2026-11-03, the
+   Events"), drawn the same way at the same size (owner, 2026-11-03, the
    1.x and 2.0 start screens side by side: "1.x looks more 2.0 than 2.0").
+   The website's Events card is not in the app (owner, 2026-11-16: "Remove
+   event completely from there").
 
-   Each card: its label and headline stay put, its middle plays the steps by
+   The card: its label and headline stay put, its middle plays the steps by
    itself (a slide every 4 s, dots to jump, Pause/Play), its button stays
-   put. The Albums slides move half a beat after the Events ones, so the two
-   never slide together. A finger swipes them and, while it is on them, holds
-   the clock. With "reduce motion" on the slides still change every 4 s, but
-   jump instead of sliding, and the pictures hold still.
+   put. A finger swipes them and, while it is on them, holds the clock. With
+   "reduce motion" on the slides still change every 4 s, but jump instead of
+   sliding, and the pictures hold still.
 
    Album card's button: "Start Creating" (the website's); with an album in
    progress, "Continue my album" and "Start a new album" instead, as before.
@@ -19,13 +20,12 @@ import { Animated, Image, type ImageSourcePropType, Pressable, ScrollView, type 
 import { GOLD, VideoMark } from '../editor/core/GoldButton';
 import { useHomeMotion } from './homeMotion';
 import { useType } from './homeFonts';
-import { ArrowUp, Calendar, Sparkle, Tick, Truck } from './homeIcons';
-import { ALBUMS_CARD, EVENTS_CARD, HOME, type HomeStep } from './homeWords';
+import { ArrowUp, Sparkle, Truck } from './homeIcons';
+import { ALBUMS_CARD, HOME, type HomeStep } from './homeWords';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const FAMILY: ImageSourcePropType = require('../../assets/home/family.jpg');
 const TRAVEL: ImageSourcePropType = require('../../assets/home/travel.jpg');
-const WEDDING: ImageSourcePropType = require('../../assets/home/wedding.jpg');
 const MEGY: ImageSourcePropType = require('../../assets/home/megy.png');
 /* eslint-enable @typescript-eslint/no-require-imports */
 
@@ -61,13 +61,11 @@ const hidden = { accessibilityElementsHidden: true, importantForAccessibility: '
 
 /* ── The carousel ─────────────────────────────────────────────────────── */
 
-export function StepCarousel({ name, slides, startDelayMs = 0, testID }: {
+export function StepCarousel({ name, slides, testID }: {
   /** "Megyprints Albums", for the dots' and Pause's names. */
   name: string;
   /** The slides; each gets `go(k)` for an in-slide "Here's how ›". */
   slides: (go: (k: number) => void) => ReactNode[];
-  /** The first advance waits this much longer (the half beat). */
-  startDelayMs?: number;
   testID: string;
 }) {
   const { still } = useHomeMotion();
@@ -77,7 +75,7 @@ export function StepCarousel({ name, slides, startDelayMs = 0, testID }: {
   const [paused, setPaused] = useState(false);
   // A finger on the slides holds the clock.
   const [held, setHeld] = useState(false);
-  // A jump restarts the clock (no half beat after the first run).
+  // A jump restarts the clock.
   const [epoch, setEpoch] = useState(0);
   const scroller = useRef<ScrollViewInstance>(null);
   const go = useCallback((k: number) => { setI(k); setEpoch((e) => e + 1); }, []);
@@ -90,9 +88,9 @@ export function StepCarousel({ name, slides, startDelayMs = 0, testID }: {
     const first = setTimeout(() => {
       setI((k) => (k + 1) % n);
       tick = setInterval(() => setI((k) => (k + 1) % n), SLIDE_MS);
-    }, SLIDE_MS + (epoch === 0 ? startDelayMs : 0));
+    }, SLIDE_MS);
     return () => { clearTimeout(first); if (tick) clearInterval(tick); };
-  }, [paused, held, n, epoch, startDelayMs]);
+  }, [paused, held, n, epoch]);
 
   useEffect(() => {
     if (width > 0) scroller.current?.scrollTo({ x: i * width, animated: !still });
@@ -285,12 +283,9 @@ function StepText({ n, step, gold = false }: { n: number; step: HomeStep; gold?:
 /** The fan of photos on the first slide: x, y, turn, crop. */
 type Fanned = [number, number, number, Crop];
 const ALBUM_FAN: Fanned[] = [[6, 46, -14, { width: 349.6, left: -252, top: -172.5 }], [70, 46, 13, { width: 362.9, left: -196.2, top: -153.9 }], [38, 30, -2, { width: 229.4, left: -52.4, top: -115.2 }]];
-const EVENT_FAN: Fanned[] = [[4, 50, -15, { width: 401, left: -216.5, top: -270.8 }], [72, 48, 14, { width: 372.4, left: -267.7, top: -270.1 }], [38, 28, -2, { width: 362.9, left: -196.2, top: -153.9 }]];
-/** Where each fanned photo's little phone sits (Events). */
-const FAN_PHONES: ViewStyle[] = [{ left: -6, top: -8 }, { right: -6, top: -8 }, { left: 19, top: -14 }];
 
 /** The hook slide: the card's line and "Here's how ›", a fan of photos. */
-function HookSlide({ text, how, onHow, phones = false, testID }: { text: string; how: string; onHow: () => void; phones?: boolean; testID: string }) {
+function HookSlide({ text, how, onHow, testID }: { text: string; how: string; onHow: () => void; testID: string }) {
   const t = useType();
   const m = useHomeMotion();
   const w = useContext(SlideWidth);
@@ -304,10 +299,9 @@ function HookSlide({ text, how, onHow, phones = false, testID }: { text: string;
       </View>
       <View {...hidden} style={styles.fan}>
         <Animated.View style={[StyleSheet.absoluteFill, m.float]}>
-          {(phones ? EVENT_FAN : ALBUM_FAN).map(([x, y, rot, c], k) => (
+          {ALBUM_FAN.map(([x, y, rot, c], k) => (
             <View key={k} style={{ position: 'absolute', left: x, top: y, transform: [{ rotate: `${rot}deg` }] }}>
               <Photo src={FAMILY} w={54} h={64} c={c} radius={3} shadow={k === 2 ? RING_DEEP : RING} />
-              {phones && <View style={[styles.fanPhone, FAN_PHONES[k]]} />}
             </View>
           ))}
         </Animated.View>
@@ -408,120 +402,6 @@ function AlbumsShip() {
   );
 }
 
-/* ── The Events slides ────────────────────────────────────────────────── */
-
-function EventsBook() {
-  const t = useType();
-  const m = useHomeMotion();
-  return (
-    <Scene>
-      <Picture>
-        <View style={{ position: 'absolute', left: 40, top: 12, transform: [{ rotate: '-6deg' }] }}>
-          <Animated.View style={m.float}>
-            <Phone w={70} h={126}>
-              <View style={styles.eventScreen}>
-                <Text style={[t.displayItalic, styles.couple]}>{'Ana & Ben'}</Text>
-                <FakeQr seed={7} cell={2} />
-                <View style={styles.readyChip}>
-                  <Tick size={7} color="#2E7D4A" stroke={1.4} />
-                  <Text style={[t.bodyBold, styles.readyText]}>QR ready</Text>
-                </View>
-              </View>
-            </Phone>
-          </Animated.View>
-        </View>
-        <Twinkle x={112} y={6} size={22} color={INK.sparkleGold} />
-        <Twinkle x={24} y={104} size={14} color={INK.peach} />
-      </Picture>
-      <StepText n={1} step={EVENTS_CARD.steps[0]} />
-    </Scene>
-  );
-}
-
-/** The four corners of the camera's frame on the scanning phone. */
-const CORNERS: ViewStyle[] = [
-  { left: 1, top: 1, borderTopWidth: 2.4, borderLeftWidth: 2.4 },
-  { left: 27, top: 1, borderTopWidth: 2.4, borderRightWidth: 2.4 },
-  { left: 27, top: 37, borderBottomWidth: 2.4, borderRightWidth: 2.4 },
-  { left: 1, top: 37, borderBottomWidth: 2.4, borderLeftWidth: 2.4 },
-];
-
-function EventsScan() {
-  const t = useType();
-  const m = useHomeMotion();
-  return (
-    <Scene>
-      <Picture>
-        <View style={styles.table} />
-        <View style={styles.tableCard}>
-          <FakeQr seed={23} cell={2} />
-          <Text style={[t.bodyBold, styles.tableText]}>TABLE 7</Text>
-        </View>
-        <View style={{ position: 'absolute', left: 80, top: 10, transform: [{ rotate: '9deg' }] }}>
-          <View style={styles.scanPhone}>
-            <View style={styles.scanScreen}>
-              <View style={styles.scanQr}><FakeQr seed={23} cell={1} /></View>
-              <View style={styles.scanFrame}>
-                {CORNERS.map((c, k) => <View key={k} style={[styles.corner, c]} />)}
-              </View>
-              <Animated.View style={[styles.scanLine, m.scan]} />
-            </View>
-          </View>
-        </View>
-      </Picture>
-      <StepText n={2} step={EVENTS_CARD.steps[1]} />
-    </Scene>
-  );
-}
-
-const GUEST_PHONES: [number, number, number][] = [[4, 8, 0], [22, 54, 3], [4, 100, 2]];
-
-function EventsCollect() {
-  const t = useType();
-  const m = useHomeMotion();
-  return (
-    <Scene>
-      <Picture>
-        {GUEST_PHONES.map(([x, y, k]) => {
-          const r = region(k);
-          return (
-            <View key={k} style={[styles.guestPhone, { left: x, top: y }]}>
-              <Photo src={FAMILY} w={26} h={40} c={crop(26, 40, r[0], r[1], r[2], r[3])} radius={5} />
-            </View>
-          );
-        })}
-        <View style={styles.album}>
-          <View style={styles.albumSpine} />
-          <Text style={[t.displayItalicLight, styles.albumTitle]}>Our album</Text>
-        </View>
-        <View style={{ position: 'absolute', left: 86, top: 30, transformOrigin: 'top left', transform: [{ rotate: '-8deg' }, { scale: 0.75 }] }}>
-          <Photo src={FAMILY} w={54} h={64} c={{ width: 349.6, left: -252, top: -172.5 }} radius={3} shadow={RING} />
-        </View>
-        <Animated.View style={[{ position: 'absolute', left: 92, top: 26, transformOrigin: 'top left' }, m.fly]}>
-          <Photo src={FAMILY} w={54} h={64} c={{ width: 401, left: -216.5, top: -270.8 }} radius={3} shadow={RING} />
-        </Animated.View>
-      </Picture>
-      <StepText n={3} step={EVENTS_CARD.steps[2]} />
-    </Scene>
-  );
-}
-
-function EventsPrint() {
-  const m = useHomeMotion();
-  return (
-    <Scene>
-      <Picture>
-        <Animated.View style={[{ position: 'absolute', left: 18, top: 12 }, m.float]}>
-          <Photo src={WEDDING} w={112} h={112} c={{ width: 154.4, left: -21.6, top: -46.6 }} radius={8} shadow="0 16px 28px rgba(45, 30, 20, 0.35)" style={{ transform: [{ rotate: '-3deg' }] }} />
-        </Animated.View>
-        <Animated.View style={[styles.doneBadge, m.pop]}><Tick size={15} color="#FFFFFF" stroke={2.6} /></Animated.View>
-        <TruckChip label="On its way" x={56} y={116} />
-      </Picture>
-      <StepText n={4} step={EVENTS_CARD.steps[3]} />
-    </Scene>
-  );
-}
-
 /* ── The cards ────────────────────────────────────────────────────────── */
 
 function CardShell({ children, testID }: { children: ReactNode; testID: string }) {
@@ -535,7 +415,7 @@ export function AlbumsCard({ children }: { children: ReactNode }) {
     <CardShell testID="home-albums-card">
       <Text style={[t.bodyBold, styles.label]}>{ALBUMS_CARD.label.toUpperCase()}</Text>
       <Text style={[t.display, styles.title]} accessibilityRole="header">{ALBUMS_CARD.title}</Text>
-      <StepCarousel name={ALBUMS_CARD.label} testID="home-albums-slides" startDelayMs={SLIDE_MS / 2} slides={(go) => [
+      <StepCarousel name={ALBUMS_CARD.label} testID="home-albums-slides" slides={(go) => [
         <HookSlide key="hook" text={ALBUMS_CARD.hook} how={ALBUMS_CARD.how} onHow={() => go(1)} testID="home-albums-how" />,
         <AlbumsUpload key="1" />,
         <AlbumsDesign key="2" />,
@@ -559,51 +439,22 @@ export function StartCreating({ label = ALBUMS_CARD.cta, onPress, testID, sparkl
   );
 }
 
-/** An outlined button in the cards ("Book your event", "Start a new album"). */
-export function CardButton({ label, onPress, testID, icon, tall = true }: { label: string; onPress: () => void; testID: string; icon?: ReactNode; tall?: boolean }) {
+/** An outlined button in the cards ("Start a new album"). */
+export function CardButton({ label, onPress, testID, tall = true }: { label: string; onPress: () => void; testID: string; tall?: boolean }) {
   const t = useType();
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label} testID={testID}
       style={({ pressed }) => [styles.outlined, !tall && styles.outlinedShort, pressed && styles.pressed]}>
-      {icon}
       <Text style={[t.bodyBold, styles.outlinedText, !tall && styles.outlinedTextShort]}>{label}</Text>
     </Pressable>
-  );
-}
-
-export function EventsCard({ onBook }: { onBook: () => void }) {
-  const t = useType();
-  return (
-    <CardShell testID="home-events-card">
-      <View style={styles.labelRow}>
-        <View style={styles.newBadge}><Text style={[t.bodyBold, styles.newText]}>{HOME.newBadge.toUpperCase()}</Text></View>
-        <Text style={[t.bodyBold, styles.label]}>{EVENTS_CARD.label.toUpperCase()}</Text>
-      </View>
-      <Text style={[t.display, styles.title]} accessibilityRole="header">{EVENTS_CARD.title}</Text>
-      <StepCarousel name={EVENTS_CARD.label} testID="home-events-slides" slides={(go) => [
-        <HookSlide key="hook" text={EVENTS_CARD.body} how={EVENTS_CARD.how} onHow={() => go(1)} phones testID="home-events-how" />,
-        <EventsBook key="1" />,
-        <EventsScan key="2" />,
-        <EventsCollect key="3" />,
-        <EventsPrint key="4" />,
-      ]} />
-      <View style={styles.cardButtons}>
-        <Text style={[t.body, styles.who]}>{EVENTS_CARD.who}</Text>
-        <CardButton label={`${EVENTS_CARD.cta} ›`} onPress={onBook} testID="go-events" icon={<Calendar size={18} color={INK.label} />} />
-      </View>
-    </CardShell>
   );
 }
 
 const styles = StyleSheet.create({
   card: { backgroundColor: '#FFFFFF', borderRadius: 22, padding: 16, paddingBottom: 14, gap: 8, boxShadow: '0 16px 40px rgba(0, 0, 0, 0.2)' },
   label: { fontSize: 11, letterSpacing: 1.1, color: INK.label },
-  labelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  newBadge: { backgroundColor: INK.peach, borderRadius: 999, paddingHorizontal: 6, paddingVertical: 2 },
-  newText: { fontSize: 11, letterSpacing: 0.9, color: '#FFFFFF' },
   title: { fontSize: 22, lineHeight: 26.4, color: INK.dark },
   cardButtons: { gap: 8, marginTop: 2 },
-  who: { fontSize: 12, lineHeight: 17, textAlign: 'center', color: INK.soft },
 
   region: { borderRadius: 16, overflow: 'hidden' },
   dots: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: 32, marginTop: 4 },
@@ -629,7 +480,6 @@ const styles = StyleSheet.create({
   hookLine: { fontSize: 13, lineHeight: 19, color: INK.body },
   how: { fontSize: 13, color: INK.label },
   fan: { marginLeft: 10, width: 136, height: 150 },
-  fanPhone: { position: 'absolute', width: 16, height: 24, borderRadius: 4, borderWidth: 2, borderColor: INK.dark, backgroundColor: '#FFFFFF' },
 
   phone: { borderRadius: 14, backgroundColor: INK.dark, padding: 4, boxShadow: '0 14px 26px rgba(45, 30, 20, 0.3)' },
   phoneScreen: { flex: 1, borderRadius: 11, overflow: 'hidden', backgroundColor: '#FFFFFF' },
@@ -644,25 +494,6 @@ const styles = StyleSheet.create({
   truckHolder: { position: 'absolute', width: 160, flexDirection: 'row' },
   truckChip: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, backgroundColor: '#FFFFFF', paddingHorizontal: 9, paddingVertical: 4, boxShadow: '0 4px 10px rgba(0, 0, 0, 0.16)' },
   truckText: { fontSize: 10, color: INK.body },
-
-  eventScreen: { alignItems: 'center', gap: 6, paddingTop: 12 },
-  couple: { fontSize: 9, color: INK.peach },
-  readyChip: { flexDirection: 'row', alignItems: 'center', gap: 2, borderRadius: 999, backgroundColor: '#E5F1E9', paddingHorizontal: 5, paddingVertical: 2 },
-  readyText: { fontSize: 7, color: '#2E7D4A' },
-  table: { position: 'absolute', left: 4, top: 112, width: 132, height: 24, borderRadius: 12, backgroundColor: '#E9D2C3' },
-  tableCard: { position: 'absolute', left: 14, top: 48, width: 56, height: 72, borderRadius: 5, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', gap: 5, boxShadow: '0 10px 18px rgba(45, 30, 20, 0.25)' },
-  tableText: { fontSize: 7, letterSpacing: 0.84, color: INK.label },
-  scanPhone: { width: 60, height: 108, borderRadius: 13, backgroundColor: INK.dark, padding: 4, boxShadow: '0 14px 26px rgba(45, 30, 20, 0.32)' },
-  scanScreen: { width: 52, height: 100, borderRadius: 10, overflow: 'hidden', backgroundColor: '#3B3633', alignItems: 'center', justifyContent: 'center' },
-  scanQr: { borderRadius: 2, backgroundColor: '#FFFFFF', padding: 3 },
-  scanFrame: { position: 'absolute', left: 8, top: 26, width: 36, height: 46 },
-  corner: { position: 'absolute', width: 8, height: 8, borderColor: '#FFFFFF' },
-  scanLine: { position: 'absolute', left: 6, right: 6, top: 0, height: 2, borderRadius: 1, backgroundColor: '#E07A52', boxShadow: '0 0 8px 2px rgba(224, 122, 82, 0.7)' },
-  guestPhone: { position: 'absolute', width: 30, height: 44, borderRadius: 7, backgroundColor: INK.dark, padding: 2, boxShadow: '0 6px 12px rgba(45, 30, 20, 0.25)' },
-  album: { position: 'absolute', left: 76, top: 52, width: 66, height: 80, borderTopLeftRadius: 4, borderBottomLeftRadius: 4, borderTopRightRadius: 7, borderBottomRightRadius: 7, backgroundColor: INK.peach, boxShadow: '0 14px 24px rgba(45, 30, 20, 0.32)' },
-  albumSpine: { position: 'absolute', left: 6, top: 0, bottom: 0, width: 2, backgroundColor: 'rgba(0, 0, 0, 0.2)' },
-  albumTitle: { position: 'absolute', left: 14, right: 6, bottom: 10, textAlign: 'center', fontSize: 9, color: INK.paper },
-  doneBadge: { position: 'absolute', left: 8, top: 4, width: 28, height: 28, borderRadius: 14, backgroundColor: INK.peach, alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(184, 92, 56, 0.45)' },
 
   start: { height: 52, borderRadius: 14, backgroundColor: INK.peach, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 6px 16px rgba(184, 92, 56, 0.3)' },
   startText: { fontSize: 16, color: '#FFFFFF' },

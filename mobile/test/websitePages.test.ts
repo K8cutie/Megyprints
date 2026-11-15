@@ -1,6 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   THE WEBSITE'S PAGES THE APP OPENS ("Message us", "Open on the website",
-   Megyprints Events). The website is a #/ app (src/main.tsx HashRouter):
+   THE WEBSITE'S PAGES THE APP OPENS ("Message us", "Open on the website").
+   Not Megyprints Events: the app has no Events (owner, 2026-11-16).
+   The website is a #/ app (src/main.tsx HashRouter):
    https://megyprints.vercel.app/contact is served the front page
    (vercel.json sends every other path to index.html), so "Message us"
    opened the home page, not Contact. Every page the app opens is a #/ page
@@ -32,7 +33,7 @@ describe('the website pages the app opens', () => {
 
   it('sitePage: the #/ address of a page the website has', () => {
     const routes = read('src/App.tsx');
-    for (const page of ['contact', 'memories', 'events']) {
+    for (const page of ['contact', 'memories']) {
       expect(routes).toContain(`<Route path="/${page}" element=`);
       expect(sitePage(page)).toBe(`https://megyprints.vercel.app/#/${page}`);
     }

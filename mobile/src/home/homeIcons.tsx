@@ -54,20 +54,6 @@ export function Truck({ color }: { color: string }) {
   );
 }
 
-/** A calendar (the "Book your event" button). */
-export function Calendar({ size, color }: { size: number; color: string }) {
-  const line = 2;
-  return (
-    <View {...hidden} style={{ width: size, height: size }}>
-      <View style={{ position: 'absolute', left: size * 0.1, top: size * 0.18, width: size * 0.8, height: size * 0.72, borderWidth: line, borderColor: color, borderRadius: 3 }} />
-      <View style={{ position: 'absolute', left: size * 0.1, top: size * 0.4, width: size * 0.8, height: line, backgroundColor: color }} />
-      <View style={{ position: 'absolute', left: size * 0.3, top: size * 0.06, width: line, height: size * 0.22, borderRadius: 1, backgroundColor: color }} />
-      <View style={{ position: 'absolute', left: size * 0.7 - line, top: size * 0.06, width: line, height: size * 0.22, borderRadius: 1, backgroundColor: color }} />
-      <View style={{ position: 'absolute', left: size * 0.5 - 2.5, top: size * 0.56, width: 5, height: 5, borderRadius: 1, backgroundColor: color, transform: [{ rotate: '45deg' }] }} />
-    </View>
-  );
-}
-
 /** The menu button's three lines (the website's lucide Menu, 24 px). */
 export function MenuBars({ color }: { color: string }) {
   const bar: ViewStyle = { width: 20, height: 2.2, borderRadius: 1.1, backgroundColor: color };

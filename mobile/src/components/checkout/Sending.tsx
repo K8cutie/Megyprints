@@ -24,14 +24,12 @@ import { PlaceProgressBar } from './PlaceProgressBar';
 /** The checkout screen's words for an error with none of its own. */
 const SOMETHING_WRONG = 'Something went wrong placing your order.';
 
-export function Sending({ plan, album, cover, material, text, placed, sent, bookingNumber = null, onOrder, onSent, onFailed }: {
+export function Sending({ plan, album, cover, material, text, placed, sent, onOrder, onSent, onFailed }: {
   plan: PlaceOrderPlan; album: CheckoutAlbum; cover: CoverType; material: MaterialType; text: PageText; placed: PlacedOrder | null;
   /** The files already sent (sentFiles.ts): not made or sent again. */
   sent?: SentFiles;
-  /** An event album its booking pays for: the booking's number (the notification says it). */
-  bookingNumber?: string | null;
   onOrder: (o: PlacedOrder) => void;
-  onSent: (r: { order: PlacedOrder; paidByTester: boolean; paidByBooking?: boolean }) => void;
+  onSent: (r: { order: PlacedOrder; paidByTester: boolean }) => void;
   onFailed: (e: unknown) => void;
 }) {
   useKeepAwake('megy-place-order');
@@ -65,7 +63,7 @@ export function Sending({ plan, album, cover, material, text, placed, sent, book
       const { sendFromPhone } = require('../../lib/checkout/phoneSend') as typeof import('../../lib/checkout/phoneSend');
       sendFromPhone({ plan, album, cover, material, text, placed, sent, onStep, onOrder: (o) => handlers.current.onOrder(o) })
         .then(async (r) => {
-          await k.sent(r.order, r.paidByTester, r.paidByBooking ? bookingNumber : null);
+          await k.sent(r.order, r.paidByTester);
           if (live) handlers.current.onSent(r);
         })
         .catch(async (e: unknown) => {

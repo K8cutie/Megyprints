@@ -97,7 +97,7 @@ working sessions.
 | **3** | Album steps (Name → Size → Photos → Cover), Make my album, preview with page turn | Same photos + same size give **the same pages** as the website (the page plan is shared code, so they must match exactly) | 2 |
 | **4** | Editor: swap photos, move/zoom a photo in its box, change layout, words, colours, undo | An album edited in the app opens the same on the website, and back | 3–4 |
 | **5** | Checkout and print files made on the phone | **Golden-page test:** every page of test albums, drawn by the app, compared pixel by pixel with the website's print files; then **one real printed test album** from the shop, checked by the owner | 3 + shop time |
-| **6** | QR memories, Orders, Memories, Events, Share | A QR on a printed page opens its memory; app orders match the admin Orders page | 2 |
+| **6** | QR memories, Orders, Memories, Share (Events taken out of the app on 2026-11-16: see "No Events in the app") | A QR on a printed page opens its memory; app orders match the admin Orders page | 2 |
 | **7** | Switch 1.x → 2.0 on Play | See section 6 | 1 + Google review |
 
 ### What 0b really involves (found by the Phase 0a check)
@@ -2968,6 +2968,8 @@ start with any other).
 
 ## Phase 6: Megyprints Events, and the website's pages (2026-11-02, `feat/port-events-link`)
 
+(The Events link below was taken out on 2026-11-16: see "No Events in the app".)
+
 - Events are booked and run on the website (guests take part by scanning
   the event's QR; nothing to download). The start screen has the website's
   "Megyprints Events", which opens the website's Events page
@@ -3021,7 +3023,8 @@ video steps, My Memories' Replace video and Delete), on the phone:
   (`feat/port-hosting-term`): the website's term buttons ("How long should
   your memories stay live?", the schedule's tiers, the included one first),
   priced and stored on the order (`hosting_years`).
-- **An event's album at checkout** (`feat/port-event-album`,
+- **An event's album at checkout** (taken out on 2026-11-16: see "No
+  Events in the app") (`feat/port-event-album`,
   `src/lib/events`): the website's "another device" way. Checkout offers
   the host's bookings still waiting for their album ("Use booking EV-… for
   this album"); the booking's deal card says whether it pays (the balance
@@ -3324,7 +3327,8 @@ buttons. Now it is the website's home at phone width (`src/app/index.tsx`,
 - the albums photo behind it all under the website's veil, slowly zooming
   (`assets/home/hero.jpg`, the website's `hero-albums.jpg` cut to its middle
   for an upright phone, 150 KB); "Megy · Prints" and a menu over it;
-- the Albums and Events cards (`HomeCards.tsx`, the website's
+- the Albums and Events cards (the Events card taken out on 2026-11-16: see
+  "No Events in the app") (`HomeCards.tsx`, the website's
   `src/pages/home/HomeCards.tsx`): label, Playfair headline, five slides
   each with the same pictures at the same sizes (a slide every 4 s, Albums
   half a beat later, dots, Pause/Play, swipe), "Start Creating" and "Book
@@ -4462,6 +4466,34 @@ with a +08:00 zone tag.
 
 (The line about the making screen's count was taken out after the 2026-11-09 walk: the
 count needs the phone's photo check, which is not in the app yet.)
+
+## No Events in the app (2026-11-16, `feat/port-remove-events`)
+
+Owner, 2026-11-16: "Remove event completely from there i want to relocate it
+or make it a feature available only to affiliates specifically to event
+planners travel agencies etc". The app is for making albums. Megyprints
+Events stays on the website as it is, until it moves somewhere of its own.
+
+What the customer sees in the app now:
+
+- **The start screen has the Albums card only.** No Events card, no "New"
+  badge, no "Book your event ›", and no "Megyprints Events" in the menu
+  (signed in or out). The Albums slides change every 4 s from the first
+  one (the half beat only kept the two cards from sliding together).
+- **Checkout is a normal album checkout.** It no longer reads the
+  account's event bookings, never offers "Use booking EV-… for this
+  album", and never sends `cover_order_with_booking`. A host with a booking
+  orders the event's album on the website, as before.
+
+Taken out with it: `src/lib/events.ts`, `src/lib/events/` (the deal mirror,
+the phone's album-to-booking links), the Events slides, words, the
+calendar icon, the wedding photo (`assets/home/wedding.jpg`), the two
+start-screen movements only those slides used (scan, fly), the event step
+of the order sender (`booking`, `paidByBooking`) and its notification line,
+and `test/eventsLink.test.tsx` and `test/eventDeal.test.ts`. The website,
+its Events pages and the database are unchanged. `test/homeLook.test.tsx`
+and `test/checkoutRealAlbum.test.tsx` now fail if Events comes back into
+the app.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
