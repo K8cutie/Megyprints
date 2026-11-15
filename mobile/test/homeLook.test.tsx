@@ -54,6 +54,8 @@ jest.mock('../src/builder/BuilderProvider', () => ({
 jest.mock('../src/builder/albumFlow', () => ({ albumInProgress: () => mockState.inProgress, resumeRoute: () => '/photos', startNewNote: () => '' }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ draft: { photos: [] }, clear: jest.fn() }) }));
 jest.mock('../modules/photo-files', () => ({ releasePickedFiles: jest.fn(async () => 0) }));
+// The look with Events on, as built; off is test/eventsLink.test.tsx.
+jest.mock('../src/lib/events', () => ({ ...jest.requireActual('../src/lib/events'), EVENTS_ON: true }));
 
 const REPO = path.resolve(__dirname, '..', '..');
 const read = (f: string) => fs.readFileSync(path.join(REPO, f), 'utf8').replace(/\r\n/g, '\n');

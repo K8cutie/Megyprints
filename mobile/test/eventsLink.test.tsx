@@ -27,12 +27,41 @@ jest.mock('../src/builder/BuilderProvider', () => ({
 jest.mock('../src/builder/albumFlow', () => ({ albumInProgress: () => false, resumeRoute: () => '/', startNewNote: () => '' }));
 jest.mock('../src/lib/draftStore', () => ({ useDraft: () => ({ draft: { photos: [] }, clear: jest.fn() }) }));
 jest.mock('../modules/photo-files', () => ({ releasePickedFiles: jest.fn(async () => 0) }));
+// Events on (as built) or off (owner, 2026-11-16: lib/events.ts EVENTS_ON), per test.
+// A getter (defined, not spread: a spread would read it once, too early).
+const mockEvents = { on: true };
+jest.mock('../src/lib/events', () => {
+  const m = { ...jest.requireActual('../src/lib/events') };
+  Object.defineProperty(m, 'EVENTS_ON', { get: () => mockEvents.on, enumerable: true });
+  return m;
+});
 
 let openUrl: jest.SpyInstance;
-beforeEach(() => { openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never); });
+beforeEach(() => { mockEvents.on = true; openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(true as never); });
 afterEach(() => openUrl.mockRestore());
 
-describe('Megyprints Events', () => {
+describe('while Events is off (owner, 2026-11-16: "for now events is disabled as a feature until we work something out")', () => {
+  it('it is off now, and nothing is deleted: turning it back on is one line', () => {
+    expect((jest.requireActual('../src/lib/events') as { EVENTS_ON: boolean }).EVENTS_ON).toBe(false);
+  });
+
+  it.each([
+    ['signed out', null],
+    ['signed in', { user: { id: 'u1', email: 'maria@example.test' } }],
+  ])('%s: no Events card, no Events in the menu, nothing opens the Events page', async (_n, session) => {
+    mockEvents.on = false;
+    mockAuth.session = session;
+    await render(<Start />);
+    expect(screen.queryByTestId('home-events-card', { includeHiddenElements: true })).toBeNull();
+    expect(screen.queryByTestId('go-events')).toBeNull();
+    await fireEvent.press(screen.getByTestId('home-menu'));
+    expect(screen.queryByTestId('menu-events')).toBeNull();
+    expect(screen.getByTestId(session ? 'menu-albums' : 'menu-sign-in')).toBeOnTheScreen();
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('Megyprints Events, while it is on', () => {
   it('the website\'s name for it and its page', () => {
     expect(read('src/pages/homeCopy.ts')).toContain(`label: '${EVENTS_LABEL}',`);
     expect(read('src/App.tsx')).toContain('<Route path="/events" element={<Events />} />');
