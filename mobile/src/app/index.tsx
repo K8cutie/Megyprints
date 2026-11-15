@@ -2,7 +2,9 @@
    THE START SCREEN, the website's home at phone width (owner, 2026-11-03:
    "1.x looks more 2.0 than 2.0"): the albums photo behind everything, gently
    zooming; "Megy · Prints" and the menu over it; the Albums and Events cards
-   (src/home/HomeCards.tsx). The app's own parts stay: Continue my album /
+   (src/home/HomeCards.tsx), the Events card and menu link only while Events
+   is on (lib/events.ts EVENTS_ON: off since 2026-11-16, the owner's "for now
+   events is disabled"). The app's own parts stay: Continue my album /
    Start a new album in the Albums card, Sign in at the top, the account's
    places in their own card when signed in, and, in the dev build only, the
    test buttons and the "Test version" note at the bottom. Under everything,
@@ -24,7 +26,7 @@ import { HomeMotionProvider, useHomeMotion } from '../home/homeMotion';
 import { HOME } from '../home/homeWords';
 import { useAuth } from '../lib/auth';
 import { buildKind } from '../lib/buildKind';
-import { EVENTS_LABEL, EVENTS_PAGE } from '../lib/events';
+import { EVENTS_LABEL, EVENTS_ON, EVENTS_PAGE } from '../lib/events';
 import { useDraft } from '../lib/draftStore';
 import { useReduceMotion } from '../lib/reduceMotion';
 
@@ -123,7 +125,8 @@ export default function Start() {
       { label: HOME.profile, onPress: () => go('/profile'), testID: 'menu-profile' },
       { label: HOME.memories, onPress: () => go('/memories'), testID: 'menu-memories' },
     ] : [{ label: HOME.signIn, onPress: () => go('/sign-in'), testID: 'menu-sign-in' }]),
-    { label: EVENTS_LABEL, onPress: openEvents, testID: 'menu-events' },
+    // Events only while it is on (lib/events.ts EVENTS_ON; off since 2026-11-16).
+    ...(EVENTS_ON ? [{ label: EVENTS_LABEL, onPress: openEvents, testID: 'menu-events' }] : []),
     ...(session ? [{ label: HOME.signOut, onPress: () => { void signOut(); }, testID: 'menu-sign-out' }] : []),
   ];
 
@@ -158,7 +161,7 @@ export default function Start() {
                   <StartCreating onPress={() => go('/album-name')} testID="make-album" />
                 )}
               </AlbumsCard>
-              <EventsCard onBook={openEvents} />
+              {EVENTS_ON && <EventsCard onBook={openEvents} />}
               {!loading && session && <AccountCard email={email} signOut={() => { void signOut(); }} />}
               {testBuild && (
                 <View style={[styles.card, styles.testCard]} testID="home-test-card">

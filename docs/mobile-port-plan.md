@@ -97,7 +97,7 @@ working sessions.
 | **3** | Album steps (Name → Size → Photos → Cover), Make my album, preview with page turn | Same photos + same size give **the same pages** as the website (the page plan is shared code, so they must match exactly) | 2 |
 | **4** | Editor: swap photos, move/zoom a photo in its box, change layout, words, colours, undo | An album edited in the app opens the same on the website, and back | 3–4 |
 | **5** | Checkout and print files made on the phone | **Golden-page test:** every page of test albums, drawn by the app, compared pixel by pixel with the website's print files; then **one real printed test album** from the shop, checked by the owner | 3 + shop time |
-| **6** | QR memories, Orders, Memories, Events, Share | A QR on a printed page opens its memory; app orders match the admin Orders page | 2 |
+| **6** | QR memories, Orders, Memories, Events (switched off since 2026-11-16: see "Events switched off in the app"), Share | A QR on a printed page opens its memory; app orders match the admin Orders page | 2 |
 | **7** | Switch 1.x → 2.0 on Play | See section 6 | 1 + Google review |
 
 ### What 0b really involves (found by the Phase 0a check)
@@ -4492,6 +4492,30 @@ count needs the phone's photo check, which is not in the app yet.)
     New:
     • When you put a photo in a frame, Megy moves it to show the faces
     </en-US>
+
+## Events switched off in the app (2026-11-16, `feat/port-remove-events`)
+
+The owner decided on 2026-11-16, in three steps:
+
+- "Remove event completely from there i want to relocate it or make it a feature available only to affiliates specifically to event planners travel agencies etc"
+- then "i dont want megyevents gone i want it to be an affiliate feature"
+- then "for now events is disabled as a feature until we work something out".
+
+The first commit on this branch deleted the app's Events code. The second commit puts it all back. Events is now **switched off, not removed**: `src/lib/events.ts` → `EVENTS_ON = false`. This is the same switch as the website's `src/lib/eventsSwitch.ts` (main, PR #290).
+
+What changes while it is off:
+
+- **Start screen:** no Events card.
+- **Menu:** no "Megyprints Events", signed in or out.
+
+Everything else is unchanged:
+
+- Checkout still takes an event's album for a booking that is already booked, as the website does.
+- The website's Events pages stay as they are.
+
+`test/eventsLink.test.tsx` checks both states. Off: no card, no menu item, nothing opens the Events page, and the switch is off. On: the card and the menu open the website's Events page. `test/homeLook.test.tsx` checks the look with Events on, as built.
+
+Turning Events back on is one line in the app and one on the website.
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
