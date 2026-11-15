@@ -15,7 +15,7 @@ import { act, createElement, useEffect } from 'react';
 import { createRoot, type Root } from 'test-renderer';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useBuilderState, type BuilderActions } from '@web/pages/builder/useBuilderState';
-import { BuilderPlatformContext } from '@web/shared/platform';
+import { BuilderPlatformContext, type FaceFinder } from '@web/shared/platform';
 import { seeded, type Scenario, type ScenarioPhoto } from '../../tools/parity/scenarios';
 import { createAppPlatform, type AppPlatform } from '../src/builder/appPlatform';
 import { fileKeyValueStore, memoryStore, type SyncFiles } from '../src/builder/deviceStore';
@@ -52,11 +52,18 @@ const nobody = {
   },
 } as unknown as SupabaseClient;
 
-function platformOn(phone: Phone, files: SyncFiles): AppPlatform {
+/** What a test can change about the made-up phone. */
+export interface BenchOptions {
+  /** The face finder (default: the app's own, which finds none in jest). */
+  faces?: FaceFinder;
+}
+
+function platformOn(phone: Phone, files: SyncFiles, opts: BenchOptions = {}): AppPlatform {
   return createAppPlatform({
     deviceStore: fileKeyValueStore(files), sessionStore: memoryStore(), inspect: phone.inspect,
     lifecycle: { onLeave: () => () => {}, onReturn: () => () => {} },
     measurer: () => null, client: nobody, useUser: () => null,
+    ...(opts.faces ? { faces: opts.faces } : {}),
   });
 }
 
@@ -87,10 +94,12 @@ function draftOf(phone: Phone, sc: Scenario): DraftPhoto[] {
   })), 1).draft.photos;
 }
 
-/** Name → Size → Photos → Cover → "Make my album", the app's steps. */
-export async function madeAlbum(sc: Scenario): Promise<AppPlatform> {
+/** Name → Size → Photos → Cover, the app's steps up to "Make my album". */
+export async function readyToMake(sc: Scenario, opts: BenchOptions = {}): Promise<AppPlatform> {
   const phone = madeUpPhone();
-  const platform = platformOn(phone, memoryFiles());
+  const platform = platformOn(phone, memoryFiles(), opts);
+  // A second album in one test: the first one is taken down first.
+  if (root) { const old = root; await act(async () => { old.unmount(); }); }
   root = createRoot();
   await act(async () => { root!.render(createElement(BuilderPlatformContext.Provider, { value: platform }, createElement(Probe))); });
   await settle();
@@ -100,6 +109,12 @@ export async function madeAlbum(sc: Scenario): Promise<AppPlatform> {
   await act(async () => { await syncPhotos(current, draftOf(phone, sc), phone.inspect, { addressOf }); });
   for (let i = 0; i < 50 && current.uploadedPhotos.some((p) => !(p.width > 0)); i++) await settle();
   await act(async () => { chooseCover(current, current.uploadedPhotos.find((p) => p.name === sc.cover)!.id); });
+  return platform;
+}
+
+/** Name → Size → Photos → Cover → "Make my album", the app's steps. */
+export async function madeAlbum(sc: Scenario, opts: BenchOptions = {}): Promise<AppPlatform> {
+  const platform = await readyToMake(sc, opts);
   const spy = jest.spyOn(Math, 'random').mockImplementation(seeded(sc.seed));
   try { await act(async () => { await makeAlbum(current); }); } finally { spy.mockRestore(); }
   await settle();

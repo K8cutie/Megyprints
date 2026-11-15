@@ -2390,16 +2390,25 @@ export function useBuilderState(): BuilderActions {
       photosPerPage == null ? Math.ceil(MIN_ALBUM_PAGES * FULL_PAGE_SHARE) : undefined);
     if (faceCands.length > 0) {
       faceCenters = {};
+      // Up to 8 s of work: shown as its own step with a count ("Finding the
+      // faces. 3 of 24"), never under "Laying out the pages" with nothing
+      // moving (owner, 2026-11-09: a slow step is fine, a felt hang is not).
+      setGenerating('faces');
+      setGeneratingCount({ done: 0, total: faceCands.length });
+      await paintFrame();
       try {
         await faces.init();
         const deadline = Date.now() + 8000;
+        let done = 0;
         for (const i of faceCands) {
           if (Date.now() > deadline) break;
           const url = pool[i]?.previewUrl;
           const c = url ? await faces.detectFaceCenter(url) : null;
           if (c) faceCenters[i] = c;
+          setGeneratingCount({ done: ++done, total: faceCands.length });
         }
       } catch { /* no faces known → least-crop order */ }
+      setGeneratingCount(null);
     }
     // SCENES (owner, 2026-11-09): photos taken within 5 minutes are one
     // scene, and a page never holds two scenes (generateAlbum SCENE_GAP_MS).
