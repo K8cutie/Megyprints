@@ -784,16 +784,33 @@ platform plugs them in where it now has "not available yet":
 `const checks = createPhoneChecks();` then `faces: checks.faces,
 photoCheck: checks.photoCheck`.
 
-**Where it runs today: only in the dev app's test screen**
-(`mobile/src/app/photo-check-lab.tsx`, dev builds only). It is ready to
-plug in, but the album flow does not use it yet: Phase 3's
-`appPlatform.ts` (branch `feat/port-phase-3`) still has
-`photoCheck.available: () => false` and a `detectFaceCenter` that answers
-null. When Phase 3 lands: put `createPhoneChecks()` into `appPlatform`
-with a test, then repeat the timing and memory runs from the real Photos
-step and "Make my album" (the face pass and face centring share one cache
-only while `StoredPhoto.url` is the same address as the photo's preview
-address, which Phase 3's `appPhotos.ts` keeps today).
+**Where it runs today (2026-11-16, branch `feat/port-face-finder`):** the
+**face finder** is in the album (`appPlatform.ts` `faces:
+createPhoneChecks().faces`): a photo put in a frame slides to its faces
+(a portrait in a square frame moves up or down to them), "Make my album"
+looks for faces before it picks the full pages ("Finding the faces. 3 of
+24", at most 8 s, then it goes on with what it found), and a video
+memory's QR goes in the corner away from the faces. The **blur check**
+(`photoCheck`) is still only on the dev app's test screen
+(`mobile/src/app/photo-check-lab.tsx`): `photoCheck.available` stays
+false in the album.
+
+**No release build found a face before this branch.** R8 (it shrinks
+release builds only) took out the constructors of ML Kit's registrars,
+which ML Kit makes by reflection, so ML Kit could not start: the log said
+`NoSuchMethodException: com.google.mlkit.vision.face.internal.FaceRegistrar.<init> []`
+and every `MegyPhotoPixels.faces` call was rejected with a
+NullPointerException. The test screen ran in debug builds, which R8 does
+not touch, so it was never seen. Fixed by a keep rule the module hands
+to the app (`modules/photo-pixels/android/consumer-rules.pro`, held by
+`test/faceModel.test.ts`). Nothing used faces in the album before, so no
+customer saw a difference.
+
+**Speed in the album, emulator, release build (2026-11-16):** one face
+search (size, ML Kit's copy, ML Kit) took 1.3 to 1.8 s with the emulator's
+memory free, about 4 s with it swapping, and about 5 s for the first one
+after the app opens (ML Kit loading). So on the emulator "Make my album"
+looks at 2 to 5 photos in its 8 s. Not yet timed on a real phone.
 
 - **Blur and repeats**: the app's native module (`mobile/modules/photo-pixels`)
   makes each photo's 800 px small copy the way the website's browser does
@@ -3040,7 +3057,8 @@ video steps, My Memories' Replace video and Delete), on the phone:
   top-right and bottom-right; page 2 the other way (the website's
   `bindingEdge`). The corner picker offers only the page's two outer
   corners and marks the binding's side; Auto takes the outer corner farthest
-  from the face (the phone finds no faces yet, so: the bottom one). The
+  from the face (before `feat/port-face-finder` the phone found no faces,
+  so: the bottom one). The
   website's album code (frozen) still allows all 4 corners, and a page
   changes sides when a page is added or taken out before it, so the app
   reads its pages through `withQrOnOuterSide` (BuilderProvider): the
@@ -4426,6 +4444,11 @@ making screen showed "Making your album", "70 photos" / "150 photos", "Looking a
 photos", "Laying out the pages", "Almost done", "Your photos stay on your phone." and was
 gone in about half a second, also with 150 photos of 12 MP. "Checking photos for blur" and
 "Finding the faces" are website-only until the phone's check is wired into the app.
+**Update 2026-11-16 (`feat/port-face-finder`):** "Finding the faces. N of M" now shows in
+the app whenever the album is short of photos that fit a full page (for example an 8x8
+of mostly portraits): the face search for the full pages, at most 8 s. Seen on the
+emulator with 45 portraits: "Finding the faces. 0 of 40". The blur count still needs
+the photo check.
 
 ### Walked on the emulator, 2026-11-09 (2.1.0 code 110 Play build over 2.0.9)
 
@@ -4462,6 +4485,11 @@ with a +08:00 zone tag.
 
 (The line about the making screen's count was taken out after the 2026-11-09 walk: the
 count needs the phone's photo check, which is not in the app yet.)
+
+### Release notes 2.1.1 (draft, only if `feat/port-face-finder` is in it: check on upload day)
+
+    New:
+    • When you put a photo in a frame, Megy moves it to show the faces
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 

@@ -7,11 +7,19 @@
      deviceStore   files, one per name, saved before setItem returns (deviceStore.ts)
      sessionStore  memory: this visit only
      photos        the Phase 2 photos by their address, never copied (appPhotos.ts)
-     faces         none for now: no on-device face library is in the app yet,
-                   so a photo is centred in its frame, as the website does when
-                   it finds no face
+     faces         Google ML Kit on the phone (lib/phonePhotoCheck.ts, the
+                   website's face rules), so the builder does what the website
+                   does with faces: a photo put in a frame slides to its faces
+                   (a portrait in a square frame moves up or down to them),
+                   "Make my album" prefers, for the full pages, photos whose
+                   faces the page's cut keeps (among those it can look at in
+                   its 8 s), and a video memory's QR goes in the corner away
+                   from the faces. No face, or no ML Kit in
+                   the build (jest, an old APK): the photo stays centred, as
+                   the website does when it finds no face
      photoCheck    not available yet (blur, repeats and closed eyes stay a
-                   website feature for now)
+                   website feature for now). The face finder above does not
+                   need it: it finds faces only when the builder asks
      lifecycle     React Native's AppState
      textMeasurer  the page renderer's Skia fonts, once they have loaded
                    (textMeasurer.ts); null until then, so nothing is said about
@@ -30,9 +38,10 @@
    `deps`, so jest builds the same platform on a made-up phone.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AppLifecycle, BuilderPlatform, KeyValueStore, TextMeasurer } from '@web/shared/platform';
+import type { AppLifecycle, BuilderPlatform, FaceFinder, KeyValueStore, TextMeasurer } from '@web/shared/platform';
 import { createThemeQuotes } from '@web/lib/themeQuotePool';
 import { albumVersionWith, signedInUserIdWith, useAlbumSyncWith } from '@web/lib/albumCloud';
+import { createPhoneChecks } from '../lib/phonePhotoCheck';
 import { createPhotoIntake, createPhotoStore, type AppPhotoStore, type InspectPhotos } from './appPhotos';
 
 export interface AppPlatformDeps {
@@ -45,6 +54,9 @@ export interface AppPlatformDeps {
   client: SupabaseClient;
   /** Who is signed in (a React hook: the app's sign-in context). */
   useUser: () => { id: string } | null;
+  /** The face finder; default: the phone's own (ML Kit, createPhoneChecks
+   *  on the native modules). Tests pass a made-up one. */
+  faces?: FaceFinder;
 }
 
 /** Tells the screens that show the occasion that the builder changed it. */
@@ -70,7 +82,7 @@ export function createAppPlatform(deps: AppPlatformDeps): AppPlatform {
     sessionStore: deps.sessionStore,
     usePhotoStore: () => photoStore,
     photos: createPhotoIntake(deps.inspect),
-    faces: { init: async () => {}, detectFaceCenter: async () => null },
+    faces: deps.faces ?? createPhoneChecks().faces,
     photoCheck: {
       available: () => false,
       facesForAllPhotos: () => false,
