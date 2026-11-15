@@ -40,3 +40,21 @@ describe("FACE_MODEL says what the native module asks ML Kit for", () => {
     expect(gradle).toContain(`"${name}:${version}"`);
   });
 });
+
+describe('ML Kit can start in a release build', () => {
+  // R8 (release builds only) removed the constructors of ML Kit's
+  // registrars, which ML Kit makes by reflection: no face was ever found in
+  // a release build up to 2.1.0 (emulator log, 2026-11-16:
+  // "NoSuchMethodException: ...FaceRegistrar.<init> []"). The module that
+  // brings ML Kit carries the rule that keeps them, to every app built with it.
+  const rules = fs.readFileSync(path.join(__dirname, '..', 'modules', 'photo-pixels', 'android', 'consumer-rules.pro'), 'utf8');
+
+  it('the module hands its keep rules to the app', () => {
+    expect(gradle).toMatch(/consumerProguardFiles\s+'consumer-rules\.pro'/);
+  });
+
+  it('every ML Kit registrar keeps its constructor', () => {
+    const live = rules.split(/\r?\n/).filter((l) => l.trim() && !l.trim().startsWith('#'));
+    expect(live).toContain('-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }');
+  });
+});
