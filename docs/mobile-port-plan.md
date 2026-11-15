@@ -4486,10 +4486,12 @@ with a +08:00 zone tag.
 (The line about the making screen's count was taken out after the 2026-11-09 walk: the
 count needs the phone's photo check, which is not in the app yet.)
 
-### Release notes 2.1.1 (draft, only if `feat/port-face-finder` is in it: check on upload day)
+### Release notes 2.1.1 (code 111: 2.1.0 + `feat/port-face-finder`; check against the app on upload day)
 
+    <en-US>
     New:
     • When you put a photo in a frame, Megy moves it to show the faces
+    </en-US>
 
 ## Appendix: what the Phase 0a check left out, and why (2026-10-28)
 
