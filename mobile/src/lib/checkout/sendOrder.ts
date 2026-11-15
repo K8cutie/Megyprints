@@ -42,6 +42,7 @@ import type { SentFiles } from './sentFiles';
 import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
 import { MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
+import { bookingErrorMessage } from '../events/eventDeal';
 
 type DbError = { message: string; code?: string | null } | null;
 
@@ -65,6 +66,8 @@ export type SendStep =
   | { step: 'sending' }
   | { step: 'memories' }
   | { step: 'finishing' }
+  /** An event album: its booking pays for the order. */
+  | { step: 'booking' }
   /** Memory videos: checked before the order (before) or after the pages. */
   | { step: 'videosCheck'; before: boolean }
   /** Memory videos: shrinking (compress) and uploading, done of total. */
@@ -144,7 +147,7 @@ const realWait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Place order, for real: the plan's steps in its order. Resolves with the
  *  order and whether it is a tester order (marked paid: no payment step). */
-export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: PlacedOrder | null = null): Promise<{ order: PlacedOrder; paidByTester: boolean }> {
+export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: PlacedOrder | null = null): Promise<{ order: PlacedOrder; paidByTester: boolean; paidByBooking?: boolean }> {
   const { db, upload, onStep = () => {}, wait = realWait, clips } = deps;
   const clipCodes = [...new Set(plan.steps.flatMap((s) => (s.kind === 'upload' && s.bucket === 'memory-clips' ? [s.path.split('.')[0]] : [])))];
   if (clipCodes.length && !clips) throw new MemoryVideosNotInAppError();
@@ -176,6 +179,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
   const named = (s: string) => s.split(ORDER_ID).join(id);
 
   let paidByTester = false;
+  let paidByBooking = false;
   let videosSent = false;
   let replaced: string[] = [];
   for (const step of plan.steps) {
@@ -230,9 +234,15 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
       const { error } = await db.rpc(step.name, { p_order_id: id });
       if (error) throw new Error(TESTER_CLAIM_FAILED);
       paidByTester = true;
+    } else if (step.kind === 'rpc' && step.name === 'cover_order_with_booking') {
+      // 5a. An event album: its booking pays (eventAlbum.ts coverOrderWithBooking).
+      onStep({ step: 'booking' });
+      const { error } = await db.rpc(step.name, { p_order_id: id, p_booking_id: step.args.p_booking_id });
+      if (error) throw new Error(bookingErrorMessage({ message: error.message, code: error.code ?? undefined }));
+      paidByBooking = true;
     }
   }
-  return { order, paidByTester };
+  return { order, paidByTester, paidByBooking };
 }
 
 /** The cover: made, then sent, 3 tries; the website's words after the last. */

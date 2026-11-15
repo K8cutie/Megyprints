@@ -66,6 +66,8 @@ import { checkTesterCode, checkTesterCodeOffline, testerLine, type TesterCode } 
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { albumClipTier } from '../lib/memories/albumTier';
+import { dropEventLink, readEventLink, saveEventLink } from '../lib/events/albumEventLink';
+import * as EV from '../lib/events/eventDeal';
 import { MissingClipError, missingClipMessage, type ClipQuality } from '../lib/memories/clips';
 
 type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing' | 'done';
@@ -117,7 +119,7 @@ export default function OrderScreen() {
   const showFailure = useRef(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
   // The end: a tester order placed, or a payment sent.
-  const [done, setDone] = useState<{ number: string; test: boolean; receiptError: string | null } | null>(null);
+  const [done, setDone] = useState<{ number: string; test: boolean; receiptError: string | null; booking?: string } | null>(null);
   const b = own?.builder;
   const album = useMemo(() => (ordersOwn && b
     // Until the account's copy is read, a stand-in row with the album's id:
@@ -196,10 +198,62 @@ export default function OrderScreen() {
   const coverFits = coverFitsSheet(albumSize, cover, pageCount, { material });
   const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type), { material });
   const firstChoice = coverChoices[0]?.type;
+  // An event album's cover is its deal's (below).
+  const [eventLink, setEventLink] = useState<EV.EventAlbumLink | null | undefined>(undefined);
   useEffect(() => {
-    if (coverFits || !firstChoice || step !== 'form') return;
+    if (eventLink || coverFits || !firstChoice || step !== 'form') return;
     setCover(firstChoice);
-  }, [coverFits, firstChoice, step]);
+  }, [coverFits, firstChoice, step, eventLink]);
+
+  // AN EVENT'S ALBUM (the website's Order.tsx; lib/events/eventDeal.ts). The
+  // link is kept on this phone; without one, the host's bookings still
+  // waiting for their album are offered ("Use booking EV-… for this album").
+  const eventAlbumId = ordersOwn ? album.albumId : null;
+  useEffect(() => {
+    if (!eventAlbumId) { setEventLink(null); return; }
+    let alive = true;
+    void readEventLink(eventAlbumId).then((l) => { if (alive) setEventLink(l); });
+    return () => { alive = false; };
+  }, [eventAlbumId]);
+  const [waitingBookings, setWaitingBookings] = useState<EV.EventBooking[]>([]);
+  useEffect(() => {
+    if (eventLink !== null || !userId || !eventAlbumId) return;
+    let alive = true;
+    EV.listMyBookings(supabase as never, userId)
+      .then((all) => { if (alive) setWaitingBookings(EV.bookingsWaitingForAlbum(all)); })
+      .catch(() => { /* no offer: checkout works as a normal album */ });
+    return () => { alive = false; };
+  }, [userId, eventAlbumId, eventLink]);
+  const [eventBooking, setEventBooking] = useState<EV.EventBooking | null | undefined>(undefined);
+  useEffect(() => {
+    if (!eventLink || !userId) return;
+    let alive = true;
+    setEventBooking(undefined);
+    EV.getMyBooking(supabase as never, userId, eventLink.bookingId)
+      .then((bk) => { if (alive) setEventBooking(bk); })
+      .catch(() => { if (alive) setEventBooking(null); });
+    return () => { alive = false; };
+  }, [eventLink?.bookingId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const eventDeal = eventLink && eventBooking !== undefined ? EV.eventDealState(eventLink, eventBooking, { size: albumSize, pages: pageCount }) : null;
+  const coveredByBooking = eventDeal?.state === 'covered';
+  // The deal fixes the cover; undoing gives back the one they had picked.
+  useEffect(() => { if (eventLink) setCover(EV.dealCover(eventLink.cover)); }, [eventLink?.cover]); // eslint-disable-line react-hooks/exhaustive-deps
+  const coverBeforeLink = useRef<CoverType | null>(null);
+  const linkThisBooking = (bk: EV.EventBooking) => {
+    const link = EV.linkFromBooking(bk);
+    if (!link || !eventAlbumId) return;
+    coverBeforeLink.current = cover;
+    void saveEventLink(eventAlbumId, link);
+    setEventLink(link);
+  };
+  const notMyEventAlbum = () => {
+    if (!eventAlbumId) return;
+    void dropEventLink(eventAlbumId);
+    if (coverBeforeLink.current) setCover(coverBeforeLink.current);
+    setEventLink(null);
+    setEventBooking(undefined);
+    setMessage('');
+  };
 
   // HD memories: the quality the album's videos were made for (the website's
   // albumTier), read before the price is shown.
@@ -212,8 +266,9 @@ export default function OrderScreen() {
     return () => { alive = false; };
   }, [clipKey]);
   const clipTierReady = !clipKey || clipTier?.key === clipKey;
-  const hdMemories = qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
-  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester });
+  const hdMemories = !eventLink && qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
+  // An event album: the included term, no tester code (its booking pays).
+  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, tester: eventLink ? null : tester });
   const price = clipTierReady ? priced : { ...priced, ready: false };
 
   // The bar's steps for this album (made once: a re-render must not restart the bar).
@@ -239,7 +294,7 @@ export default function OrderScreen() {
 
   // A free test order of this album that stopped half-way: Place order with
   // the code finishes that order, not a new one (openOrder.ts).
-  const finishing = !!openOrder && unfinishedTestOrder(openOrder) && !!tester;
+  const finishing = !!openOrder && unfinishedTestOrder(openOrder) && !!tester && !eventLink;
   // "Place a new order?" is not asked of an order the code finishes: the
   // code used after the question left it up, with no Place order, and its
   // "Yes, place a second order" finished the old order (beta round 3).
@@ -269,8 +324,9 @@ export default function OrderScreen() {
         shipping: { name: cleanName, phone: cleanPhone, address },
         hostingYears: price.effectiveYears,
         hdMemories,
-        testerCode: tester?.code ?? null,
+        testerCode: eventLink ? null : tester?.code ?? null,
         includedYears: price.includedYears,
+        eventBookingId: eventLink && coveredByBooking ? eventLink.bookingId : null,
       });
       setPlan(p);
       setPlacedAmount(price.payTotal);
@@ -282,6 +338,11 @@ export default function OrderScreen() {
   };
 
   const onPlace = () => {
+    // An event album its booking can't pay for (yet): say why, place nothing.
+    if (eventLink && eventDeal?.state !== 'covered') {
+      setMessage(eventDeal?.state === 'blocked' ? eventDeal.message : EV.CHECKING_TRY_AGAIN);
+      return;
+    }
     if (!price.ready) { prices.retry(); return; }
     setMessage('');
     setSignInAsk(false);
@@ -330,11 +391,13 @@ export default function OrderScreen() {
     return (
       <Sending
         plan={plan} album={album} cover={cover} material={material} text={ownText} placed={placedRef.current} sent={sentRef.current}
+        bookingNumber={eventLink?.bookingNumber ?? null}
         onOrder={(o) => { placedRef.current = o; }}
         onSent={(r) => {
           placedRef.current = r.order;
           setPlacedOrder(r.order);
           if (r.paidByTester) { setDone({ number: r.order.order_number, test: true, receiptError: null }); setStep('done'); return; }
+          if (r.paidByBooking && eventLink) { setDone({ number: r.order.order_number, test: false, receiptError: null, booking: eventLink.bookingNumber }); setStep('done'); return; }
           setStep('payment');
         }}
         onFailed={(e) => {
@@ -354,7 +417,7 @@ export default function OrderScreen() {
   }
 
   if (step === 'done' && done) {
-    return <Done number={done.number} test={done.test} receiptError={done.receiptError} />;
+    return <Done number={done.number} test={done.test} receiptError={done.receiptError} booking={done.booking} />;
   }
 
   if (step === 'placed' && plan) {
@@ -435,6 +498,25 @@ export default function OrderScreen() {
         </View>
       )}
 
+      {!!eventLink && (
+        <View style={[styles.notice, coveredByBooking && styles.dealOk]} testID="order-event-deal">
+          <Text style={styles.noticeHead}>{EV.dealTitle(eventLink.bookingNumber)}</Text>
+          <Text style={styles.noticeBody} testID="order-event-deal-text">
+            {eventDeal === null ? EV.CHECKING_BOOKING : eventDeal.state === 'covered' ? EV.COVERED : eventDeal.state === 'blocked' ? eventDeal.message : ''}
+          </Text>
+          {eventLink.atCheckout && <Button label={EV.NOT_MINE} kind="plain" onPress={notMyEventAlbum} testID="order-event-unlink" />}
+        </View>
+      )}
+      {!eventLink && waitingBookings.length > 0 && (
+        <View style={styles.notice} testID="order-event-offer">
+          <Text style={styles.noticeHead}>{EV.OFFER_TITLE}</Text>
+          <Text style={styles.noticeBody}>{EV.OFFER_BODY}</Text>
+          {waitingBookings.map((bk) => (
+            <Button key={bk.id} label={EV.useBooking(bk.booking_number)} kind="plain" onPress={() => linkThisBooking(bk)} testID={`order-event-use-${bk.booking_number}`} />
+          ))}
+        </View>
+      )}
+
       {/* What you're paying for: the front of the book. */}
       <View style={styles.card}>
         <View style={styles.coverRow}>
@@ -453,8 +535,8 @@ export default function OrderScreen() {
       </Section>
 
       <Section title="Cover Type">
-        {coverChoices.map((c) => (
-          <Choice key={c.type} on={cover === c.type} title={c.name} body={c.description} onPress={() => setCover(c.type)} />
+        {(eventLink ? COVERS.filter((c) => c.type === cover) : coverChoices).map((c) => (
+          <Choice key={c.type} on={cover === c.type} title={c.name} body={c.description} onPress={() => { if (!eventLink) setCover(c.type); }} />
         ))}
         {!!coverNote && <Text style={styles.small} testID="order-cover-note">{coverNote}</Text>}
       </Section>
@@ -491,24 +573,29 @@ export default function OrderScreen() {
         <Row label="Cover" value={coverName} accent />
         <Row label="Size" value={sizeName} accent />
         <View style={styles.rule} />
-        {price.breakdown.items.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
+        {/* An event album is part of its booking's deal: it never shows the album price. */}
+        {eventLink
+          ? <Row label={EV.albumLine(eventLink.bookingNumber)} value="₱0" testID="order-event-line" />
+          : price.breakdown.items.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
         <Row label="Shipping" value="Free" good testID="order-shipping" />
-        {tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
+        {!eventLink && tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
         <View style={styles.totalRow}>
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
-            {price.ready && tester && <Text style={styles.was}>{peso(price.total)}  </Text>}
-            {price.ready && !tester && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
-            {price.ready ? peso(price.payTotal) : '—'}
+            {!eventLink && price.ready && tester && <Text style={styles.was}>{peso(price.total)}  </Text>}
+            {!eventLink && price.ready && !tester && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
+            {eventLink ? '₱0' : price.ready ? peso(price.payTotal) : '—'}
           </Text>
         </View>
-        {price.ready && !tester && price.wasTotal !== null && (
+        {coveredByBooking && <Text style={styles.savings} testID="order-covered">{EV.COVERED_LINE}</Text>}
+        {!!eventLink && !coveredByBooking && <Text style={styles.small} testID="order-covered-later">{EV.COVERED_LATER}</Text>}
+        {!eventLink && price.ready && !tester && price.wasTotal !== null && (
           <Text style={styles.savings} testID="order-savings">New lower price: you save {peso(price.wasTotal - price.total)}</Text>
         )}
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
             test album writes nothing, so it checks the code's shape only. */}
-        {price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => (live && userId ? checkTesterCode(supabase, typed, supabaseConfigured) : checkTesterCodeOffline(typed, !!userId))}
+        {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => (live && userId ? checkTesterCode(supabase, typed, supabaseConfigured) : checkTesterCodeOffline(typed, !!userId))}
           signedIn={!!userId} onSignIn={signIn} />}
         <View style={styles.included} testID="order-included">
           <Text style={styles.strongSmall}>Included with your album</Text>
@@ -516,7 +603,7 @@ export default function OrderScreen() {
           <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>
           {price.includedYears !== null && <Text style={styles.small}>✓ {includedHostingLine(price.includedYears, price.effectiveYears)}</Text>}
         </View>
-        {qrCount > 0 && price.tiers.length > 0 && (
+        {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
           // Order.tsx: "How long should your memories stay live?"
           <View style={styles.terms} testID="order-terms">
             <Text style={styles.strongSmall}>How long should your memories stay live?</Text>
@@ -537,7 +624,9 @@ export default function OrderScreen() {
         )}
         <View style={styles.qrNote} testID="order-qr-note">
           <Text style={styles.qrNoteText}>
-            <Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.
+            {eventLink
+              ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
+              : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
         </View>
@@ -548,7 +637,7 @@ export default function OrderScreen() {
       ) : asking ? null : (
         <>
           <Button
-            label={placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
+            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
             busy={!price.ready && (prices.loading || prices.retrying)}
             onPress={onPlace}
             testID="order-place"
@@ -601,15 +690,18 @@ function Placing({ frames, onDone }: { frames: PlaceFrame[]; onDone: () => void 
 /** The end of checkout, in the website's words (its tracking step's
  *  headline): a tester order placed, or a payment sent for the shop to
  *  confirm. */
-function Done({ number, test, receiptError }: { number: string; test: boolean; receiptError: string | null }) {
-  const title = test ? 'Test order placed' : "Thank you — we're confirming your payment";
+function Done({ number, test, receiptError, booking }: { number: string; test: boolean; receiptError: string | null; booking?: string }) {
+  // An event album its booking paid for: the order is paid (the website's tracking headline for it).
+  const title = booking ? trackOf({ status: 'paid' }).headline : test ? 'Test order placed' : "Thank you — we're confirming your payment";
   return (
     <ScrollView contentContainerStyle={styles.page} testID="order-done">
       <Text style={[styles.h1, styles.center]}>{title}</Text>
       <Text style={[styles.strong, styles.center]} testID="order-done-number">Order {number}</Text>
-      {test
-        ? <Text style={[styles.small, styles.center]}>Thank you for testing Megy Prints!</Text>
-        : <Text style={[styles.small, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>}
+      {booking
+        ? <Text style={[styles.small, styles.center]} testID="order-paid-by-booking">{EV.paidByBooking(booking)}</Text>
+        : test
+          ? <Text style={[styles.small, styles.center]}>Thank you for testing Megy Prints!</Text>
+          : <Text style={[styles.small, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>}
       {!!receiptError && <Text style={styles.error}>{receiptError}</Text>}
       <Button label="Done" onPress={() => { if (router.canDismiss?.()) router.dismissAll(); else router.replace('/'); }} testID="order-done-close" />
     </ScrollView>
@@ -691,6 +783,7 @@ const styles = StyleSheet.create({
   savings: { fontSize: 13, fontWeight: '700', color: colors.good, textAlign: 'right' },
   included: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 2 },
   qrNote: { borderWidth: 1, borderColor: '#E9B8A0', backgroundColor: '#FBF0EA', borderRadius: 12, padding: 12 },
+  dealOk: { borderColor: '#BFE3C8', backgroundColor: '#EEF8F1' },
   terms: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 4 },
   termRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   term: { width: '48%', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },

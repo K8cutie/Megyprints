@@ -74,6 +74,7 @@ export function sendFrame(prev: PlaceProgress | null, s: SendStep): { progress: 
     case 'sending': return { progress: forward(prev, PLACE_AT.sending, true), message: 'Sending your print file…' };
     case 'memories': return { progress: forward(prev, PLACE_AT.saving), message: 'Saving your memories…' };
     case 'finishing': return { progress: forward(prev, PLACE_AT.finishing), message: 'Finishing your test order…' };
+    case 'booking': return { progress: forward(prev, PLACE_AT.finishing), message: 'Paying with your event booking…' };
     case 'videosCheck': return s.before
       ? { progress: forward(prev, PLACE_AT.start), message: 'Checking your memory videos…' }
       : { progress: forward(prev, PLACE_AT.checking), message: 'Checking your memory videos…' };
