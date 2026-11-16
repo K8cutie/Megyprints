@@ -27,13 +27,14 @@ import { Image } from 'expo-image';
 import { ALBUM_SIZES, type AlbumPage, type PageTemplate } from '@web/pages/builder/types';
 import { relayPageOnTemplate } from '@web/pages/builder/useBuilderState';
 import { memoriesOn } from '@web/pages/builder/generateAlbum';
+import { spreadHalfOf } from '@web/pages/builder/miniSpread';
 import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { Button } from '../../components/Button';
 import { colors, space } from '../../lib/theme';
 import { EditorSheet, SheetPlacement, useSheetBodyWidth } from '../core/EditorSheet';
 import type { EditorContext, SheetProps } from '../registry';
 import { applyLayout, layoutChoices, photosHeld, tryLayout, type LayoutAsk } from './actions';
-import { LAYOUT_CURRENT, LAYOUT_MEMORY_NOTE, LAYOUT_NONE, LAYOUT_TITLE, leftoverWords } from './words';
+import { LAYOUT_CURRENT, LAYOUT_MEMORY_NOTE, LAYOUT_NONE, LAYOUT_SPREAD_NOTE, LAYOUT_TITLE, leftoverWords } from './words';
 
 /** Across the short sheet upright, so more layouts show at once; two in the side panel. */
 const COLUMNS_UPRIGHT = 3;
@@ -89,6 +90,14 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
 
   const memoryNote = hasMemory ? <Text style={styles.note} testID="photos-layout-memory">{LAYOUT_MEMORY_NOTE}</Text> : null;
   const onlyCurrent = layouts.length === 1 && layouts[0].id === current && !hasMemory;
+  // The Megy Mini's middle spread keeps its one photo across both pages.
+  if (spreadHalfOf(start.templateId)) {
+    return (
+      <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll testID="photos-layout-sheet">
+        <Text style={styles.none} testID="photos-layout-spread">{LAYOUT_SPREAD_NOTE}</Text>
+      </EditorSheet>
+    );
+  }
   return (
     <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll={!!asking || layouts.length === 0} list={!asking && layouts.length > 0} live={!asking} testID="photos-layout-sheet">
       {asking ? (

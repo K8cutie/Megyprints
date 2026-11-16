@@ -197,6 +197,17 @@ export function buildGoldenSet(): GoldenSet {
     b('pan-zoom-portrait', '8x8', 4, 'zoom 1.35 and a pan, left-hand page', page('8x8', 't88-solo-portrait', [1], {
       slotScales: [1.35], slotOffsetsX: [40], slotOffsetsY: [-60],
     })),
+    // THE MEGY MINI'S MIDDLE SPREAD (miniSpread.ts): one photo across pages 8
+    // and 9, each half a frame two pages wide with no spine margin.
+    b('mini-spread-left', '5.8x8.3', 7, 'Megy Mini middle spread, page 8: the left half of one photo, zoom and pan', page('5.8x8.3', 'mini-spread-left', [5], {
+      slotScales: [1.2], slotOffsetsX: [30], slotOffsetsY: [-20],
+    })),
+    b('mini-spread-right', '5.8x8.3', 8, 'Megy Mini middle spread, page 9: the right half of the same photo', page('5.8x8.3', 'mini-spread-right', [5], {
+      slotScales: [1.2], slotOffsetsX: [30], slotOffsetsY: [-20],
+    })),
+    b('mini-spread-qr', '5.8x8.3', 8, 'Megy Mini middle spread, page 9 with a video memory in its outer bottom corner', page('5.8x8.3', 'mini-spread-right-qr-br', [5, null], {
+      qrFills: [null, goldenQr('MINI-SPREAD')],
+    })),
     b('pan-held-at-edge', '8x8', 9, 'a pan bigger than the photo allows is held at its edge', page('8x8', 't88-solo-landscape', [5], {
       slotOffsetsX: [-5000], slotOffsetsY: [0],
     })),

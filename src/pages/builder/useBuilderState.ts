@@ -32,6 +32,7 @@ import { isLookId, type LookId } from './lookRules';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
 import { bookPagesFor, maxPagesFor } from '../../lib/megyMini';
+import { healSpreadPairs, spreadHalfOf, spreadQrCornerOf, spreadTemplateId, outerSpreadCorner, placeSpreadPair } from './miniSpread';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
 import { withPhotoOnLastPage } from './lastPagePhoto';
 // ── Phase 1: Cloud imports (the client, the sign-in and the album rows come
@@ -1903,7 +1904,8 @@ export function useBuilderState(): BuilderActions {
       if (next[currentPageIndex]) {
         next[currentPageIndex] = updater(next[currentPageIndex]);
       }
-      return next;
+      // The Megy Mini's middle spread: its other half follows (miniSpread.ts).
+      return healSpreadPairs(prev, next);
     });
   }, [currentPageIndex]);
 
@@ -2442,6 +2444,8 @@ export function useBuilderState(): BuilderActions {
     };
     dealAlbumBoxes(newPages, boxContent);
     newPages = mergeStudioPages(newPages, kept);
+    // Kept Studio pages go back where they were: the middle spread stays at 8|9.
+    newPages = placeSpreadPair(newPages);
     // createEmptyPage only carries border color/width — also apply the border STYLE
     // and the decorative FRAME (when chosen) onto every freshly generated page.
     const bStyle = border.style;
@@ -2478,7 +2482,9 @@ export function useBuilderState(): BuilderActions {
    *  actions leave it alone without an undo step. */
   const currentPageHasMemory = useCallback(() => {
     const page = albumPagesRef.current[currentPageIndex];
-    return !!page && memoriesOn(page).length > 0;
+    // The Megy Mini's middle spread keeps its one photo across both pages:
+    // the layout actions leave it alone too (miniSpread.ts).
+    return !!page && (memoriesOn(page).length > 0 || spreadHalfOf(page.templateId) !== null);
   }, [currentPageIndex]);
 
   const regeneratePage = useCallback(() => {
@@ -2673,6 +2679,8 @@ export function useBuilderState(): BuilderActions {
     const template = getTemplateById(templateId);
     if (!template) return;
     const before = albumPages[currentPageIndex];
+    // The Megy Mini's middle spread keeps its layout (miniSpread.ts).
+    if (spreadHalfOf(before?.templateId)) return;
     // A layout this page can't take (a memory page onto more photos), or a
     // memory page's own layout (the sheet's "✓ Current"), leaves it as it is —
     // no undo step for nothing.
@@ -2752,7 +2760,7 @@ export function useBuilderState(): BuilderActions {
     if (editScopeRef.current === 'coverFront') {
       setCoverFrontPage((p) => placePhoto([p], 0, slotIndex, photoIndex).pages[0]);
     } else {
-      setAlbumPages((prev) => (prev[currentPageIndex] ? placePhoto(prev, currentPageIndex, slotIndex, photoIndex).pages : prev));
+      setAlbumPages((prev) => (prev[currentPageIndex] ? healSpreadPairs(prev, placePhoto(prev, currentPageIndex, slotIndex, photoIndex).pages) : prev));
     }
     centreOnFace(slotIndex, photoIndex);
   }, [currentPageIndex, centreOnFace, pushSnapshot]);
@@ -2792,6 +2800,8 @@ export function useBuilderState(): BuilderActions {
     const template = page?.templateId ? getTemplateById(page.templateId) : null;
     const slot = template?.slots[slotIndex];
     if (!page || !slot) return [];
+    // The middle spread's frame is two pages wide: never moved (miniSpread.ts).
+    if (template?.spreadHalf) return [];
     const ctx = { albumSize, pageIndex: currentPageIndex, template, coverMode: phase === 'cover' };
     const prior = page.slotGeometries?.[slotIndex] ?? {};
     const { geom, reasons } = clampSlotGeometry(slot, { ...prior, ...geometry }, ctx);
@@ -2916,7 +2926,11 @@ export function useBuilderState(): BuilderActions {
       }
       chosen = qrCornerAwayFromFace(face);
     }
-    const template = qrBadgeTemplate(size, chosen);
+    // On the middle spread the QR goes in an OUTER corner only (miniSpread.ts).
+    const spreadSide = spreadHalfOf(page.templateId);
+    const template = spreadSide
+      ? getTemplateById(spreadTemplateId(spreadSide, outerSpreadCorner(spreadSide, chosen)))
+      : qrBadgeTemplate(size, chosen);
     if (!template) return false;
     const qrIdx = template.slots.findIndex((s) => s.kind === 'qr');
     pushSnapshot();
@@ -2955,8 +2969,11 @@ export function useBuilderState(): BuilderActions {
   const setMemoryQrCorner = useCallback((corner: QrCorner) => {
     const page = stateRefForQr.current.page;
     const size = stateRefForQr.current.size;
-    if (!page || !qrBadgeCornerOf(page.templateId)) return;
-    const template = qrBadgeTemplate(size, corner);
+    const spreadSide = spreadQrCornerOf(page?.templateId) ? spreadHalfOf(page?.templateId) : null;
+    if (!page || (!qrBadgeCornerOf(page.templateId) && !spreadSide)) return;
+    const template = spreadSide
+      ? getTemplateById(spreadTemplateId(spreadSide, outerSpreadCorner(spreadSide, corner)))
+      : qrBadgeTemplate(size, corner);
     if (!template) return;
     const qrIdx = template.slots.findIndex((s) => s.kind === 'qr');
     const photoIdx = (page.slotFills ?? []).find((f): f is number => f != null) ?? null;

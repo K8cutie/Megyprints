@@ -10,6 +10,7 @@ import { TEMPLATES_6X4 } from './templates6x4';
 import { TEMPLATES_8X6 } from './templates8x6';
 import { TEMPLATES_6X8 } from './templates6x8';
 import { TEMPLATES_A5 } from './templatesA5';
+import { SPREAD_TEMPLATES } from './miniSpread';
 import { BINDING_INCHES } from './binding';
 
 /** ══════════════════════════════════════════════════════════════════════════
@@ -1447,7 +1448,9 @@ export function getTemplatesForCount(
 }
 
 export function getTemplateById(id: string): PageTemplate | undefined {
-  return PAGE_TEMPLATES.find(t => t.id === id) ?? COVER_TEMPLATES.find(t => t.id === id);
+  return PAGE_TEMPLATES.find(t => t.id === id) ?? COVER_TEMPLATES.find(t => t.id === id)
+    // The Megy Mini's middle spread: resolvable, never dealt or listed (miniSpread.ts).
+    ?? SPREAD_TEMPLATES.find(t => t.id === id);
 }
 
 export const TEMPLATE_CATEGORIES: { id: PageTemplate['category']; label: string }[] = [

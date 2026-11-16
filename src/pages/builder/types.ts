@@ -98,6 +98,9 @@ export interface PageTemplate {
    *  this many photos per page. Absent → dealt at every density, AUTO included.
    *  The layout picker and manual swaps ignore it. */
   minDensity?: number;
+  /** The Megy Mini's middle spread (miniSpread.ts): one photo across pages 8
+   *  and 9. A half has no spine margin at all; its frame is two pages wide. */
+  spreadHalf?: 'left' | 'right';
 }
 
 export interface FilledSlot {
