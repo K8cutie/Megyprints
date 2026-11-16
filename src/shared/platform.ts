@@ -158,6 +158,12 @@ export interface PhotoIntake {
   pictureSize(this: void, url: string): Promise<PhotoSize | null>;
   /** What a photo shows while it is being converted (a URL an image can show). */
   convertingPreview: string;
+  /** What is already known about a photo as it comes in (optional). App: the
+   *  Photos step has run Megy's photo check on it, and the customer may have
+   *  said "keep it"; the album photo starts with both, so it is not checked
+   *  or asked about again. Website: not given (a photo is checked once it
+   *  is uploaded). */
+  known?(this: void, photo: PickedPhoto): { check?: PhotoCheck; kept?: boolean } | undefined;
 }
 
 /** Finding faces, so a crop keeps them and a video memory's QR stays off them. */

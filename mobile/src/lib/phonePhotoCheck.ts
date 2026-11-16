@@ -94,7 +94,17 @@ function keepLast<V>(max: number) {
 /** The faces ML Kit found for a photo, in its small copy's pixels (w × h). */
 interface FoundFaces { w: number; h: number; faces: PhoneFace[] }
 
-export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { photoCheck: PhotoChecker; faces: FaceFinder } {
+export interface PhoneChecks {
+  photoCheck: PhotoChecker;
+  faces: FaceFinder;
+  /** A blur answer this phone already has for the photo at `url` (saved with
+   *  the picked photos, photoDraft): the photo is not decoded again for it
+   *  (after the app is closed and opened again, or when the album builder
+   *  asks about a photo the Photos step has checked). */
+  remember(url: string, width: number, height: number, check: PhotoCheck): void;
+}
+
+export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): PhoneChecks {
   const limit = createLimiter(PHONE_CHECK_AT_ONCE);
   const basics = keepLast<PhotoCheck>(KEEP);
   const found = keepLast<FoundFaces>(KEEP);
@@ -118,7 +128,15 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
 
   const photoCheck: PhotoChecker = {
     available: () => device.canDecode,
-    facesForAllPhotos: () => device.faces != null,
+    // Only the photos in a set of repeats get the face pass (it picks the
+    // shot Megy keeps), as on a website browser without fast face finding.
+    // A face pass on EVERY photo was tried on the emulator (2026-11-17,
+    // release build, a 2.5 GB phone): ML Kit on each photo's big copy held
+    // more than one processor core and 460 MB (twice the app's usual) for
+    // minutes, and the phone went into swap. The full pages' faces are
+    // found when the album is made (the builder's own face search, 8 s at
+    // most).
+    facesForAllPhotos: () => false,
     readable: (photo: StoredPhoto) => checkable(photo.url),
     async check(photo, width, height, opts = {}) {
       const { w, h } = checkCopySize(width, height);
@@ -179,5 +197,12 @@ export function createPhoneChecks(device: PhoneCheckDevice = nativeDevice): { ph
     },
   };
 
-  return { photoCheck, faces };
+  const remember: PhoneChecks['remember'] = (url, width, height, check) => {
+    if (!(width > 0 && height > 0) || !checkable(url)) return;
+    const { w, h } = checkCopySize(width, height);
+    const key = `${url}|${w}x${h}`;
+    if (!basics.get(key)) basics.set(key, checkFrom(check.sharp, check.hash));
+  };
+
+  return { photoCheck, faces, remember };
 }

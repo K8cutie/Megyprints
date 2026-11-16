@@ -57,7 +57,8 @@ import { curveGlyphs, WORDART_SHADOW } from '@web/pages/builder/wordArtRules';
 import { Button } from '../../components/Button';
 import { CoverPhotoGrid } from '../../components/CoverPhotoGrid';
 import { useBuilder } from '../../builder/BuilderProvider';
-import { coverPhotoId, coverPhotos } from '../../builder/albumFlow';
+import { coverPhotoId } from '../../builder/albumFlow';
+import { useCoverPhotos } from '../../builder/useCoverPhotos';
 import { NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../../builder/screenWords';
 import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { colors, space } from '../../lib/theme';
@@ -354,7 +355,7 @@ export default function CoverScreen() {
   };
 
   // ── The album's photos for the cover, best first ──
-  const photos = useMemo(() => coverPhotos(builder.uploadedPhotos).filter((p) => !!p.previewUrl), [builder.uploadedPhotos]);
+  const { photos, best } = useCoverPhotos(builder.uploadedPhotos);
   const onCover = coverPhotoId(builder);
 
   // The cover's font, if this phone doesn't have it yet (an album made on the
@@ -440,7 +441,7 @@ export default function CoverScreen() {
       </View>
       {tab === 'background' && photos.length > 0 && (
         <View style={styles.photoRow}>
-          <CoverPhotoGrid photos={photos} onCover={onCover} onPick={(p) => putPhotoOnCover(builder, p)} pad={space.md} rows={2.5} />
+          <CoverPhotoGrid photos={photos} best={best} onCover={onCover} onPick={(p) => putPhotoOnCover(builder, p)} pad={space.md} rows={2.5} />
         </View>
       )}
       <View style={styles.top}>

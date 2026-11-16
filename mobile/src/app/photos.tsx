@@ -19,22 +19,30 @@
    The count that decides the way on is the album builder's after the photos
    go in: the same photo picked twice goes in once, and one the phone can't
    open doesn't go in. Then this step says so and asks for more.
+
+   Megy's photo check runs here on the picked photos (lib/draftPhotoCheck,
+   the website's rules) and shows the blurry shots and the repeats it would
+   leave out (PhotoCheckCard, as on the website's upload step). A photo left
+   out stays picked but is not shown in the grid and does not count; it does
+   not go into the album, and "Bring them back" puts it back.
    ══════════════════════════════════════════════════════════════════════════ */
 import { FlashList } from '@shopify/flash-list';
 import { router } from 'expo-router';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { photosOverBy, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { inspectPhotos, releasePickedFiles } from '../../modules/photo-files';
 import { useBuilder } from '../builder/BuilderProvider';
-import { albumMade, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MADE_ALBUM_PHOTOS_NOTE, REMAKE_ALBUM, remakeQuestion, resizeMadeAlbum, saveStep, sizeTap, syncNote, syncPhotos, TO_COVER, type PhotoSync } from '../builder/albumFlow';
+import { albumMade, KEEP_PAGES, keptToCarry, MADE_ALBUM_PHOTOS_MESSAGE, MADE_ALBUM_PHOTOS_NOTE, REMAKE_ALBUM, remakeQuestion, resizeMadeAlbum, saveStep, sizeTap, syncNote, syncPhotos, TO_COVER, type PhotoSync } from '../builder/albumFlow';
 import { MINI_INSTEAD, MINI_SIZE, miniOfferOf } from '@web/lib/megyMini';
 import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { useGoToPreview } from '../builder/useGoToPreview';
 import { Button } from '../components/Button';
+import { PhotoCheckCard } from '../components/PhotoCheckCard';
 import { Thumb } from '../components/Thumb';
+import { useDraftPhotoCheck } from '../lib/draftPhotoCheck';
 import { useDraft } from '../lib/draftStore';
 import { accessToGiveBack } from '../lib/filePhotos';
 import { formatCount } from '../lib/photoDays';
@@ -49,7 +57,7 @@ const GAP = 3;
 const UNDO_MS = 10_000;
 
 export default function YourPhotos() {
-  const { draft, loading, add, remove, clear, peek, couldNotOpen, closeCouldNotOpen } = useDraft();
+  const { draft, loading, add, remove, clear, peek, couldNotOpen, closeCouldNotOpen, setChecks, leaveOut, keep, bringBack } = useDraft();
   const [undo, setUndo] = useState<DraftPhoto | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const { width } = useWindowDimensions();
@@ -58,6 +66,17 @@ export default function YourPhotos() {
   const [going, setGoing] = useState(false);
   const goToPreview = useGoToPreview();
   const made = albumMade(builder.albumPages);
+  // Megy's photo check on the picked photos, and what it would leave out.
+  const check = useDraftPhotoCheck(platform.photoCheck, { draft, peek, setChecks }, platform.rememberCheck, platform.wantPhotoCheck);
+  // The photos going in: a photo left out is not in the grid.
+  const shown = useMemo(() => draft.photos.filter((p) => !p.leftOut), [draft.photos]);
+  // "Keep it" goes with the photo into the album, so the album remembers it
+  // (on another phone, and on the website).
+  const { uploadedPhotos, keepPhotos } = builder;
+  useEffect(() => {
+    const ids = keptToCarry(uploadedPhotos, draft.photos);
+    if (ids.length) keepPhotos(ids);
+  }, [uploadedPhotos, draft.photos, keepPhotos]);
   // What the album builder took, after the last time the photos went in;
   // only while the picked photos are the same as then.
   const [took, setTook] = useState<{ at: number; goingIn: number; note: string } | null>(null);
@@ -213,6 +232,7 @@ export default function YourPhotos() {
         </View>
       )}
       <Text style={styles.message} testID="photos-message">{made && step.short === 0 ? MADE_ALBUM_PHOTOS_MESSAGE : step.message}</Text>
+      <PhotoCheckCard photos={draft.photos} check={check} onLeaveOut={leaveOut} onKeep={keep} onBringBack={bringBack} />
       {made && <Text style={styles.order} testID="photos-made-note">{MADE_ALBUM_PHOTOS_NOTE}</Text>}
       {step.count > 0 && (
         <View style={styles.orderRow}>
@@ -228,7 +248,7 @@ export default function YourPhotos() {
   return (
     <View style={styles.page}>
       <FlashList
-        data={draft.photos}
+        data={shown}
         numColumns={COLUMNS}
         // Off: photos added from the picker land BEFORE the ones on screen
         // (time order), and keeping those in view left the grid blank until

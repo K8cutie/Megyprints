@@ -12,7 +12,8 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { fileDraftStorage, type DraftStorage } from './draftFile';
-import { addPhotos, emptyDraft, readDraft, removePhotos, serializeDraft, type AddResult, type AlbumDraft, type DraftPhoto } from './photoDraft';
+import type { PhotoCheck } from '@web/lib/photoCheck';
+import { addPhotos, bringBackPhotos, emptyDraft, keepPhotos, leaveOutPhotos, readDraft, removePhotos, serializeDraft, setChecks as setDraftChecks, type AddResult, type AlbumDraft, type DraftPhoto } from './photoDraft';
 
 interface DraftValue {
   /** Still reading the saved album from the phone. */
@@ -30,6 +31,12 @@ interface DraftValue {
   replace: (photos: readonly DraftPhoto[]) => void;
   /** The album as it is right now, even between renders (for timers). */
   peek: () => AlbumDraft;
+  /** Megy's photo check (lib/draftPhotoCheck): what it found for each photo
+   *  (by key), then the customer's answer to its suggestion. */
+  setChecks: (found: ReadonlyMap<string, PhotoCheck>) => void;
+  leaveOut: (keys: readonly string[]) => void;
+  keep: (keys: readonly string[]) => void;
+  bringBack: () => void;
 }
 
 const DraftContext = createContext<DraftValue | null>(null);
@@ -123,11 +130,12 @@ export function DraftProvider({ children, storage = fileDraftStorage }: { childr
     return () => { live = false; };
   }, [storage, save]);
 
-  const commit = useCallback((next: AlbumDraft) => {
+  const commit = useCallback((next: AlbumDraft, own = true) => {
     if (next === current.current) return;
     current.current = next;
     setDraft(next);
-    setCouldNotOpen(false);
+    // The person's own change closes "could not be opened"; Megy's check doesn't.
+    if (own) setCouldNotOpen(false);
     void save(next);
   }, [save]);
 
@@ -141,11 +149,15 @@ export function DraftProvider({ children, storage = fileDraftStorage }: { childr
   const clear = useCallback(() => commit({ ...emptyDraft(), updatedAt: Date.now() }), [commit]);
   const replace = useCallback((photos: readonly DraftPhoto[]) => commit(addPhotos({ ...emptyDraft(), updatedAt: Date.now() }, photos).draft), [commit]);
   const peek = useCallback(() => current.current, []);
+  const setChecks = useCallback((found: ReadonlyMap<string, PhotoCheck>) => commit(setDraftChecks(current.current, found), false), [commit]);
+  const leaveOut = useCallback((keys: readonly string[]) => commit(leaveOutPhotos(current.current, keys)), [commit]);
+  const keep = useCallback((keys: readonly string[]) => commit(keepPhotos(current.current, keys)), [commit]);
+  const bringBack = useCallback(() => commit(bringBackPhotos(current.current)), [commit]);
   const closeCouldNotOpen = useCallback(() => setCouldNotOpen(false), []);
 
   const value = useMemo(
-    () => ({ loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, replace, peek }),
-    [loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, replace, peek],
+    () => ({ loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, replace, peek, setChecks, leaveOut, keep, bringBack }),
+    [loading, draft, couldNotOpen, closeCouldNotOpen, add, remove, clear, replace, peek, setChecks, leaveOut, keep, bringBack],
   );
   return <DraftContext.Provider value={value}>{children}</DraftContext.Provider>;
 }

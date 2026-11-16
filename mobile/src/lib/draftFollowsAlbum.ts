@@ -34,6 +34,9 @@ export function draftFromAlbum(photos: readonly UploadedPhoto[], keptAt: (id: st
       width: p.width, height: p.height, capturedAt: p.capturedAt ?? null, modifiedAt: null, addedAt: i,
       mimeType: p.type, size: p.size,
       ...(p.leftOut ? { leftOut: true } : {}),
+      // Megy's photo check, as the album holds it: not done again, not asked again.
+      ...(p.check ? { check: p.check } : {}),
+      ...(p.kept ? { kept: true } : {}),
     });
   });
   return out;

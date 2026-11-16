@@ -288,7 +288,8 @@ describe('the photo check on the phone', () => {
       expect(res.faces).toBeNull();
       expect(res.eyesClosed).toBe(false);
       expect(typeof res.sharp).toBe('number');
-      expect(photoCheck.facesForAllPhotos()).toBe(faces != null);
+      // Never a face pass on every photo (too heavy for a phone: see phonePhotoCheck.ts).
+      expect(photoCheck.facesForAllPhotos()).toBe(false);
     }
   });
 

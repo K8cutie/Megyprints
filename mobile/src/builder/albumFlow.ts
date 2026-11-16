@@ -253,6 +253,15 @@ export async function syncPhotos(
   return { added: r.added, restored: r.restored ?? 0, skipped: r.skipped ?? 0, unreadable, removed, leftOut, goingIn };
 }
 
+/** "Keep it" on the Photos step (Megy's photo check), carried to the album:
+ *  the album's photos (by id) whose picked photo is kept and that the album
+ *  does not hold as kept yet. Left-out photos are syncPhotos' work. */
+export function keptToCarry(photos: readonly UploadedPhoto[], draft: readonly DraftPhoto[]): string[] {
+  const kept = new Set(draft.filter((p) => p.kept && !p.leftOut).map((p) => p.uri));
+  if (kept.size === 0) return [];
+  return photos.filter((p) => !p.kept && !p.leftOut && !!p.previewUrl && kept.has(p.previewUrl)).map((p) => p.id);
+}
+
 /** What the Photos step says when picked photos did not all go in ('' when they did). */
 export function syncNote(r: Pick<PhotoSync, 'skipped' | 'unreadable'>): string {
   const parts: string[] = [];
@@ -282,6 +291,25 @@ export function coverPhotos(photos: readonly UploadedPhoto[]): UploadedPhoto[] {
   const live = photos.filter((p) => !p.leftOut);
   const median = medianSharpness(live);
   return [...live].sort((a, b) => photoQuality(b, median) - photoQuality(a, median));
+}
+
+/** The cover's photos as the screen shows them: in an order that stays put
+ *  while they are looked at. Best first once Megy's photo check has looked
+ *  at every one of them (`best`: the screen's line may say so); in the
+ *  album's order until then. The check goes on while the cover is picked
+ *  (the faces, a photo at a time), and each answer would move photos under a
+ *  finger: so the order is taken once per visit (`prev`: the order shown so
+ *  far) and kept until the photos themselves change. */
+export interface CoverRow { ids: string[]; best: boolean }
+export function steadyCoverRow(prev: CoverRow | null, photos: readonly UploadedPhoto[]): CoverRow & { photos: UploadedPhoto[] } {
+  const live = photos.filter((p) => !p.leftOut && !!p.previewUrl);
+  const byId = new Map(live.map((p) => [p.id, p]));
+  if (prev && prev.ids.length === live.length && prev.ids.every((id) => byId.has(id))) {
+    return { ...prev, photos: prev.ids.map((id) => byId.get(id)!) };
+  }
+  const best = live.length > 0 && live.every((p) => !!p.check);
+  const shown = best ? coverPhotos(live) : live;
+  return { ids: shown.map((p) => p.id), best, photos: shown };
 }
 
 /** The photo on the cover now (its id), if it is one of the album's. */

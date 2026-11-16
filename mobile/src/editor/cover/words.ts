@@ -18,10 +18,10 @@ export const TABS = { background: 'Background', text: 'Text' } as const;
 /** CoverEditor.tsx Background tab: over the one row of photos (no "Show all"
  *  since #235). "Best ones first" is the website's photo check's order. */
 export const WEBSITE_YOUR_PHOTOS = 'Your photos, best ones first. Tap one.';
-/** APP: the app has no photo check yet (appPlatform.ts photoCheck), so the
- *  row is in the album's order, and its line promised a ranking it never
- *  had (beta round 2). Once the check is on, it takes the website's words
- *  again (test/editorCover.test.ts fails first). */
+/** APP: the photos are best first only once Megy's photo check (on since
+ *  2.1.2) has looked at every one of them (albumFlow.steadyCoverRow): then
+ *  the line is the website's. Until then they are in the album's order, and
+ *  the line must not promise a ranking they don't have (beta round 2). */
 export const YOUR_PHOTOS = 'Your photos. Tap one for the cover.';
 export const COLOUR = 'Colour';
 export const ZOOM = 'Zoom';

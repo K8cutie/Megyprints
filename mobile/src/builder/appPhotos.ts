@@ -31,6 +31,7 @@
        (Phase 5) converts the photos that need it, one at a time.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { KeptPhoto, KeyValueStore, PhotoIntake, PhotoSize, PhotoStore, PickedPhoto, StoredPhoto } from '@web/shared/platform';
+import type { PhotoCheck } from '@web/lib/photoCheck';
 import type { DraftPhoto } from '../lib/photoDraft';
 
 /** A photo from the Photos step, as the builder takes it. */
@@ -45,6 +46,10 @@ export interface AppPickedPhoto extends PickedPhoto {
   /** What the phone said about it just now (syncPhotos asked), so the photo
    *  store does not ask again. */
   readonly header?: PhotoHeader;
+  /** Megy's photo check from the Photos step (lib/draftPhotoCheck), and
+   *  "keep it": the album photo starts with them (PhotoIntake.known). */
+  readonly check?: PhotoCheck;
+  readonly kept?: boolean;
 }
 
 export function isAppPickedPhoto(p: unknown): p is AppPickedPhoto {
@@ -73,6 +78,8 @@ export function toPickedPhoto(p: DraftPhoto, bytes?: number, header?: PhotoHeade
     height: p.height,
     capturedAt: p.capturedAt,
     ...(header ? { header } : {}),
+    ...(p.check ? { check: p.check } : {}),
+    ...(p.kept ? { kept: true } : {}),
   };
 }
 
@@ -209,6 +216,7 @@ export function createPhotoIntake(inspect: InspectPhotos): PhotoIntake {
     // Read when it was picked (Phase 2: EXIF where the phone's index lacks it).
     captureTime: async (p) => (isAppPickedPhoto(p) ? p.capturedAt ?? null : null),
     previewUrlOf: (p) => (isAppPickedPhoto(p) ? p.uri : ''),
+    known: (p) => (isAppPickedPhoto(p) && (p.check || p.kept) ? { check: p.check, kept: p.kept } : undefined),
     // Every address is checked again when an album opens: a photo can be
     // deleted from the phone between visits (see the top of this file).
     urlNeedsReload: () => true,
