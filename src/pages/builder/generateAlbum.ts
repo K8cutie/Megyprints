@@ -21,6 +21,7 @@ import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { PER_SIZE_AUTHORED } from './templateKit';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
+import { isMiniSize, MINI_SIZE, MINI_PAGES, MINI_MEMORY_PAGES, MINI_OPENING_PAGES } from '../../lib/megyMini';
 
 /* ══════════════════════════════════════════════════════════════════════════
    SMART ALBUM GENERATION — Ratio-aware template matching
@@ -442,6 +443,7 @@ export function isFullPagePhoto(page: AlbumPage): boolean {
    fitting photos takes the least-bad others — and, when the caller detected
    faces, only those whose faces the centred crop keeps. */
 const PAGE_ASPECT: Record<string, number> = {
+  '5.8x8.3': 148 / 210,  // A5, the Megy Mini
   '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
 };
 const SIDE_CROP_OK = 0.34;
@@ -1371,6 +1373,11 @@ export interface GenerateOptions {
    *  "Grouping the moments". Left out: worked out here. false: no scenes
    *  (pages fill across the moment as before 2026-11-09). */
   scenes?: Map<string, number> | false;
+  /** Full pages kept for video memories (MIN_MEMORY_PAGES). The Megy Mini
+   *  keeps 2, its free videos (lib/megyMini). */
+  memoryPages?: number;
+  /** Full pages at the start (OPENING_FULL_PAGES). The Megy Mini has 1. */
+  openingPages?: number;
 }
 
 /**
@@ -1399,9 +1406,13 @@ export function generateAlbum(
   // SCENES: worked out once, on the whole album. The photos reserved for the
   // opening and memory pages leave gaps in what is laid out around them, and
   // those gaps must not split the rest into more scenes.
+  if (isMiniSize(albumSize) && options?.memoryPages === undefined) {
+    return generateMiniBook(photos, photosPerPage, background, options);
+  }
   const opts = options?.scenes === undefined ? { ...options, scenes: planScenes(photos) } : options;
   const made = (memoryPages: number) => generateAlbumWith(photos, albumSize, photosPerPage, background, opts, memoryPages);
-  const base = made(MIN_MEMORY_PAGES);
+  const memoryBase = Math.max(0, Math.floor(options?.memoryPages ?? MIN_MEMORY_PAGES));
+  const base = made(memoryBase);
   const share = options?.fullPageShare ?? FULL_PAGE_SHARE;
   if (photosPerPage != null || !(share > 0) || !memorySingleTemplate(albumSize)) return base;
   // An album with more photos than its minimum pages hold at the natural mix
@@ -1425,11 +1436,11 @@ export function generateAlbum(
   //  • Short of the share once it fits (a hero single the first album had
   //    didn't come back: 19 of 40), the missing ones are asked for too, once.
   //  • A few tries at most: the album is made on the customer's phone.
-  let k = MIN_MEMORY_PAGES + (target - bestFull);
+  let k = memoryBase + (target - bestFull);
   let bestNow = bestFull;
   let again = false;
   let topUp = false;
-  for (let tries = 0; tries < 12 && k > MIN_MEMORY_PAGES; tries++) {
+  for (let tries = 0; tries < 12 && k > memoryBase; tries++) {
     const pages = made(k);
     const over = pages.length - base.length;
     if (over <= 0) {
@@ -1449,6 +1460,27 @@ export function generateAlbum(
   return best;
 }
 
+/** The Megy Mini (lib/megyMini): always exactly its 16 pages, so a crowd of
+ *  photos is dealt denser instead of adding a page. One opening full page and
+ *  two memory pages (its 2 free videos) instead of an album's 3 and 7. The
+ *  app takes 16 to 40 photos for it, which always fit (megyMini.spec). */
+function generateMiniBook(
+  photos: UploadedPhoto[],
+  photosPerPage: number | undefined,
+  background: AlbumPage['background'] | undefined,
+  options: GenerateOptions | undefined,
+): AlbumPage[] {
+  const wanted = Math.max(1, Math.floor(options?.minPages ?? MINI_PAGES));
+  const opts: GenerateOptions = { ...options, minPages: wanted, memoryPages: MINI_MEMORY_PAGES, openingPages: MINI_OPENING_PAGES };
+  let pages = generateAlbum(photos, MINI_SIZE, photosPerPage, background, opts);
+  for (const denser of [2, 3, 4]) {
+    if (pages.length <= wanted) break;
+    if (photosPerPage != null && denser <= photosPerPage) continue;
+    pages = generateAlbum(photos, MINI_SIZE, denser, background, opts);
+  }
+  return pages;
+}
+
 /** generateAlbum with `memoryPages` photos reserved for full pages besides the
  *  opening ones: past MIN_MEMORY_PAGES each must fit (pickMemoryPhotos). */
 function generateAlbumWith(
@@ -1465,10 +1497,10 @@ function generateAlbumWith(
   for (const m of options?.memories ?? []) {
     if (photos[m.photo] && qrBadgeTemplate(albumSize, m.corner ?? 'br')) badges.set(m.photo, [...(badges.get(m.photo) ?? []), m]);
   }
-  const opening = solo ? pickOpeningPhotos(photos, albumSize, OPENING_FULL_PAGES, new Set(badges.keys()), options?.faceCenters) : [];
+  const opening = solo ? pickOpeningPhotos(photos, albumSize, options?.openingPages ?? OPENING_FULL_PAGES, new Set(badges.keys()), options?.faceCenters) : [];
   const carried = [...badges].flatMap(([photo, list]) => list.map(() => photo));
   const want = solo ? Math.max(0, Math.min(memoryPages, photos.length - opening.length) - carried.length) : 0;
-  const lenient = Math.max(0, MIN_MEMORY_PAGES - carried.length);
+  const lenient = Math.max(0, (options?.memoryPages ?? MIN_MEMORY_PAGES) - carried.length);
   const spoken = new Set([...badges.keys(), ...opening]);
   const reserved = [...carried, ...(want > 0 ? pickMemoryPhotosBesides(photos, albumSize, want, spoken, options, lenient) : [])];
   if (reserved.length === 0 && opening.length === 0) {

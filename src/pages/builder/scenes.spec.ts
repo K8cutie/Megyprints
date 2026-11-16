@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { isMiniSize } from '../../lib/megyMini';
 import { generateAlbum, chosenAlbumPages, planScenes, distanceM, SCENE_GAP_MS, SCENE_MOVE_M } from './generateAlbum';
 import { DENSITY_BY_SIZE, MIN_ALBUM_PAGES } from './densities';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from './types';
@@ -74,7 +75,8 @@ const mixedPages = (pages: AlbumPage[], sceneOf: number[]) =>
   pages.filter((p) => new Set(fills(p).map((i) => sceneOf[i])).size > 1).length;
 
 describe('scenes: photos taken within 5 minutes stay together on a page', () => {
-  const sizes = Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[];
+  // Albums only: the Megy Mini (A5) is always 16 pages (megyMini.spec).
+const sizes = (Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[]).filter((s) => !isMiniSize(s));
 
   it('planScenes: a gap over 5 minutes, a move over 200 m, or a new moment starts a scene; no time is one scene', () => {
     const base = Date.UTC(2026, 10, 7, 9);

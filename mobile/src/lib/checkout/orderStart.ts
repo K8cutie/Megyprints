@@ -51,7 +51,7 @@ export type OrderCheck =
  *  read the warning and tapped "Order anyway". */
 export function orderCheck(a: OrderInput, { anyway = false }: { anyway?: boolean } = {}): OrderCheck {
   const have = albumPhotoCount(a.pages);
-  if (photosShortBy(have) > 0) return { kind: 'tooFew', have, message: tooFewToOrderMessage(have) };
+  if (photosShortBy(have, a.albumSize) > 0) return { kind: 'tooFew', have, message: tooFewToOrderMessage(have, a.albumSize) };
   const gone = missingPhotos(a.pages, a.photos, a.coverFront);
   if (gone.count > 0) return { kind: 'missing', message: missingOnPhoneMessage(gone) };
   if (anyway) return { kind: 'go' };

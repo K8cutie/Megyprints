@@ -1237,9 +1237,10 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<P
       { top: front.y, bottom: H - (front.y + front.height), right: W - (front.x + front.width), left: 0 });
     frontImg.width = 0; frontImg.height = 0; // let it go now
     // Spine: fill + the derived front-page text, rotated up the spine.
-    ctx.fillStyle = spine.bg;
-    ctx.fillRect(spineRect.x, spineRect.y, spineRect.width, spineRect.height);
-    if (spine.text.text.trim()) {
+    // A Megy Mini's stapled cover has no spine (width 0): nothing to draw there.
+    if (spineRect.width > 0) ctx.fillStyle = spine.bg;
+    if (spineRect.width > 0) ctx.fillRect(spineRect.x, spineRect.y, spineRect.width, spineRect.height);
+    if (spineRect.width > 0 && spine.text.text.trim()) {
       const spineSafe = insetRect(spineRect, geom.safeInsetPx);
       words.push(...liftWords(ctx, spineSafe, () => drawCoverText(ctx, { style: spine.text, rect: spineSafe, rotateDeg: -90, valign: 'middle' })));
     }

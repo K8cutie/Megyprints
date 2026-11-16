@@ -4486,12 +4486,15 @@ with a +08:00 zone tag.
 (The line about the making screen's count was taken out after the 2026-11-09 walk: the
 count needs the phone's photo check, which is not in the app yet.)
 
-### Release notes 2.1.1 (code 111: 2.1.0 + `feat/port-face-finder`; check against the app on upload day)
+### Release notes 2.1.1 (code 111: 2.1.0 + `feat/port-face-finder` + `feat/port-megy-mini`; check against the app on upload day)
 
     <en-US>
     New:
+    • Megy Mini: a 16-page A5 booklet, stapled, with 2 video memories
     • When you put a photo in a frame, Megy moves it to show the faces
     </en-US>
+
+**Megy Mini (2026-11-16, `feat/port-megy-mini`):** the Mini line is true only once 0062 is on the live database AND Megy Mini is switched on with a shipping fee (Admin → Pricing). Until then the app shows no Mini card: drop the line if it isn't on by upload day.
 
 ## Events switched off in the app (2026-11-16, `feat/port-remove-events`)
 

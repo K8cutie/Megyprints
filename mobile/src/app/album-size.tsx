@@ -16,7 +16,8 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { AlbumSizeConfig } from '@web/pages/builder/types';
+import { ALBUM_SIZES, type AlbumSizeConfig } from '@web/pages/builder/types';
+import { isMiniSize, miniOfferOf, MINI_NAME, MINI_PAGES, MINI_PHOTO_RANGE, MINI_SIZE, type MiniOffer } from '@web/lib/megyMini';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { offerableSizes, pagesHoldPhotos, resizeMadeAlbum, saveStep, SIZE_LINE, sizePhotosPerPage, sizeTap } from '../builder/albumFlow';
@@ -24,21 +25,30 @@ import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
 
-/** The sizes the owner switched off (public_price_schedule), or none. */
-async function disabledSizes(): Promise<string[]> {
-  if (!supabaseConfigured) return [];
+/** From the price list (public_price_schedule): the sizes the owner switched
+ *  off, or none; and the Megy Mini while it is on sale (0062), or null. */
+async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null }> {
+  if (!supabaseConfigured) return { off: [], mini: null };
   try {
     const { data, error } = await supabase.rpc('public_price_schedule');
-    const list = !error && data && typeof data === 'object' ? (data as { disabled_sizes?: unknown }).disabled_sizes : null;
-    return Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [];
+    const schedule = !error && data && typeof data === 'object' ? (data as { disabled_sizes?: unknown; mini?: unknown }) : null;
+    const list = schedule?.disabled_sizes;
+    return {
+      off: Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [],
+      mini: miniOfferOf(schedule),
+    };
   } catch {
-    return [];
+    return { off: [], mini: null };
   }
 }
+
+/** The Megy Mini's card: A5's own size entry, named as the product. */
+const MINI_CARD: AlbumSizeConfig = { ...(ALBUM_SIZES.find((s) => s.preset === MINI_SIZE) as AlbumSizeConfig), name: MINI_NAME };
 
 export default function AlbumSize() {
   const { builder, platform } = useBuilder();
   const [sizes, setSizes] = useState<AlbumSizeConfig[]>(() => offerableSizes());
+  const [mini, setMini] = useState<MiniOffer | null>(null);
   const [resizing, setResizing] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   // The builder as of now, for answers that arrive later.
@@ -46,15 +56,17 @@ export default function AlbumSize() {
   now.current = builder;
   useEffect(() => {
     let live = true;
-    void disabledSizes().then((off) => {
+    void sizeOffers().then(({ off, mini: offer }) => {
       if (!live) return;
       const next = offerableSizes(off);
       setSizes(next);
+      setMini(offer);
       // The size on the album is no longer offered: the first one that is,
       // but only while no page holds a photo (a made album is never laid out
-      // again without a tap and a yes).
+      // again without a tap and a yes). A Megy Mini stays one while it is on sale.
       const b = now.current;
-      if (next.length && !next.some((s) => s.preset === b.albumSize) && !pagesHoldPhotos(b.albumPages, b.coverFront)) b.setAlbumSize(next[0].preset);
+      const stillOffered = next.some((s) => s.preset === b.albumSize) || (isMiniSize(b.albumSize) && !!offer);
+      if (next.length && !stillOffered && !pagesHoldPhotos(b.albumPages, b.coverFront)) b.setAlbumSize(next[0].preset);
     });
     return () => { live = false; };
   }, []);
@@ -113,6 +125,33 @@ export default function AlbumSize() {
             </Pressable>
           );
         })}
+        {(mini || isMiniSize(builder.albumSize)) && (() => {
+          // MEGY MINI (lib/megyMini): its own product next to the albums, shown
+          // only while it is on sale (or when this album already is one).
+          const on = isMiniSize(builder.albumSize);
+          return (
+            <>
+              <Text style={styles.section}>Or a small booklet</Text>
+              <Pressable accessibilityRole="radio" accessibilityState={{ checked: on, busy: resizing === MINI_SIZE }} onPress={() => pick(MINI_CARD)}
+                style={[styles.card, on && styles.cardOn]} testID="size-mini">
+                <View style={styles.cardTop}>
+                  <View style={[styles.shape, styles.mini]} />
+                  <View style={styles.cardWords}>
+                    <Text style={styles.name}>{MINI_NAME}</Text>
+                    <Text style={styles.perPage}>A5 · {MINI_PAGES} pages · {MINI_PHOTO_RANGE} photos</Text>
+                  </View>
+                  {resizing === MINI_SIZE ? <ActivityIndicator color={colors.accent} />
+                    : on && <Text style={styles.tick} accessibilityLabel="Picked">✓</Text>}
+                </View>
+                <Text style={styles.line}>
+                  {mini
+                    ? `A stapled booklet with ${mini.free_qr} video memories included. ₱${mini.price} + ₱${mini.shipping_fee} shipping.`
+                    : 'A stapled booklet with video memories included.'}
+                </Text>
+              </Pressable>
+            </>
+          );
+        })()}
       </ScrollView>
       <SafeAreaView edges={['bottom']} style={styles.bar}>
         <Button label="Next: add your photos →" onPress={next} busy={!!resizing} testID="size-next" />
@@ -133,6 +172,9 @@ const styles = StyleSheet.create({
   square: { width: 36, height: 36 },
   landscape: { width: 44, height: 30 },
   portrait: { width: 30, height: 44 },
+  // A5 is smaller than every album: a smaller shape, the same portrait.
+  mini: { width: 22, height: 31 },
+  section: { fontSize: 16, fontWeight: '700', color: colors.muted, marginTop: space.sm },
   cardWords: { flex: 1 },
   name: { fontSize: 18, fontWeight: '700', color: colors.text },
   perPage: { fontSize: 14, color: colors.muted },

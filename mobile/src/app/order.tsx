@@ -37,6 +37,15 @@ import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES, includedHostingLine }
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
+import { isMiniSize, MINI_COVER, MINI_NAME } from '@web/lib/megyMini';
+
+/** The Megy Mini's one cover (lib/megyMini): never offered for an album. */
+const MINI_COVER_CHOICE: (typeof COVERS)[number] = {
+  type: MINI_COVER,
+  name: 'Stapled',
+  description: 'A soft cover, folded and stapled through the middle like a magazine.',
+  priceFactor: 1,
+};
 import { Button } from '../components/Button';
 import { AddressFields } from '../components/checkout/AddressFields';
 import { CoverThumb } from '../components/checkout/CoverThumb';
@@ -191,19 +200,23 @@ export default function OrderScreen() {
   const pageCount = album.pages.length;
   const qrCount = countQrMemories(album.pages);
   const photosIn = albumPhotoCount(album.pages);
-  const tooFew = photosShortBy(photosIn) > 0;
+  const tooFew = photosShortBy(photosIn, albumSize) > 0;
+  // MEGY MINI (lib/megyMini): its own cover (staples), its own price + shipping.
+  const mini = isMiniSize(albumSize);
 
   // THE PRESS: a cover too big for the shop's sheet isn't offered (shared printSheet).
-  const coverChoices = COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount, { material }));
+  const coverChoices = mini ? [MINI_COVER_CHOICE] : COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount, { material }));
   const coverFits = coverFitsSheet(albumSize, cover, pageCount, { material });
   const coverNote = coverChoiceNote(albumSize, pageCount, coverChoices.map((c) => c.type), { material });
   const firstChoice = coverChoices[0]?.type;
   // An event album's cover is its deal's (below).
   const [eventLink, setEventLink] = useState<EV.EventAlbumLink | null | undefined>(undefined);
   useEffect(() => {
-    if (eventLink || coverFits || !firstChoice || step !== 'form') return;
+    // A Megy Mini is always stapled; an album never is (a cover kept from a Mini).
+    const rightKind = mini ? cover === MINI_COVER : cover !== MINI_COVER;
+    if (eventLink || (coverFits && rightKind) || !firstChoice || step !== 'form') return;
     setCover(firstChoice);
-  }, [coverFits, firstChoice, step, eventLink]);
+  }, [coverFits, firstChoice, step, eventLink, mini, cover]);
 
   // AN EVENT'S ALBUM (the website's Order.tsx; lib/events/eventDeal.ts). The
   // link is kept on this phone; without one, the host's bookings still
@@ -320,7 +333,7 @@ export default function OrderScreen() {
         userId,
         album: album.row,
         pages: album.pages,
-        specs: { material, cover, size: albumSize },
+        specs: { material, cover: mini ? MINI_COVER : cover, size: albumSize },
         shipping: { name: cleanName, phone: cleanPhone, address },
         hostingYears: price.effectiveYears,
         hdMemories,
@@ -347,7 +360,7 @@ export default function OrderScreen() {
     setMessage('');
     setSignInAsk(false);
     setOpenAlbumAsk(false);
-    const r = checkCheckout({ name, phone, address, coverFits, coverNote, signedIn: !!userId, openOrderUnanswered: !!openOrder && !finishing && !secondOk.current, pages: album.pages });
+    const r = checkCheckout({ name, phone, address, coverFits, coverNote, signedIn: !!userId, openOrderUnanswered: !!openOrder && !finishing && !secondOk.current, pages: album.pages, size: albumSize });
     if (r.ok) {
       setErrors({}); setAddressErrors({});
       setName(r.name); setPhone(r.phone);
@@ -454,7 +467,7 @@ export default function OrderScreen() {
 
   if (step === 'payment') {
     const albumLine = [ALBUM_SIZES.find((s) => s.preset === albumSize)?.name, MATERIALS.find((m) => m.type === material)?.name, COVERS.find((c) => c.type === cover)?.name].join(' · ');
-    const summary = { albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal };
+    const summary = { albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal, shipsFree: !price.mini };
     if (live && placedOrder) {
       return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={summary} live
         onBack={() => setStep('form')}
@@ -464,9 +477,9 @@ export default function OrderScreen() {
   }
 
   /* ══════════════ FORM ══════════════ */
-  const sizeName = ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
+  const sizeName = mini ? `${MINI_NAME} · A5` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
   const materialName = MATERIALS.find((m) => m.type === material)?.name ?? material;
-  const coverName = COVERS.find((c) => c.type === cover)?.name ?? cover;
+  const coverName = mini ? MINI_COVER_CHOICE.name : COVERS.find((c) => c.type === cover)?.name ?? cover;
   const words = openOrder ? openOrderWords(openOrder) : null;
 
   return (
@@ -577,7 +590,8 @@ export default function OrderScreen() {
         {eventLink
           ? <Row label={EV.albumLine(eventLink.bookingNumber)} value="₱0" testID="order-event-line" />
           : price.breakdown.items.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
-        <Row label="Shipping" value="Free" good testID="order-shipping" />
+        {/* A Megy Mini's shipping is a line of its own bill (above), paid on top. */}
+        {!price.mini && <Row label="Shipping" value="Free" good testID="order-shipping" />}
         {!eventLink && tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
         <View style={styles.totalRow}>
           <Text style={styles.strong}>Total</Text>
@@ -598,9 +612,11 @@ export default function OrderScreen() {
         {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => (live && userId ? checkTesterCode(supabase, typed, supabaseConfigured) : checkTesterCodeOffline(typed, !!userId))}
           signedIn={!!userId} onSignIn={signIn} />}
         <View style={styles.included} testID="order-included">
-          <Text style={styles.strongSmall}>Included with your album</Text>
-          <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>
-          <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>
+          <Text style={styles.strongSmall}>Included with your {mini ? MINI_NAME : 'album'}</Text>
+          {!mini && <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>}
+          {mini
+            ? <Text style={styles.small}>✓ {price.freeVideos} video memories ({peso(price.freeVideos * EXTRA_QR_RATE)} value)</Text>
+            : <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>}
           {price.includedYears !== null && <Text style={styles.small}>✓ {includedHostingLine(price.includedYears, price.effectiveYears)}</Text>}
         </View>
         {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
@@ -626,18 +642,20 @@ export default function OrderScreen() {
           <Text style={styles.qrNoteText}>
             {eventLink
               ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
-              : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
+              : mini
+                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. Extra videos are ₱{EXTRA_QR_RATE} each.</>
+                : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
         </View>
       </Section>
 
       {tooFew ? (
-        <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn)}</Text></View>
+        <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn, albumSize)}</Text></View>
       ) : asking ? null : (
         <>
           <Button
-            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total })}
+            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total, miniOff: price.miniOff })}
             busy={!price.ready && (prices.loading || prices.retrying)}
             onPress={onPlace}
             testID="order-place"

@@ -31,6 +31,7 @@ import { isMaskId, type MaskId } from './maskShapes';
 import { isLookId, type LookId } from './lookRules';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
+import { bookPagesFor, maxPagesFor } from '../../lib/megyMini';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
 import { withPhotoOnLastPage } from './lastPagePhoto';
 // ── Phase 1: Cloud imports (the client, the sign-in and the album rows come
@@ -2177,6 +2178,8 @@ export function useBuilderState(): BuilderActions {
   }, [albumPages.length]);
 
   const addPage = useCallback(() => {
+    // A Megy Mini is always its 16 pages (lib/megyMini): no page is added to it.
+    if (albumPagesRef.current.length >= maxPagesFor(albumSize)) return;
     pushSnapshot();
     setAlbumPages((prev) => {
       const newPage = createEmptyPage(prev.length, albumSize);
@@ -2195,7 +2198,8 @@ export function useBuilderState(): BuilderActions {
      sticker is placed in page fractions, so it is kept out of the spine again. */
   const deletePages = useCallback((indexes: readonly number[], opts?: { landOnLast?: boolean }): number => {
     const prev = albumPagesRef.current;
-    const room = Math.max(0, prev.length - MIN_PAGES);
+    // Never under the book's pages: 40 for an album, all 16 for a Megy Mini.
+    const room = Math.max(0, prev.length - bookPagesFor(albumSize));
     const wanted = [...new Set(indexes)].filter((i) => i >= 0 && i < prev.length).sort((a, b) => a - b);
     const going = new Set(wanted.slice(Math.max(0, wanted.length - room)));
     if (going.size === 0) return 0;
@@ -2387,7 +2391,7 @@ export function useBuilderState(): BuilderActions {
     // On Surprise about half the pages are full pages (FULL_PAGE_SHARE), so
     // the faces matter whenever fewer than half of a 40-page album fit.
     const faceCands = memoryFaceCandidates(pool, size, undefined,
-      photosPerPage == null ? Math.ceil(MIN_ALBUM_PAGES * FULL_PAGE_SHARE) : undefined);
+      photosPerPage == null ? Math.ceil(bookPagesFor(size) * FULL_PAGE_SHARE) : undefined);
     if (faceCands.length > 0) {
       faceCenters = {};
       // Up to 8 s of work: shown as its own step with a count ("Finding the
@@ -2417,7 +2421,7 @@ export function useBuilderState(): BuilderActions {
     const scenes = planScenes(pool);
     setGenerating('laying_out');
     await paintFrame();
-    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, scenes, minPages: Math.max(1, MIN_ALBUM_PAGES - kept.length) });
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, scenes, minPages: Math.max(1, bookPagesFor(size) - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     // Bank quotes are off (DEAL_BANK_QUOTES): quote boxes are made empty, so

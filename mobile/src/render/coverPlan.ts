@@ -151,8 +151,11 @@ export function planCover(input: CoverInput, measure: CoverMeasure): CoverPlan {
       mirror: { top: front.y, bottom: H - (front.y + front.h), right: W - (front.x + front.w), left: 0 },
     });
     const spineRect = g.panels.spine;
-    steps.push({ kind: 'fill', rect: rect(spineRect), color: spine.bg });
-    if (spine.text.text.trim()) words({ style: spine.text, rect: insetRect(spineRect, g.safeInsetPx), rotateDeg: -90, valign: 'middle' });
+    // A Megy Mini's stapled cover has no spine (width 0): nothing to draw there.
+    if (spineRect.width > 0) {
+      steps.push({ kind: 'fill', rect: rect(spineRect), color: spine.bg });
+      if (spine.text.text.trim()) words({ style: spine.text, rect: insetRect(spineRect, g.safeInsetPx), rotateDeg: -90, valign: 'middle' });
+    }
     return { albumSize, width: W, height: H, geometry: g, fromCoverPage: true, steps, spine, assets: [...assets], notDrawn };
   }
 

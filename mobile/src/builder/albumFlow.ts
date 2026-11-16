@@ -17,7 +17,8 @@ import type { BuilderActions, GenerateResult, GeneratingPhase } from '@web/pages
 import type { AlbumPage, AlbumSizeConfig, AlbumSizePreset, UploadedPhoto } from '@web/pages/builder/types';
 import { offerableSizesAmong } from '@web/pages/builder/sizeOffer';
 import { densityRangeLabel } from '@web/pages/builder/densities';
-import { photosGoingIn, photosShortBy, tooFewToMakeMessage } from '@web/pages/builder/albumMinimum';
+import { photosGoingIn, photosOverBy, photosShortBy, tooFewToMakeMessage } from '@web/pages/builder/albumMinimum';
+import { isMiniSize, miniPhotoProblem, MINI_NAME } from '@web/lib/megyMini';
 import { albumIsBuilt, COVER_TO_PAGES, COVER_TO_PHOTOS, coverStepNext as wizardCoverStepNext, KEEP_PAGES, MAKE_ALBUM, REMAKE_ALBUM, TO_COVER } from '@web/assistant/wizardSteps';
 import { albumIsMade, confirmedIntent, placedMemories, rebuildQuestion, remakeLosesMessage } from '@web/assistant/rebuildQuestion';
 import { isAlbumNameReady } from '@web/lib/albumName';
@@ -114,7 +115,9 @@ export function sizeTap(builder: SizeBuilder, size: AlbumSizePreset): SizeTap {
   if (size === builder.albumSize) return { kind: 'same' };
   if (!albumIsMade(builder.albumPages)) return { kind: 'set' };
   const have = photosGoingIn(builder.uploadedPhotos);
-  if (photosShortBy(have) > 0) return { kind: 'tooFew', message: tooFewToMakeMessage(have) };
+  if (photosShortBy(have, size) > 0) return { kind: 'tooFew', message: tooFewToMakeMessage(have, size) };
+  // A Megy Mini holds 16 to 40 photos (lib/megyMini).
+  if (photosOverBy(have, size) > 0) return { kind: 'tooFew', message: miniPhotoProblem(have) ?? '' };
   const q = rebuildQuestion({ type: 'change_size', payload: { size }, rawMessage: '' }, builder);
   return { kind: 'ask', question: (q ?? '').replace(CHAT_YES, '') };
 }
@@ -131,9 +134,15 @@ export async function resizeMadeAlbum(
   // actionEngine pagesBackground: the background of the page on screen.
   const bg = builder.albumPages[builder.currentPageIndex ?? 0]?.background;
   const r: GenerateResult = await builder.generateAlbum(bg, { size, ...(lost.length ? { confirmedLost: lost } : {}) });
-  const label = size.replace('x', '×');
-  if (!r.made) return { done: false, message: `The size was not changed: your album stays ${builder.albumSize.replace('x', '×')}.` };
+  const label = sizeName(size);
+  if (!r.made) return { done: false, message: `The size was not changed: your album stays ${sizeName(builder.albumSize)}.` };
+  if (isMiniSize(size)) return { done: true, message: `Your photos are now a ${MINI_NAME}: 16 A5 pages, laid out again from your photos.` };
   return { done: true, message: `Album size changed to ${label}. Every page is laid out again for the new shape.` };
+}
+
+/** A size as a customer reads it: "8×8", or "Megy Mini" for A5. */
+export function sizeName(size: AlbumSizePreset): string {
+  return isMiniSize(size) ? MINI_NAME : size.replace('x', '×');
 }
 
 /** The wizard's size choice line: '8×8" Square: 1-4 photos per page'. */
@@ -261,8 +270,8 @@ export function syncNote(r: Pick<PhotoSync, 'skipped' | 'unreadable'>): string {
 }
 
 /** The photos step's way on (wizard: hard gate at 40, never a dead button). */
-export function photosShort(builder: Pick<BuilderActions, 'uploadedPhotos'>): number {
-  return photosShortBy(photosGoingIn(builder.uploadedPhotos));
+export function photosShort(builder: Pick<BuilderActions, 'uploadedPhotos'> & Partial<Pick<BuilderActions, 'albumSize'>>): number {
+  return photosShortBy(photosGoingIn(builder.uploadedPhotos), builder.albumSize);
 }
 
 /* ── Cover ─────────────────────────────────────────────────────────────── */
@@ -313,8 +322,8 @@ export function albumMade(pages: BuilderActions['albumPages']): boolean {
  *  (an album already made goes back to its pages, never made again: that
  *  would wipe edits; short of 40 photos, to the photos; else it makes the
  *  album), from the photos going in. */
-export function coverStepNext(made: boolean, photosIn: number): { label: string; go: 'pages' | 'photos' | 'make' } {
-  return wizardCoverStepNext(made, photosIn);
+export function coverStepNext(made: boolean, photosIn: number, size?: AlbumSizePreset): { label: string; go: 'pages' | 'photos' | 'make' } {
+  return wizardCoverStepNext(made, photosIn, size);
 }
 
 /** The Photos step once the album is made (the website's upload step for a

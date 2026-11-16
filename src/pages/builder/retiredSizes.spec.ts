@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { isMiniSize } from '../../lib/megyMini';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -171,6 +172,6 @@ describe('9×9 is gone from the app, and the database agrees (0053)', () => {
   });
 
   it("0053's event-deal size check lists exactly the sizes the app makes", () => {
-    expect(quoted(SQL.match(/deal_album_size in \(([^)]*)\)/)![1])).toEqual(ALBUM_SIZES.map((s) => s.preset).sort());
+    expect(quoted(SQL.match(/deal_album_size in \(([^)]*)\)/)![1])).toEqual(ALBUM_SIZES.map((s) => s.preset).filter((s) => !isMiniSize(s)).sort());
   });
 });

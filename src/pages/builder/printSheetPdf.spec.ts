@@ -363,3 +363,32 @@ describe('every page is cut at its own box on the sheet', () => {
     }
   });
 });
+
+/* MEGY MINI (owner, 2026-11-16; lib/megyMini): a 16-page A5 booklet, folded
+   and stapled. Its sheets carry SPREADS (printSheet saddleSheetPlan), not
+   single leaves, so no piece numbers: each sheet says its folds instead. */
+describe('Megy Mini press sheets (folded and stapled)', () => {
+  it('lays a 16-page A5 Mini on 2 sheets: 4 sides of 12.5 x 19 in, no fonts, no piece numbers', async () => {
+    drawn.length = 0;
+    const { bytes, plan, sourceBleedIn } = await imposeAlbumSheets(await albumPdf('5.8x8.3', 16, 0.125, true), '5.8x8.3', 'MP-MINI', T);
+    expect(sourceBleedIn).toBe(0.125);
+    expect(plan.sheets).toBe(2);
+    expect(plan.sides.map((s) => `${s.sheet}${s.side}`)).toEqual(['1front', '1back', '2front', '2back']);
+    const out = await PDFDocument.load(bytes);
+    expect(out.getPageCount()).toBe(4);
+    for (const pg of out.getPages()) expect([pg.getWidth(), pg.getHeight()]).toEqual([12.5 * 72, 19 * 72]);
+    expect(drawn).toContain('MP-MINI · Megy Mini · sheet 1 of 2 · front');
+    expect(drawn).toContain('MP-MINI · Megy Mini · sheet 2 of 2 · back');
+    expect(drawn.filter((t) => /^\d+$/.test(t))).toEqual([]);
+    expect(await fontsIn(bytes)).toEqual({ objects: 0, pagesListing: 0 });
+  });
+
+  it('refuses a print file that is not a whole number of folded sheets', async () => {
+    await expect(imposeAlbumSheets(await albumPdf('5.8x8.3', 15, 0.125, true), '5.8x8.3', 'MP-MINI', T)).rejects.toThrow(/multiple of 4/);
+  });
+
+  it('takes the stapled cover: one side, no spine', async () => {
+    const { spineIn } = await imposeCoverSheet(await coverPdf('5.8x8.3', 'staple', 16), '5.8x8.3', 'staple', 16, 'MP-MINI', T);
+    expect(spineIn).toBeCloseTo(0, 3);
+  });
+});
