@@ -12,7 +12,8 @@ export const SHARED_CHECK_EXPECTED: Record<string, string> = {
   sheets: '13',
   price: '365',
   breakdown: '3 lines, total 505',
-  templates: '714',
+  // + 12, the Megy Mini's own layouts (miniTemplates, 2026-11-17); its first ones stay, retired.
+  templates: '726',
   'templates-by-size': '8x8: 28, 6x6: 22, 8x6: 38, 6x8: 38, 6x4: 11',
   quotes: '818',
   album: '40 pages, 19 full-page photos, 60 photos placed',

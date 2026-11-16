@@ -33,7 +33,8 @@ export const DENSITY_BY_SIZE: Record<AlbumSizePreset, number[]> = {
   '6x8': [1, 2, 3, 4],
   '11.5x8': [1, 2, 3, 4, 5, 6],
   '8.5x11': [1, 2, 3, 4, 5, 6],
-  // The Megy Mini (A5) deals the 6x8 deck rebuilt for A5 (rectTemplates): same cap.
+  // The Megy Mini (A5) is laid out by its own page planner (miniPlanner), which
+  // fills its 16 pages from 1 to 5 photos a page whatever is chosen here.
   '5.8x8.3': [1, 2, 3, 4],
 };
 

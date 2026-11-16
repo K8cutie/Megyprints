@@ -10,6 +10,7 @@ import { TEMPLATES_6X4 } from './templates6x4';
 import { TEMPLATES_8X6 } from './templates8x6';
 import { TEMPLATES_6X8 } from './templates6x8';
 import { TEMPLATES_A5 } from './templatesA5';
+import { MINI_TEMPLATES } from './miniTemplates';
 import { SPREAD_TEMPLATES } from './miniSpread';
 import { BINDING_INCHES } from './binding';
 
@@ -1268,7 +1269,7 @@ export const PAGE_TEMPLATES: PageTemplate[] =
     // single (a photo at its true ratio inside the safe area) into a full-bleed
     // one, which is the exact layout a square page cannot have without cropping
     // an off-orientation photo by a third.
-    .concat(TEMPLATES_6X6, TEMPLATES_8X8, TEMPLATES_6X4, TEMPLATES_8X6, TEMPLATES_6X8, TEMPLATES_A5);
+    .concat(TEMPLATES_6X6, TEMPLATES_8X8, TEMPLATES_6X4, TEMPLATES_8X6, TEMPLATES_6X8, TEMPLATES_A5, MINI_TEMPLATES);
 
 /* BORDERED SINGLES RETIRED (owner, 2026-10-02): "remove the 1 pic page
    templates that are not full bleed". A single photo now gets a full-bleed
@@ -1281,6 +1282,10 @@ export const PAGE_TEMPLATES: PageTemplate[] =
 for (const t of PAGE_TEMPLATES) {
   if (t.slots.filter((s) => s.kind !== 'qr').length === 1 && !t.fullBleed) RETIRED_TEMPLATE_IDS.add(t.id);
 }
+/* THE MEGY MINI'S FIRST LAYOUTS RETIRED (owner, 2026-11-17): the Mini deals
+   its own (miniTemplates.ts). The old A5 ids keep resolving for Minis made
+   before, which stay exactly as they were. */
+for (const t of TEMPLATES_A5) RETIRED_TEMPLATE_IDS.add(t.id);
 
 export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
 

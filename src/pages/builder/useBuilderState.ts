@@ -31,7 +31,8 @@ import { isMaskId, type MaskId } from './maskShapes';
 import { isLookId, type LookId } from './lookRules';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
-import { bookPagesFor, maxPagesFor } from '../../lib/megyMini';
+import { bookPagesFor, maxPagesFor, isMiniSize } from '../../lib/megyMini';
+import { miniCrossings, miniShape, miniReflow } from './miniPlanner';
 import { healSpreadPairs, spreadHalfOf, spreadQrCornerOf, spreadTemplateId, outerSpreadCorner, placeSpreadPair } from './miniSpread';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
 import { withPhotoOnLastPage } from './lastPagePhoto';
@@ -261,7 +262,9 @@ function relayPhotosOnTemplate(page: AlbumPage, template: PageTemplate): AlbumPa
     textSlotOrnament: carriedTextSlotOrnament,
     textSlotOrnamentGeom: carriedTextSlotOrnamentGeom,
     textSlotQrGeom: carriedTextSlotQrGeom,
-    slotFills: reflowFills(existingFills, slotCount, carriedQr, carriedText, carriedOrnament),
+    // A Mini page onto another Mini layout: photos keep their frame's shape.
+    slotFills: miniReflow(page.templateId, page.slotFills, template.id, (i) => !!(carriedQr[i] || carriedText[i] || carriedOrnament[i]))
+      ?? reflowFills(existingFills, slotCount, carriedQr, carriedText, carriedOrnament),
     slotScales: new Array(slotCount).fill(1),
     slotOffsetsX: new Array(slotCount).fill(0),
     slotOffsetsY: new Array(slotCount).fill(0),
@@ -2319,6 +2322,49 @@ export function useBuilderState(): BuilderActions {
     setGeneratingCount(null);
   }, [checker, startPhotoCheck]);
 
+  /** A Mini's pages with every photo in a frame of the other shape moved to
+   *  show its face (faceCentrePan). A face that isn't found: a portrait in a
+   *  landscape frame keeps its upper part, where heads are; a landscape on a
+   *  portrait page stays centred. Never more than 8 s. `photos` = the
+   *  measured photos the pages were laid out from. */
+  const showCrossedFaces = async (pages: AlbumPage[], size: AlbumSizePreset, photos: UploadedPhoto[]): Promise<AlbumPage[]> => {
+    const crossed = pages.flatMap((p, pageIndex) =>
+      miniCrossings(p.templateId, p.slotFills, photos).map((slot) => ({ pageIndex, slot, photo: p.slotFills![slot]! })));
+    if (!crossed.length) return pages;
+    setGenerating('faces');
+    setGeneratingCount({ done: 0, total: crossed.length });
+    await paintFrame();
+    const out = [...pages];
+    const deadline = Date.now() + 8000;
+    let ready = false;
+    try { await faces.init(); ready = true; } catch { /* no faces: the fallback below */ }
+    let done = 0;
+    for (const c of crossed) {
+      const photo = photos[c.photo];
+      const url = photo?.previewUrl;
+      let face: { x: number; y: number } | null = null;
+      if (ready && url && Date.now() < deadline) {
+        try { face = await faces.detectFaceCenter(url); } catch { face = null; }
+      }
+      if (!face && photo && miniShape(photo) === 'P') face = { x: 0.5, y: 0.3 };
+      const loaded = url && face ? await pictureSize(url).catch(() => null) : null;
+      const natural = loaded ? { w: loaded.width, h: loaded.height } : photo ? { w: photo.width, h: photo.height } : null;
+      const page = out[c.pageIndex];
+      const box = slotDesignSize(page, c.slot, size, c.pageIndex);
+      if (face && natural && box) {
+        const pan = faceCentrePan(face, natural, box, page.slotScales?.[c.slot]);
+        const xs = [...(page.slotOffsetsX ?? [])];
+        const ys = [...(page.slotOffsetsY ?? [])];
+        xs[c.slot] = pan.x;
+        ys[c.slot] = pan.y;
+        out[c.pageIndex] = { ...page, slotOffsetsX: xs, slotOffsetsY: ys };
+      }
+      setGeneratingCount({ done: ++done, total: crossed.length });
+    }
+    setGeneratingCount(null);
+    return out;
+  };
+
   const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
     const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
     const size = newSize ?? albumSize;
@@ -2457,6 +2503,11 @@ export function useBuilderState(): BuilderActions {
     newPages = mergeStudioPages(newPages, kept);
     // Kept Studio pages go back where they were: the middle spread stays at 8|9.
     newPages = placeSpreadPair(newPages);
+    // THE MEGY MINI fills every page (miniPlanner; owner, 2026-11-17): a photo
+    // that had to go in a frame of the other shape is moved to show its faces
+    // ("crops the photo to fill the page, keeping the faces in"). Its own step
+    // with a count, like "Finding the faces" above.
+    if (isMiniSize(size)) newPages = await showCrossedFaces(newPages, size, photos);
     // createEmptyPage only carries border color/width — also apply the border STYLE
     // and the decorative FRAME (when chosen) onto every freshly generated page.
     const bStyle = border.style;

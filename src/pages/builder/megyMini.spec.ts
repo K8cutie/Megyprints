@@ -3,7 +3,7 @@ import { generateAlbum, isFullPagePhoto } from './generateAlbum';
 import { getTemplatesForAlbum, getTemplateById } from './pageTemplates';
 import { offerableSizesAmong, isSizeOfferableAmong } from './sizeOffer';
 import { coverWrapGeometry, isHardcover, spineWidthInches, PRINTER_SPEC } from './coverGeometry';
-import { bindingInchesFor, BINDING_INCHES } from './binding';
+import { bindingInchesFor, bindingMarginFraction, BINDING_INCHES, MINI_FOLD_INCHES } from './binding';
 import { saddleFolds, saddleSheetPlan, PRESS_SHEET } from './printSheet';
 import { ALBUM_SIZES, type AlbumPage, type UploadedPhoto } from './types';
 import { ALBUM_INCHES, MIN_FRAME_INCHES } from './templateKit';
@@ -135,8 +135,13 @@ describe('Megy Mini: the stapled cover', () => {
     expect(g.pageCount).toBe(16);
   });
 
-  it('keeps the soft 3/8" binding allowance', () => {
-    expect(bindingInchesFor(MINI_COVER)).toBe(BINDING_INCHES);
+  it('keeps no allowance at the staple fold: photos run to it (owner, 2026-11-17)', () => {
+    expect(bindingInchesFor(MINI_COVER)).toBe(MINI_FOLD_INCHES);
+    expect(MINI_FOLD_INCHES).toBe(0);
+    expect(bindingMarginFraction(MINI_SIZE)).toBe(0);
+    // albums keep theirs
+    expect(bindingInchesFor('softcover')).toBe(BINDING_INCHES);
+    expect(bindingMarginFraction('6x8')).toBeCloseTo(BINDING_INCHES / 6, 9);
   });
 });
 

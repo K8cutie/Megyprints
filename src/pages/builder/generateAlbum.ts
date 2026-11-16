@@ -23,6 +23,7 @@ import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
 import { isMiniSize, MINI_SIZE, MINI_PAGES, MINI_MEMORY_PAGES, MINI_OPENING_PAGES } from '../../lib/megyMini';
 import { pickSpreadPhoto, spreadPages, SPREAD_LEFT_INDEX } from './miniSpread';
+import { planMiniPages } from './miniPlanner';
 
 /* ══════════════════════════════════════════════════════════════════════════
    SMART ALBUM GENERATION — Ratio-aware template matching
@@ -1461,49 +1462,81 @@ export function generateAlbum(
   return best;
 }
 
-/** The Megy Mini (lib/megyMini): always exactly its 16 pages, so a crowd of
- *  photos is dealt denser instead of adding a page. One opening full page and
- *  two memory pages (its 2 free videos) instead of an album's 3 and 7. The
- *  app takes 16 to 40 photos for it, which always fit (megyMini.spec). */
+/** The Megy Mini (lib/megyMini): always exactly its 16 pages, every page
+ *  filled edge to edge with the Mini's own layouts (miniTemplates; owner,
+ *  2026-11-17: "im trying to avoid pages with lots of free spaces since the
+ *  pages for mini are very few"). One opening full page and two memory pages
+ *  (its 2 free videos) instead of an album's 3 and 7; the middle spread on
+ *  pages 8 and 9; the page planner (miniPlanner) lays out the rest. The app
+ *  takes 16 to 40 photos for it, which always fit (megyMini.spec).
+ *  A chosen photos-per-page doesn't apply: the 16 pages set the mix. */
 function generateMiniBook(
   photos: UploadedPhoto[],
-  photosPerPage: number | undefined,
+  _photosPerPage: number | undefined,
   background: AlbumPage['background'] | undefined,
   options: GenerateOptions | undefined,
 ): AlbumPage[] {
   const wanted = Math.max(1, Math.floor(options?.minPages ?? MINI_PAGES));
-  const deal = (pool: UploadedPhoto[], o: GenerateOptions | undefined, want: number): AlbumPage[] => {
-    const opts: GenerateOptions = { ...o, minPages: want, memoryPages: MINI_MEMORY_PAGES, openingPages: MINI_OPENING_PAGES };
-    let pages = generateAlbum(pool, MINI_SIZE, photosPerPage, background, opts);
-    for (const denser of [2, 3, 4]) {
-      if (pages.length <= want) break;
-      if (photosPerPage != null && denser <= photosPerPage) continue;
-      pages = generateAlbum(pool, MINI_SIZE, denser, background, opts);
-    }
-    return pages;
-  };
 
   // THE MIDDLE SPREAD (miniSpread.ts): one landscape photo across pages 8 and
   // 9, the stapled booklet's centre. Never a video memory's own photo. A roll
   // with no landscape photo that fits is made without one, as before.
   const carried = new Set((options?.memories ?? []).map((m) => m.photo));
   const spread = wanted >= SPREAD_LEFT_INDEX + 2 ? pickSpreadPhoto(photos, carried) : null;
-  if (spread == null) return deal(photos, options, wanted);
+  if (spread == null) return dealMiniPages(photos, wanted, background, options);
 
   const restMap = photos.map((_, i) => i).filter((i) => i !== spread);
   const toRest = (i: number) => (i < spread ? i : i - 1);
   const faceCenters = options?.faceCenters
     ? Object.fromEntries(Object.entries(options.faceCenters).filter(([k]) => +k !== spread).map(([k, v]) => [toRest(+k), v]))
     : undefined;
-  const pages = deal(restMap.map((i) => photos[i]), {
+  const pages = dealMiniPages(restMap.map((i) => photos[i]), wanted - 2, background, {
     ...options,
     ...(faceCenters ? { faceCenters } : {}),
     memories: options?.memories?.map((m) => ({ ...m, photo: toRest(m.photo) })),
-  }, wanted - 2);
+  });
   remapSlotFills(pages, restMap);
   const at = Math.min(SPREAD_LEFT_INDEX, pages.length);
   const pair = spreadPages(createEmptyPage(at, MINI_SIZE, background, options?.border), createEmptyPage(at + 1, MINI_SIZE, background, options?.border), spread);
   pages.splice(at, 0, ...pair);
+  pages.forEach((p, i) => { p.id = makePageId(i); });
+  return pages;
+}
+
+/** A Mini's pages besides the middle spread: the opening full page, the
+ *  memory pages (and a memory that came along, as its badge page), and the
+ *  page planner's pages for the rest, `want` pages in all. */
+function dealMiniPages(
+  photos: UploadedPhoto[], want: number, background: AlbumPage['background'] | undefined, options: GenerateOptions | undefined,
+): AlbumPage[] {
+  const solo = memorySingleTemplate(MINI_SIZE);
+  const badges = new Map<number, CarriedMemory[]>();
+  for (const m of options?.memories ?? []) {
+    if (photos[m.photo] && qrBadgeTemplate(MINI_SIZE, m.corner ?? 'br')) badges.set(m.photo, [...(badges.get(m.photo) ?? []), m]);
+  }
+  const opening = solo ? pickOpeningPhotos(photos, MINI_SIZE, MINI_OPENING_PAGES, new Set(badges.keys()), options?.faceCenters) : [];
+  const carriedPhotos = [...badges].flatMap(([photo, list]) => list.map(() => photo));
+  const memWant = solo ? Math.max(0, Math.min(MINI_MEMORY_PAGES, photos.length - opening.length) - carriedPhotos.length) : 0;
+  const spoken = new Set([...badges.keys(), ...opening]);
+  const reserved = [...carriedPhotos, ...(memWant > 0 ? pickMemoryPhotosBesides(photos, MINI_SIZE, memWant, spoken, options, memWant) : [])];
+  const taken = new Set([...reserved, ...opening]);
+  const rest = groupPhotosByMoment(photos).flat().filter((i) => !taken.has(i));
+  const sceneOf = options?.scenes === false ? null : (options?.scenes ?? planScenes(photos));
+  const plan = planMiniPages(rest.map((i) => photos[i]), Math.max(0, want - opening.length - reserved.length),
+    options?.randomize ? Math.random : () => 0, sceneOf ? rest.map((i) => sceneOf.get(photos[i].id)) : undefined);
+  const pages = plan.map((pp, k) => {
+    const page = createEmptyPage(k, MINI_SIZE, background, options?.border, options?.cornerBase);
+    page.templateId = pp.templateId;
+    page.slotFills = pp.photos.map((i) => rest[i]);
+    page.slotScales = pp.photos.map(() => 1);
+    page.slotOffsetsX = pp.photos.map(() => 0);
+    page.slotOffsetsY = pp.photos.map(() => 0);
+    return page;
+  });
+  if (solo) pages.unshift(...opening.map((photo, i) => asFullPage(createEmptyPage(i, MINI_SIZE, background, options?.border, options?.cornerBase), solo, photo)));
+  insertMemoryPages(pages, reserved, solo, photos, MINI_SIZE, background, options, badges, opening.length);
+  // Two shots of the same moment the customer kept never share a page.
+  separateLookAlikes(pages, photos, isMemoryReady);
   pages.forEach((p, i) => { p.id = makePageId(i); });
   return pages;
 }

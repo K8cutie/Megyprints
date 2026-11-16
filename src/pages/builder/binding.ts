@@ -29,11 +29,21 @@ export const BINDING_INCHES = 0.375;
  *  is drawn with 1/2" (frames are fractions of the safe area, so they follow). */
 export const HARDBOUND_BINDING_INCHES = 0.5;
 
+/** The Megy Mini (A5, lib/megyMini) is stapled through its fold (saddle-
+ *  stitched): it opens flat, and its middle spread already runs one photo
+ *  across the fold. So its pages keep NO allowance there and photos run to
+ *  the fold (owner, 2026-11-17: "im trying to avoid pages with lots of free
+ *  spaces since the pages for mini are very few"; it was the softcover's 3/8",
+ *  a white strip beside every full page). */
+export const MINI_FOLD_INCHES = 0;
+const MINI_SIZE_KEY = '5.8x8.3';
+
 /** The binding side allowance for an order's cover: 1/2" hardbound (every
  *  cover but softcover and the Megy Mini's staple cover binds as a hardcover),
- *  3/8" softcover, staples or not chosen. */
+ *  3/8" softcover or not chosen, none for the Mini's staples (MINI_FOLD_INCHES). */
 export function bindingInchesFor(cover?: string | null): number {
-  return cover && cover !== 'softcover' && cover !== 'staple' ? HARDBOUND_BINDING_INCHES : BINDING_INCHES;
+  if (cover === 'staple') return MINI_FOLD_INCHES;
+  return cover && cover !== 'softcover' ? HARDBOUND_BINDING_INCHES : BINDING_INCHES;
 }
 
 /** Which side of the open book page 1 is on. Every album is 'right' now.
@@ -50,6 +60,9 @@ interface Margin { top: number; bottom: number; left: number; right: number; }
 
 /** The binding reserve as a fraction of the page WIDTH for this album size. */
 export function bindingMarginFraction(albumSize: string, bindingIn: number = BINDING_INCHES): number {
+  // The Mini's own allowance, whatever the caller assumed: the editor, the
+  // preview and the app draw it before a cover is ever chosen.
+  if (albumSize === MINI_SIZE_KEY) return MINI_FOLD_INCHES / (148 / 25.4);
   const widthIn = parseFloat(String(albumSize).split('x')[0]) || 8;
   return bindingIn / widthIn;
 }
