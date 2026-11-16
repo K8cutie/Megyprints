@@ -51,14 +51,17 @@ describe("the cover editor uses the website's words", () => {
     expect(web.preview).toContain(`<Pencil size={13} /> ${W.EDIT_COVER}`);
   });
 
-  it('the row\'s line says the order it really has: the app runs no photo check yet (beta round 2)', () => {
+  it('the row\'s line says the order it really has: "best ones first" only once the photo check has looked at every photo (beta round 2)', () => {
     // The website's "best ones first" is its photo check's order. The app's
-    // check is off (appPlatform.ts), so every photo ties and the row keeps
-    // the album's order: the app's own words, until the check is on.
+    // check is on since 2.1.2 (appPlatform.ts): the grid says the website's
+    // line when the photos ARE best first (albumFlow.steadyCoverRow), and
+    // the app's own words while they are still in the album's order.
     const platform = fs.readFileSync(path.join(__dirname, '../src/builder/appPlatform.ts'), 'utf8');
-    expect(platform).toMatch(/photoCheck: \{\s*available: \(\) => false,/);
+    expect(platform).toContain('const phoneCheck = deps.photoCheck ?? checks.photoCheck;');
     expect(W.YOUR_PHOTOS).toBe('Your photos. Tap one for the cover.');
     expect(W.YOUR_PHOTOS).not.toMatch(/best/);
+    const grid = fs.readFileSync(path.join(__dirname, '../src/components/CoverPhotoGrid.tsx'), 'utf8');
+    expect(grid).toContain('{best ? WEBSITE_YOUR_PHOTOS : YOUR_PHOTOS}');
   });
 
   it('the Background tab (CoverEditor.tsx, PageColorPicker.tsx)', () => {

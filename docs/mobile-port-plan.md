@@ -795,6 +795,91 @@ memory's QR goes in the corner away from the faces. The **blur check**
 (`mobile/src/app/photo-check-lab.tsx`): `photoCheck.available` stays
 false in the album.
 
+**The photo check in the album (2.1.2, 2026-11-17, branch
+`feat/port-photo-check-on`; owner, asked "Build the blur check into the
+app?": "Yes, for 2.1.2").** `photoCheck` is now the phone's own
+(`appPlatform.ts`, the same `createPhoneChecks` as the face finder), with
+the website's rules.
+
+- **The Photos step checks the picked photos** (`lib/draftPhotoCheck.ts`).
+  On the website a photo is checked as it is uploaded, on the upload step;
+  in the app the picked photos wait on the Photos step (the draft) and go
+  into the builder on "Next", so that is where the app checks them and
+  asks. It uses the shared functions: `nextCheckJob` (blur and fingerprint
+  for every photo, then closed eyes for the photos in a set of repeats),
+  `checkIsReady` and `suggestLeaveOut`. Two photos are checked side by side.
+- **What the customer sees** (`components/PhotoCheckCard.tsx`, the
+  website's `PhotoCheckCard` and its words, held by
+  `test/photoCheckCard.test.tsx`): "Megy is checking your photos for blur
+  and repeats… 12 of 52" with a bar, then "Megy found 2 blurry and 3 repeat
+  shots", each photo marked Blurry or Repeat, "Leave them out", "Keep all",
+  a tap on one photo to keep it, and "3 photos left out · Bring them back".
+  Its buttons are plain: the step's one filled button is the way on.
+- **Left out** is a flag on the picked photo (`DraftPhoto.leftOut`): the
+  photo is not in the grid, does not count toward the 40 (or the Mini's
+  16), and does not go into the album. Picking it again in the picker puts
+  it back. **Keep it** (`DraftPhoto.kept`) is saved too, and goes with the
+  photo into the album (`PhotoIntake.known`, `albumFlow.keptToCarry`), so
+  Megy does not ask again, here or on the website.
+- **A photo is checked once.** What the check found is saved with the
+  picked photo (`DraftPhoto.check`, in the draft file, a few answers per
+  write) and goes into the album with it (`PhotoIntake.known`: the shared
+  builder starts the album photo with its check). After the app is closed
+  and opened again the saved answers are told to the checker
+  (`rememberCheck`), so nothing is decoded twice.
+- **Making the album**: the builder has each photo's check, so the full
+  pages skip blurry shots and take sharp ones, and two repeats do not share
+  a page, as on the website. Generate starts the check itself if it is not
+  running (`startPhotoCheck`, shared), then waits for it with the count.
+- **The cover's photos are best first** once every photo has its check,
+  and only then does the line above them say so ("Your photos, best ones
+  first. Tap one."; in the album's order the line stays "Your photos. Tap
+  one for the cover."). The order is taken once per visit and kept
+  (`albumFlow.steadyCoverRow`): answers that come in while the cover is
+  picked do not move photos under a finger.
+- **No face pass on every photo** (`facesForAllPhotos` is false on the
+  phone), and **no check until the Photos step or "Making your album"
+  opens** (`appPlatform.wantPhotoCheck`). Both come from the first emulator
+  walk of this branch (release build, the 2.5 GB emulator): with the check
+  simply connected, opening the app on an album made before started ML Kit
+  on every one of its photos behind the start screen; the app held 136 % of
+  a processor and 460 MB (it idles at about 230 MB) for minutes, and the
+  emulator went into swap. So closed eyes are judged only for the
+  photos in a set of repeats (which shot Megy keeps), as on a website
+  browser without fast face finding, and an album opened from an older
+  version is checked only when its Photos step is opened or it is made
+  again.
+- **Walked on the emulator, release build (2026-11-17)**, with the 138
+  made-up test pictures of `tools/photo-check` (20 scenes, 18 blurred
+  copies, 18 near copies, 4 turned copies, the 78 sample photos; no
+  personal photos), each given a taken time in its EXIF:
+  - Photos step: "Megy is checking your photos for blur and repeats… 32 of
+    138" and on, all 138 in about 55 s (0.4 s a photo, two at a time; the
+    pictures are 12 to 50 MP), then about 60 s more for the closed-eyes pass
+    on the photos in sets of repeats (most of this roll, by design), then
+    "Megy found 9 blurry and 23 repeat shots". A tap on one photo kept it
+    (8 blurry); "Leave them out" left "Your photos: 107" and "31 photos left
+    out · Bring them back".
+  - Cover step: "Your photos, best ones first. Tap one.", the app idle
+    there (no check behind it).
+  - "Make my album": about 2 s for the 107 photos, straight to the Preview.
+  - App closed and opened on the Photos step: 107 photos and "31 photos
+    left out" at once, nothing checked again. "Bring them back": 138.
+  - Opened on an album made before (an older test album): no check starts;
+    the app at about 230 MB, its checking threads idle.
+  - Memory: about 380 MB during the blur pass and 487 MB at the most
+    during the closed-eyes pass (ML Kit), back to about 240 MB after.
+  **Not measured: a real phone.** The emulator is a PC; a low-priced phone
+  may take longer per photo. The customer can go on at any time: the check
+  carries on behind the next step.
+- **The card says nothing rather than "all sharp, no repeats"** once the
+  customer has kept a photo Megy asked about (the website says it then
+  too): the line would not be true of the photos kept.
+- **Not done:** the suggestion is only on the Photos step (a customer who
+  goes on before the check ends sees it only by coming back); a face pass
+  on every photo (closed eyes off the full pages) waits for real-phone
+  numbers.
+
 **No release build found a face before this branch.** R8 (it shrinks
 release builds only) took out the constructors of ML Kit's registrars,
 which ML Kit makes by reflection, so ML Kit could not start: the log said
@@ -1323,6 +1408,7 @@ pushed to `DCIM/Camera` and media-scanned.
   needs a file the app does not have yet, and each one is listed
   (`builder/pageImages.ts`, `test/pageImagesAssets.test.ts`).
 - No face finding and no photo check in the app; no AI quote lines (curated only).
+  (The face finder is in since 2.1.1 and the photo check since 2.1.2: "Phase 2 notes".)
 - Not on a real phone; one emulator (Android 14, x86_64). No editing, no ordering.
 
 ---
@@ -4444,6 +4530,7 @@ making screen showed "Making your album", "70 photos" / "150 photos", "Looking a
 photos", "Laying out the pages", "Almost done", "Your photos stay on your phone." and was
 gone in about half a second, also with 150 photos of 12 MP. "Checking photos for blur" and
 "Finding the faces" are website-only until the phone's check is wired into the app.
+(Wired in 2.1.2, 2026-11-17: see "The photo check in the album" in the Phase 2 notes.)
 **Update 2026-11-16 (`feat/port-face-finder`):** "Finding the faces. N of M" now shows in
 the app whenever the album is short of photos that fit a full page (for example an 8x8
 of mostly portraits): the face search for the full pages, at most 8 s. Seen on the
@@ -4495,6 +4582,17 @@ count needs the phone's photo check, which is not in the app yet.)
     </en-US>
 
 **Megy Mini (2026-11-16, `feat/port-megy-mini`):** the Mini line is true only once 0062 is on the live database AND Megy Mini is switched on with a shipping fee (Admin → Pricing). Until then the app shows no Mini card: drop the line if it isn't on by upload day.
+
+### Release notes 2.1.2 (code 112: 2.1.1 + `feat/port-photo-check-on`; check against the app on upload day)
+
+    <en-US>
+    New:
+    • Megy checks your photos for blurry shots and repeats, and offers to leave them out
+    • Full pages now go to your sharp photos
+    • On the cover step, your best photos come first
+    </en-US>
+
+If 2.1.1 was never uploaded, 2.1.2 goes up instead and takes 2.1.1's lines too (Megy Mini, its middle pages, the Mini offered under 40 photos, faces in frames).
 
 ## Events switched off in the app (2026-11-16, `feat/port-remove-events`)
 

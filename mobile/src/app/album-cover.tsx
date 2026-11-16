@@ -15,7 +15,7 @@
    a guess. (The website's cover default, Cinzel, is in the app: 400 and 700.)
    ══════════════════════════════════════════════════════════════════════════ */
 import { router, useFocusEffect, useIsFocused } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { AlbumPage } from '@web/pages/builder/types';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { Image } from 'expo-image';
@@ -25,7 +25,8 @@ import { ALBUM_SIZES } from '@web/pages/builder/types';
 import { Button } from '../components/Button';
 import { CoverPhotoGrid } from '../components/CoverPhotoGrid';
 import { useBuilder } from '../builder/BuilderProvider';
-import { albumMade, chooseCover, coverPhotoId, coverPhotos, coverStepNext, coverTitle, photosIn, saveStep, setCoverTitleText } from '../builder/albumFlow';
+import { albumMade, chooseCover, coverPhotoId, coverStepNext, coverTitle, photosIn, saveStep, setCoverTitleText } from '../builder/albumFlow';
+import { useCoverPhotos } from '../builder/useCoverPhotos';
 import { NOT_DRAWN_LINE } from '../builder/screenWords';
 import { forgetPhotoPictures, usePagePicture } from '../builder/usePagePicture';
 import { useGoToPreview } from '../builder/useGoToPreview';
@@ -63,15 +64,19 @@ export default function AlbumCover() {
   // (CoverEditor). On focus, not on mount: this screen stays mounted under
   // the Preview and the page editor, which must edit the pages, not the cover.
   const { setEditScope } = builder;
+  // Each time this step comes on top is a new visit: the photos take their
+  // order again (useCoverPhotos).
+  const [visit, setVisit] = useState(0);
   useFocusEffect(useCallback(() => {
     setEditScope('coverFront');
+    setVisit((v) => v + 1);
     return () => setEditScope('interior');
   }, [setEditScope]));
   // The decoded photos go when the cover step is left (they are a few MB each).
   useEffect(() => () => forgetPhotoPictures(), []);
   const goToPreview = useGoToPreview();
 
-  const photos = useMemo(() => coverPhotos(builder.uploadedPhotos).filter((p) => !!p.previewUrl), [builder.uploadedPhotos]);
+  const { photos, best } = useCoverPhotos(builder.uploadedPhotos, visit);
   const onCover = coverPhotoId(builder);
 
   const title = coverTitle(builder);
@@ -111,7 +116,7 @@ export default function AlbumCover() {
         {/* The photos ABOVE the cover, a grid you scroll down (owner, 2026-11-04). */}
         {photos.length > 0 && (
           <View style={styles.row}>
-            <CoverPhotoGrid photos={photos} onCover={onCover} onPick={(p) => chooseCover(builder, p.id)} pad={space.lg} />
+            <CoverPhotoGrid photos={photos} best={best} onCover={onCover} onPick={(p) => chooseCover(builder, p.id)} pad={space.lg} />
           </View>
         )}
 

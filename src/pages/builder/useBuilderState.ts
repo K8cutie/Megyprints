@@ -1136,7 +1136,7 @@ export function useBuilderState(): BuilderActions {
   const { deviceStore, sessionStore, faces, photoCheck: checker, lifecycle, textMeasurer, occasionChanged, cloud: account } = platform;
   /** The occasion's caption lines (website: lib/quotes; app: its own pool). */
   const { ensureThemeQuotes } = platform.quotes;
-  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview } = platform.photos;
+  const { looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, releasePreviewUrl, urlNeedsReload, pictureSize, convertingPreview, known: knownAbout } = platform.photos;
   /** A saved photo URL that must be found again in the photo store when the
    *  album opens: none at all, or one the device says doesn't last (website:
    *  a blob: URL, dead with the old tab; app: a picker's URI). */
@@ -2018,6 +2018,9 @@ export function useBuilderState(): BuilderActions {
       size: file.size,
       width: 0, // filled in after IndexedDB store
       height: 0,
+      // The app's Photos step has checked the photo already (platform.photos.known).
+      ...(knownAbout?.(file)?.check ? { check: knownAbout(file)!.check } : {}),
+      ...(knownAbout?.(file)?.kept ? { kept: true } : {}),
     }));
     // Optimistically reflect in the ref so a same-tick second call dedups too.
     uploadedPhotosRef.current = [...uploadedPhotosRef.current, ...newPhotos];
@@ -2073,7 +2076,7 @@ export function useBuilderState(): BuilderActions {
     }
 
     return { added: freshFiles.length, skipped: plan.duplicate.length, videos, others, restored, otherCopies, heic: heicDone() };
-  }, [idbPhotos, looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, convertingPreview]);
+  }, [idbPhotos, looksHeic, toAlbumPhoto, getImageDimensions, captureTime, captureLocation, previewUrlOf, convertingPreview, knownAbout]);
 
   /* ── Megy's free photo check (lib/photoCheck) ──
      One photo at a time, in the background, on the phone: blur + fingerprint
@@ -2083,10 +2086,13 @@ export function useBuilderState(): BuilderActions {
      is checked once. `checkTriedRef` keeps a failed photo from looping. */
   const checkTriedRef = useRef<Set<string>>(new Set());
   const checkRunningRef = useRef(false);
-  useEffect(() => {
+  /** Starts the check, unless it is running or has nothing to do. Called when
+   *  the photos change, and by Generate before it waits for the check (the
+   *  app's check can become available without the photos changing). */
+  const startPhotoCheck = useCallback(() => {
     // A browser that can't decode a small copy (no createImageBitmap) skips the check.
     if (!checker.available()) return;
-    if (checkRunningRef.current || !nextCheckJob(uploadedPhotos, checkTriedRef.current, checker.facesForAllPhotos())) return;
+    if (checkRunningRef.current || !nextCheckJob(uploadedPhotosRef.current, checkTriedRef.current, checker.facesForAllPhotos())) return;
     checkRunningRef.current = true;
     void (async () => {
       try {
@@ -2111,6 +2117,10 @@ export function useBuilderState(): BuilderActions {
         checkRunningRef.current = false;
       }
     })();
+  }, [checker, idbPhotos]);
+  useEffect(() => {
+    startPhotoCheck();
+    // Only when the photos change, as before startPhotoCheck was split out.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uploadedPhotos]);
 
@@ -2285,6 +2295,7 @@ export function useBuilderState(): BuilderActions {
    *  gets its album from what was checked. */
   const whenPhotosChecked = useCallback(async () => {
     if (!checker.available()) return;
+    startPhotoCheck();
     const deadline = Date.now() + CHECK_WAIT_MS;
     let idle = 0;
     for (;;) {
@@ -2306,7 +2317,7 @@ export function useBuilderState(): BuilderActions {
       await new Promise((r) => setTimeout(r, 150));
     }
     setGeneratingCount(null);
-  }, [checker]);
+  }, [checker, startPhotoCheck]);
 
   const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
     const { size: newSize, confirmedLost, ...genOptions } = options ?? {};

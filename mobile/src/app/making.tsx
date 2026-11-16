@@ -17,7 +17,7 @@ import { useGoToPreview } from '../builder/useGoToPreview';
 import { colors, space } from '../lib/theme';
 
 export default function Making() {
-  const { builder } = useBuilder();
+  const { builder, platform } = useBuilder();
   const started = useRef(false);
   const [failed, setFailed] = useState<string | null>(null);
   const goToPreview = useGoToPreview();
@@ -30,6 +30,9 @@ export default function Making() {
 
   const start = () => {
     setFailed(null);
+    // The photo check is wanted here too (an album whose making starts
+    // without the Photos step, a new size for one): Generate waits for it.
+    platform.wantPhotoCheck();
     void makeAlbum(builder)
       .then((made) => {
         if (!here.current) return;

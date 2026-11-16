@@ -13,6 +13,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { addMoreLabel, MIN_ALBUM_PHOTOS, photosGoingIn, photosOverBy, photosShortBy, photoWord } from '@web/pages/builder/albumMinimum';
 import { isMiniSize, miniSuggestion, MINI_MAX_PHOTOS, MINI_MIN_PHOTOS, MINI_NAME, MINI_PAGES, MINI_SIZE } from '@web/lib/megyMini';
+import type { PhotoCheck } from '@web/lib/photoCheck';
 import { formatCount } from './photoDays';
 import { orderTime } from './photoTime';
 
@@ -41,6 +42,11 @@ export interface DraftPhoto {
   /** Left out of the album (Megy's photo check, as on the website). Stays in
    *  the list, so it can be put back; it does not count toward the 40. */
   leftOut?: boolean;
+  /** What Megy's photo check found (lib/draftPhotoCheck, the website's own
+   *  UploadedPhoto.check): saved, so a photo is checked once. */
+  check?: PhotoCheck;
+  /** "Keep it": Megy does not suggest leaving this photo out again. */
+  kept?: boolean;
 }
 
 export interface AlbumDraft {
@@ -84,7 +90,8 @@ export function photoKey(source: PhotoSource, uri: string): string {
 export function idsInAlbum(gridIds: readonly string[], photos: readonly DraftPhoto[]): Set<string> {
   const out = new Set<string>();
   if (photos.length === 0) return out;
-  const keys = new Set(photos.map((p) => p.key));
+  // A photo left out can be picked again: that puts it back (addPhotos).
+  const keys = new Set(photos.filter((p) => !p.leftOut).map((p) => p.key));
   for (const id of gridIds) if (keys.has(photoKey('gallery', id))) out.add(id);
   return out;
 }
@@ -111,22 +118,70 @@ export interface AddResult {
   alreadyIn: number;
 }
 
-/** Adds photos, skipping any already in the album, and keeps time order. */
+/** Adds photos, skipping any already in the album, and keeps time order.
+ *  A photo that was left out and is picked again goes back in, kept (Megy
+ *  does not suggest it out again). */
 export function addPhotos(draft: AlbumDraft, incoming: readonly DraftPhoto[], now = Date.now()): AddResult {
   const have = new Set(draft.photos.map((p) => p.key));
+  const out = new Set(draft.photos.filter((p) => p.leftOut).map((p) => p.key));
   const fresh: DraftPhoto[] = [];
+  const back = new Set<string>();
   let alreadyIn = 0;
   for (const p of incoming) {
+    if (out.has(p.key)) { back.add(p.key); continue; }
     if (have.has(p.key)) { alreadyIn++; continue; }
     have.add(p.key);
     fresh.push(p);
   }
-  if (fresh.length === 0) return { draft, added: 0, alreadyIn };
+  if (fresh.length === 0 && back.size === 0) return { draft, added: 0, alreadyIn };
+  const photos = back.size ? draft.photos.map((p) => (back.has(p.key) ? putBack(p) : p)) : draft.photos;
   return {
-    draft: { version: DRAFT_VERSION, photos: inTimeOrder([...draft.photos, ...fresh]), updatedAt: now },
-    added: fresh.length,
+    draft: { version: DRAFT_VERSION, photos: inTimeOrder([...photos, ...fresh]), updatedAt: now },
+    added: fresh.length + back.size,
     alreadyIn,
   };
+}
+
+/** A left-out photo back in the album, kept. */
+function putBack(p: DraftPhoto): DraftPhoto {
+  const { leftOut: _out, ...rest } = p;
+  return { ...rest, kept: true };
+}
+
+/* ── Megy's photo check on the picked photos (lib/draftPhotoCheck) ──────── */
+
+/** What the check found for these photos. The picked photos are the same,
+ *  so the draft's time does not move (the Photos step's note about what the
+ *  album took still holds). */
+export function setChecks(draft: AlbumDraft, found: ReadonlyMap<string, PhotoCheck>): AlbumDraft {
+  if (found.size === 0 || !draft.photos.some((p) => found.has(p.key))) return draft;
+  return { ...draft, photos: draft.photos.map((p) => (found.has(p.key) ? { ...p, check: found.get(p.key) } : p)) };
+}
+
+/** Megy's suggestion, accepted: these photos are left out of the album.
+ *  They stay in the list, so they can be brought back. */
+export function leaveOutPhotos(draft: AlbumDraft, keys: readonly string[], now = Date.now()): AlbumDraft {
+  const out = new Set(keys);
+  if (!draft.photos.some((p) => out.has(p.key) && !p.leftOut)) return draft;
+  return { version: DRAFT_VERSION, photos: draft.photos.map((p) => (out.has(p.key) && !p.leftOut ? { ...p, leftOut: true } : p)), updatedAt: now };
+}
+
+/** "Keep it": these photos stay in (or go back in) and are not suggested
+ *  out again. The draft's time moves only when a photo goes back in. */
+export function keepPhotos(draft: AlbumDraft, keys: readonly string[], now = Date.now()): AlbumDraft {
+  const keep = new Set(keys);
+  if (!draft.photos.some((p) => keep.has(p.key) && (!p.kept || p.leftOut))) return draft;
+  const back = draft.photos.some((p) => keep.has(p.key) && p.leftOut);
+  return {
+    version: DRAFT_VERSION,
+    photos: draft.photos.map((p) => (keep.has(p.key) && (!p.kept || p.leftOut) ? putBack(p) : p)),
+    updatedAt: back ? now : draft.updatedAt,
+  };
+}
+
+/** Every left-out photo back in the album, kept. */
+export function bringBackPhotos(draft: AlbumDraft, now = Date.now()): AlbumDraft {
+  return keepPhotos(draft, draft.photos.filter((p) => p.leftOut).map((p) => p.key), now);
 }
 
 /** Takes photos out of the album (the photos stay on the phone). */
@@ -137,6 +192,15 @@ export function removePhotos(draft: AlbumDraft, keys: readonly string[], now = D
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+/** A saved photo check, checked; null if it is not one (it is done again). */
+function readCheck(raw: unknown): PhotoCheck | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const c = raw as Record<string, unknown>;
+  const sharp = num(c.sharp);
+  if (c.v !== 1 || sharp == null || typeof c.hash !== 'string' || !/^[0-9a-f]{16}$/.test(c.hash)) return null;
+  return { v: 1, sharp, hash: c.hash, faces: num(c.faces), eyesClosed: c.eyesClosed === true, ...(c.facesTried === true ? { facesTried: true } : {}) };
+}
 
 /** One saved photo, checked; null if it is not usable. */
 function readPhoto(raw: unknown): DraftPhoto | null {
@@ -159,6 +223,9 @@ function readPhoto(raw: unknown): DraftPhoto | null {
   const size = num(r.size);
   if (size != null) photo.size = size;
   if (r.leftOut === true) photo.leftOut = true;
+  const check = readCheck(r.check);
+  if (check) photo.check = check;
+  if (r.kept === true) photo.kept = true;
   return photo;
 }
 

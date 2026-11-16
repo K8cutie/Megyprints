@@ -32,6 +32,7 @@ import { createThemeQuotes } from '@web/lib/themeQuotePool';
 import { albumVersionWith, signedInUserIdWith, useAlbumSyncWith } from '@web/lib/albumCloud';
 import { DRAFT_STORAGE_KEY } from '@web/lib/localDraftRules';
 import { MIN_ALBUM_PHOTOS } from '@web/pages/builder/albumMinimum';
+import type { PhotoCheck } from '@web/lib/photoCheck';
 
 /** A photo picked on the phone: name, size, type, and where it is. */
 interface AppPhoto extends PickedPhoto { uri: string }
@@ -174,5 +175,86 @@ describe("the website's album builder, in the app", () => {
     expect(draft?.uploadedPhotos).toHaveLength(MIN_ALBUM_PHOTOS);
     expect(draft?.uploadedPhotos[0].previewUrl).toBe('file:///photos/IMG_1.jpg');
     expect(draft?.albumPages.length).toBe(builder.albumPages.length);
+  });
+
+  it('a photo the Photos step already checked comes in with its check and "keep it": the builder checks only the others (2.1.2)', async () => {
+    const phone = makePhone();
+    const calls: string[] = [];
+    const known: PhotoCheck = { v: 1, sharp: 321, hash: '0123456789abcdef', faces: null, eyesClosed: false, facesTried: false };
+    type Checked = AppPhoto & { check?: PhotoCheck; kept?: boolean };
+    const platform: BuilderPlatform = {
+      ...phone.platform,
+      // The app's photo intake says what the Photos step found (appPhotos.ts).
+      photos: { ...phone.platform.photos, known: (p) => ((p as Checked).check || (p as Checked).kept ? { check: (p as Checked).check, kept: (p as Checked).kept } : undefined) },
+      photoCheck: {
+        available: () => true,
+        facesForAllPhotos: () => false,
+        readable: () => true,
+        check: async (p, _w, _h, opts) => {
+          calls.push(`${opts?.faces === false ? 'basic' : 'faces'}:${p.name}`);
+          return { v: 1, sharp: 50, hash: 'f'.repeat(16), faces: null, eyesClosed: false };
+        },
+      },
+    };
+    root = createRoot();
+    await act(async () => {
+      root!.render(createElement(BuilderPlatformContext.Provider, { value: platform }, createElement(Probe)));
+    });
+    await settle();
+
+    const picked: Checked[] = [
+      { name: 'IMG_0001.jpg', size: 2_000_001, type: 'image/jpeg', uri: 'file:///photos/IMG_1.jpg', check: known, kept: true },
+      { name: 'IMG_0002.jpg', size: 2_000_002, type: 'image/jpeg', uri: 'file:///photos/IMG_2.jpg' },
+    ];
+    await act(async () => { builder.addPhotos(picked); });
+    await settle();
+    await settle();
+    const [first, second] = builder.uploadedPhotos;
+    expect(first.check).toEqual(known);
+    expect(first.kept).toBe(true);
+    // The one that came in unchecked is checked by the builder, as on the website.
+    expect(second.check).toMatchObject({ sharp: 50 });
+    expect(second.kept).toBeUndefined();
+    expect(calls).toEqual(['basic:IMG_0002.jpg']);
+  });
+
+  it('a check that becomes wanted later (the app: at "Making your album") is run by Generate, which waits for it (2.1.2)', async () => {
+    const phone = makePhone();
+    const calls: string[] = [];
+    let wanted = false;
+    const platform: BuilderPlatform = {
+      ...phone.platform,
+      photoCheck: {
+        available: () => wanted,
+        facesForAllPhotos: () => false,
+        readable: () => true,
+        check: async (p) => {
+          calls.push(p.name);
+          const n = Number(/\d+/.exec(p.name)?.[0] ?? 0);
+          // Each photo its own fingerprint: no repeats, so no face pass.
+          return { v: 1, sharp: 100 + n, hash: (n * 0x1f3d5b79 >>> 0).toString(16).padStart(8, '0').repeat(2), faces: null, eyesClosed: false };
+        },
+      },
+    };
+    root = createRoot();
+    await act(async () => {
+      root!.render(createElement(BuilderPlatformContext.Provider, { value: platform }, createElement(Probe)));
+    });
+    await settle();
+    const picked: AppPhoto[] = Array.from({ length: MIN_ALBUM_PHOTOS }, (_, i) => ({
+      name: `IMG_${String(i + 1).padStart(4, '0')}.jpg`, size: 2_000_000 + i, type: 'image/jpeg', uri: `file:///photos/IMG_${i + 1}.jpg`,
+    }));
+    await act(async () => { builder.addPhotos(picked); });
+    await settle();
+    // Not wanted yet: nothing is checked behind the screens.
+    expect(calls).toEqual([]);
+    expect(builder.uploadedPhotos.some((p) => p.check)).toBe(false);
+
+    wanted = true;
+    await act(async () => { await builder.generateAlbum(); });
+    await settle();
+    expect(calls).toHaveLength(MIN_ALBUM_PHOTOS);
+    expect(builder.uploadedPhotos.every((p) => p.check)).toBe(true);
+    expect(builder.albumPages.length).toBeGreaterThanOrEqual(MIN_ALBUM_PHOTOS / 2);
   });
 });

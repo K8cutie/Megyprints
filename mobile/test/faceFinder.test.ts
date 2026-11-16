@@ -177,7 +177,8 @@ describe('the default face finder', () => {
   it('is the phone\'s ML Kit one (createPhoneChecks), not a stand-in', () => {
     jest.isolateModules(() => {
       const phoneFaces: FaceFinder = { init: async () => {}, detectFaceCenter: async () => ({ x: 0.1, y: 0.1 }) };
-      jest.doMock('../src/lib/phonePhotoCheck', () => ({ createPhoneChecks: () => ({ faces: phoneFaces, photoCheck: {} }) }));
+      const phoneCheck = { available: () => true };
+      jest.doMock('../src/lib/phonePhotoCheck', () => ({ createPhoneChecks: () => ({ faces: phoneFaces, photoCheck: phoneCheck, remember: () => {} }) }));
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { createAppPlatform } = require('../src/builder/appPlatform') as typeof import('../src/builder/appPlatform');
       const platform = createAppPlatform({
@@ -187,8 +188,15 @@ describe('the default face finder', () => {
         measurer: () => null, client: {} as never, useUser: () => null,
       });
       expect(platform.faces).toBe(phoneFaces);
-      // The blur check stays off: only the faces were connected.
+      // The photo check (blur, repeats, closed eyes) is the same checker's,
+      // since 2.1.2: the faces it finds are found once for both. It is not
+      // wanted until the Photos step or "Making your album" opens: opening
+      // the app on an album made before starts no check behind the start
+      // screen (on the emulator it held a processor core and 460 MB for
+      // minutes, 2026-11-17).
       expect(platform.photoCheck.available()).toBe(false);
+      platform.wantPhotoCheck();
+      expect(platform.photoCheck.available()).toBe(true);
     });
   });
 

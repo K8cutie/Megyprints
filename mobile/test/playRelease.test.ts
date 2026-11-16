@@ -98,7 +98,7 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.1', () => {
+  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.2', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
     // 100 (2.0.0) was built 2026-11-03 but never uploaded; 101 (2.0.1) went to Alpha 2026-11-04;
@@ -113,9 +113,13 @@ describe('the Play build is the 1.x app, a newer version', () => {
     // 110 (2.1.0) Privacy and Terms as the app's screens; scenes (photos within 5 minutes stay together);
     //             the making screen names each step with a count (owner: "so it looks like its 2.1").
     // 111 (2.1.1) the face finder: a photo put in a frame slides to show the faces; ML Kit
-    //             works in release builds (owner: "lets upload it as 2.1.1").
-    expect(play.android.versionCode).toBe(111);
-    expect(play.version).toBe('2.1.1');
+    //             works in release builds (owner: "lets upload it as 2.1.1"). Also Megy Mini (the
+    //             16-page A5 booklet), its middle spread, and the Mini offered under 40 photos.
+    // 112 (2.1.2) Megy's photo check on the phone: blurry shots and repeats suggested out on the
+    //             Photos step, full pages from sharp photos, the cover's photos best first
+    //             (owner, asked "Build the blur check into the app?": "Yes, for 2.1.2").
+    expect(play.android.versionCode).toBe(112);
+    expect(play.version).toBe('2.1.2');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {

@@ -11,8 +11,9 @@
    off the screen, and a tap shows on the cover right under it. It is a list
    that draws only the photos near the screen.
 
-   Every photo, best first (albumFlow.coverPhotos). The photo on the cover is
-   ticked. When the screen opens, the grid scrolls to it only if it's out of
+   Every photo, best first once Megy's photo check has looked at them all
+   (albumFlow.steadyCoverRow; `best` picks the line above them). The photo on
+   the cover is ticked. When the screen opens, the grid scrolls to it only if it's out of
    sight; a tap never moves the grid (it keeps its order, so nothing jumps
    under a finger).
 
@@ -26,7 +27,7 @@ import { useCallback, useRef } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import type { UploadedPhoto } from '@web/pages/builder/types';
 import { Thumb } from './Thumb';
-import { YOUR_PHOTOS } from '../editor/cover/words';
+import { WEBSITE_YOUR_PHOTOS, YOUR_PHOTOS } from '../editor/cover/words';
 import { Tick } from '../home/homeIcons';
 import { colors } from '../lib/theme';
 
@@ -49,9 +50,11 @@ export function offsetToShow(index: number, tile: number, gridH: number): number
   return row * rowH + tile <= gridH ? null : row * rowH;
 }
 
-export function CoverPhotoGrid({ photos, onCover, onPick, pad = 0, rows = ROWS_SHOWN }: {
-  /** Best first (albumFlow.coverPhotos), each with its small picture. */
+export function CoverPhotoGrid({ photos, best = false, onCover, onPick, pad = 0, rows = ROWS_SHOWN }: {
+  /** In the order shown (useCoverPhotos), each with its small picture. */
   photos: readonly UploadedPhoto[];
+  /** They are best first (Megy's photo check has looked at them all). */
+  best?: boolean;
   /** The photo on the cover now, if it is one of the album's. */
   onCover: string | null;
   onPick: (photo: UploadedPhoto) => void;
@@ -77,7 +80,7 @@ export function CoverPhotoGrid({ photos, onCover, onPick, pad = 0, rows = ROWS_S
 
   return (
     <View testID="cover-your-photos">
-      <Text style={[styles.label, { paddingHorizontal: pad }]}>{YOUR_PHOTOS}</Text>
+      <Text style={[styles.label, { paddingHorizontal: pad }]} testID="cover-your-photos-line">{best ? WEBSITE_YOUR_PHOTOS : YOUR_PHOTOS}</Text>
       <FlatList
         ref={list}
         data={photos as UploadedPhoto[]}

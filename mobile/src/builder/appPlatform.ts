@@ -17,9 +17,19 @@
                    from the faces. No face, or no ML Kit in
                    the build (jest, an old APK): the photo stays centred, as
                    the website does when it finds no face
-     photoCheck    not available yet (blur, repeats and closed eyes stay a
-                   website feature for now). The face finder above does not
-                   need it: it finds faces only when the builder asks
+     photoCheck    Megy's photo check on the phone (lib/phonePhotoCheck.ts,
+                   the website's rules: blur, repeats, closed eyes), since
+                   2.1.2. The Photos step runs it on the picked photos and
+                   shows what Megy would leave out (lib/draftPhotoCheck.ts);
+                   the builder runs it on the album's photos, as on the
+                   website (full pages from sharp, eyes-open photos; the
+                   cover's photos best first). One checker for both and for
+                   the face finder above, so a photo is looked at once.
+                   NOT WANTED until the Photos step or "Making your album"
+                   opens (wantPhotoCheck): opening the app on an album made
+                   before must not start checking every photo of it behind
+                   the start screen (seen on the emulator, 2026-11-17: more
+                   than a processor core and 460 MB held for minutes)
      lifecycle     React Native's AppState
      textMeasurer  the page renderer's Skia fonts, once they have loaded
                    (textMeasurer.ts); null until then, so nothing is said about
@@ -38,10 +48,10 @@
    `deps`, so jest builds the same platform on a made-up phone.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AppLifecycle, BuilderPlatform, FaceFinder, KeyValueStore, TextMeasurer } from '@web/shared/platform';
+import type { AppLifecycle, BuilderPlatform, FaceFinder, KeyValueStore, PhotoChecker, TextMeasurer } from '@web/shared/platform';
 import { createThemeQuotes } from '@web/lib/themeQuotePool';
 import { albumVersionWith, signedInUserIdWith, useAlbumSyncWith } from '@web/lib/albumCloud';
-import { createPhoneChecks } from '../lib/phonePhotoCheck';
+import { createPhoneChecks, type PhoneChecks } from '../lib/phonePhotoCheck';
 import { createPhotoIntake, createPhotoStore, type AppPhotoStore, type InspectPhotos } from './appPhotos';
 
 export interface AppPlatformDeps {
@@ -57,6 +67,9 @@ export interface AppPlatformDeps {
   /** The face finder; default: the phone's own (ML Kit, createPhoneChecks
    *  on the native modules). Tests pass a made-up one. */
   faces?: FaceFinder;
+  /** The photo check; default: the phone's own (the same createPhoneChecks).
+   *  Tests pass a made-up one. */
+  photoCheck?: PhotoChecker;
 }
 
 /** Tells the screens that show the occasion that the builder changed it. */
@@ -71,24 +84,32 @@ export function occasionSignal() {
 export interface AppPlatform extends BuilderPlatform {
   photoStore: AppPhotoStore;
   occasion: ReturnType<typeof occasionSignal>;
+  /** A blur answer already known for a photo (saved with the picked photos):
+   *  the checker does not decode the photo again for it. */
+  rememberCheck: PhoneChecks['remember'];
+  /** The photo check is wanted from now on (the Photos step, or "Making
+   *  your album", is open). Until then photoCheck.available() is false, so
+   *  nothing is checked behind the start screen or the Preview. */
+  wantPhotoCheck(): void;
 }
 
 export function createAppPlatform(deps: AppPlatformDeps): AppPlatform {
   const photoStore = createPhotoStore(deps.deviceStore, deps.inspect);
   const occasion = occasionSignal();
   const { client } = deps;
+  // One checker: the face finder and the photo check share the faces found.
+  const checks = createPhoneChecks();
+  const phoneCheck = deps.photoCheck ?? checks.photoCheck;
+  let checkWanted = false;
   return {
     deviceStore: deps.deviceStore,
     sessionStore: deps.sessionStore,
     usePhotoStore: () => photoStore,
     photos: createPhotoIntake(deps.inspect),
-    faces: deps.faces ?? createPhoneChecks().faces,
-    photoCheck: {
-      available: () => false,
-      facesForAllPhotos: () => false,
-      readable: () => false,
-      check: async () => { throw new Error('The photo check is not in the app yet'); },
-    },
+    faces: deps.faces ?? checks.faces,
+    photoCheck: { ...phoneCheck, available: () => checkWanted && phoneCheck.available() },
+    rememberCheck: checks.remember,
+    wantPhotoCheck: () => { checkWanted = true; },
     lifecycle: {
       // The photo index is written when the app leaves, with the album.
       onLeave: (fn) => deps.lifecycle.onLeave(() => { photoStore.flush(); fn(); }),
