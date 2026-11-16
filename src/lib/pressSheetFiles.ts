@@ -49,13 +49,19 @@ const finishOf = (o: Pick<PrintOrder, 'material'>): MaterialType => (o.material 
 /** How thick this book's spine is: its leaves of C2S 140 in the picked
  *  finish, stacked (plus the boards on a hardcover). */
 export function orderSpine(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>): string {
+  // A Megy Mini (lib/megyMini): folded and stapled, no spine.
+  if (coverOf(o) === 'staple') return 'stapled, no spine';
   return `spine ${spineLabel(spineWidthInches(o.page_count, coverOf(o), finishOf(o)))}`;
 }
+
+/** A Megy Mini's sheets, start to finish (printSheet saddleLayout). */
+export const STAPLED_HOW_TO = 'flip on the long edge · cut across between the two spreads and round their trim · fold each down the middle · nest them, fold 1 outermost · 2 staples through the fold';
 
 /** What to tell the operator after the cover sheet: its spine, and when the
  *  cover file was drawn for another spine than this paper makes (files from
  *  before C2S 140 was set), the spine the pages will really stack to. */
 export function coverSheetNote(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>, fileSpineIn: number): string {
+  if (coverOf(o) === 'staple') return 'Cover sheet: print one side only · no spine: fold it down the middle round the pages and staple them together';
   const note = `Cover sheet: print one side only · spine ${spineLabel(fileSpineIn)}`;
   const bookIn = spineWidthInches(o.page_count, coverOf(o), finishOf(o));
   return Math.abs(fileSpineIn - bookIn) * 25.4 < 0.2
@@ -114,6 +120,11 @@ export function stackHowTo(piles: number): string {
  *  pages than the order was priced for never gets here: imposeAlbumSheets
  *  refuses it (unpaidPagesMessage). */
 function sheetsNote(o: PrintOrder, plan: { sheets: number; pageCount: number; layout: { leavesPerSheet: number } }, pageOne: PageOneSide): string {
+  if (o.album_size === '5.8x8.3') {
+    // A Megy Mini (lib/megyMini): spreads, folded and stapled.
+    const mini = `Megy Mini: ${plan.sheets} sheets, both sides · ${STAPLED_HOW_TO}`;
+    return plan.pageCount === o.page_count ? mini : `${mini}. Check: the print file has ${plan.pageCount} pages, the order says ${o.page_count}.`;
+  }
   const note = `${plan.sheets} sheets, both sides · ${stackHowTo(plan.layout.leavesPerSheet)} · ${blankSidesNote(plan.pageCount, pageOne)}`;
   return plan.pageCount === o.page_count
     ? note

@@ -23,6 +23,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset } from '../pages/builder/types';
+import type { MiniOffer } from './megyMini';
 
 export type Binding = 'soft' | 'hard';
 
@@ -36,6 +37,8 @@ export const MIN_PAGES = 40;
 export const SIZE_LABELS: Record<AlbumSizePreset, string> = {
   '6x4': '6×4', '8x6': '8×6', '6x8': '6×8', '6x6': '6×6',
   '8x8': '8×8', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
+  // The Megy Mini's page (lib/megyMini): never an album size.
+  '5.8x8.3': 'A5',
 };
 
 /** Owner-only view of the cost model — the shape of owner_pricing_model(). */
@@ -66,6 +69,16 @@ export interface PricingModel {
   compare_multiple?: number | null;
   /** Last day (Asia/Manila, YYYY-MM-DD) the was price shows. */
   compare_until?: string | null;
+  /** MEGY MINI (0062; absent before it). On sale only with a shipping fee. */
+  mini_on?: boolean;
+  mini_price?: number;
+  mini_package_price?: number;
+  mini_shipping_fee?: number | null;
+  mini_free_qr?: number;
+  /** Owner's view only: what one Mini costs to make, and the hosting kept
+   *  for its videos (inside its price, not added to it). */
+  mini_cost?: number;
+  mini_hosting_reserve?: number;
 }
 
 export interface HostingTier { years: number; price: number }
@@ -106,6 +119,9 @@ export interface PriceSchedule {
   compare_at?: CompareAt | null;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
+  /** Megy Mini while it is on sale (0062); null or absent otherwise. Read it
+   *  through miniOfferOf(), never directly. */
+  mini?: MiniOffer | null;
 }
 
 /** Printed sheets for a page count. Pages are laid up `pps` to a sheet and the
@@ -336,6 +352,45 @@ export function priceBreakdown(
   }
 
   return { items, total };
+}
+
+/** CUSTOMER-FACING. A Megy Mini's bill (0062): its set price, the shipping
+ *  fee on top (albums ship free, the Mini doesn't), ₱20 for each video past
+ *  its free ones, and the same memory term and HD add-ons as an album. The
+ *  checkout's mirror of order_quote()'s Mini branch: same total to the peso. */
+export function miniPriceBreakdown(
+  schedule: PriceSchedule,
+  offer: MiniOffer,
+  qrMemories = 0,
+  hostingYears: number | null = null,
+  hdMemories = false,
+): PriceBreakdown & { shipping: number } {
+  const free = Math.max(0, Math.floor(offer.free_qr));
+  const extraQr = Math.max(0, Math.floor(qrMemories) - free);
+  const qrCharge = extraQr * EXTRA_QR_RATE;
+  const termCharge = hostingTermCharge(schedule, hostingYears);
+  const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
+  const items: PriceLine[] = [
+    {
+      label: `Megy Mini — A5 · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
+      amount: offer.price,
+    },
+    { label: 'Shipping', amount: offer.shipping_fee },
+  ];
+  if (qrCharge > 0) {
+    items.push({ label: `Video memories · ${free} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`, amount: qrCharge });
+  }
+  if (termCharge > 0 && hostingYears != null) {
+    const included = includedHostingYears(schedule);
+    items.push({
+      label: `Memories stay live · ${hostingYears} years${included ? ` (${included} included)` : ''}`,
+      amount: termCharge,
+    });
+  }
+  if (hdCharge > 0) {
+    items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
+  }
+  return { items, total: offer.price + offer.shipping_fee + qrCharge + termCharge + hdCharge, shipping: offer.shipping_fee };
 }
 
 // ── Owner side (model supplied by owner_pricing_model()) ────────────────────

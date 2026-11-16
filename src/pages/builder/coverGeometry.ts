@@ -92,9 +92,16 @@ export interface CoverWrapGeometry {
 
 const inToPx = (inches: number): number => Math.round(inches * COVER_DPI);
 
-/** Is this cover a hard case? Every non-softcover CoverType binds as hardcover. */
+/** Is this cover a hard case? Every CoverType but softcover and the Megy Mini's
+ *  staple cover (a soft, stapled cover) binds as hardcover. */
 export function isHardcover(cover: CoverType): boolean {
-  return cover !== 'softcover';
+  return cover !== 'softcover' && cover !== 'staple';
+}
+
+/** The Megy Mini's stapled cover: folded and stapled through the fold, so it has
+ *  no spine to print (lib/megyMini). */
+export function isStapled(cover: CoverType | string | null | undefined): boolean {
+  return cover === 'staple';
 }
 
 const MM_PER_IN = 25.4;
@@ -119,6 +126,7 @@ export function spineLeaves(pageCount: number): number {
 /** Spine for a given leaf thickness: every leaf stacked, plus the two
  *  boards on a hardcover. */
 export function spineForLeaf(pageCount: number, cover: CoverType, leafIn: number): number {
+  if (isStapled(cover)) return 0;
   const blockIn = spineLeaves(pageCount) * leafIn;
   return isHardcover(cover)
     ? blockIn + 2 * PRINTER_SPEC.boardThicknessIn
@@ -196,7 +204,7 @@ export function coverWrapGeometry(
     dpi: COVER_DPI,
     cover,
     hardcover: hard,
-    pageCount: Math.max(MIN_PAGES, Math.round(pageCount) || 0),
+    pageCount: isStapled(cover) ? Math.round(pageCount) || 0 : Math.max(MIN_PAGES, Math.round(pageCount) || 0),
     spineIn,
     wrap: { wIn: wrapWIn, hIn: wrapHIn, wPx: inToPx(wrapWIn), hPx: inToPx(wrapHIn) },
     panels,
