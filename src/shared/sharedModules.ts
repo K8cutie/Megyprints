@@ -34,6 +34,7 @@ export const SHARED_MODULES = [
   'src/lib/jpegZip.ts',
   'src/lib/limit.ts',
   'src/lib/megyMascot.ts',
+  'src/lib/megyMini.ts',
   'src/lib/orderExpiry.ts',
   'src/lib/orderTracker.ts',
   'src/lib/passwordReset.ts',

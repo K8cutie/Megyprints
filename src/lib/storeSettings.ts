@@ -179,6 +179,23 @@ export async function setPriceCompare(multiple: number | null, until: string | n
   return null;
 }
 
+/** Owner-only (definer RPC, 0062). Megy Mini: on or off, its price, its price
+ *  inside a package, the shipping fee charged on top (needed to turn it on)
+ *  and the free videos. Reloads the schedule. */
+export async function setMegyMini(next: { on: boolean; price: number; packagePrice: number; shippingFee: number | null; freeQr: number }): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_megy_mini', {
+    p_on: next.on,
+    p_price: Math.round(next.price),
+    p_package_price: Math.round(next.packagePrice),
+    p_shipping_fee: next.shippingFee == null ? null : Math.round(next.shippingFee),
+    p_free_qr: Math.round(next.freeQr),
+  });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only. The raw cost model behind the schedule, for the admin Pricing
  *  panel. Rejected by the database for anyone else, so a non-owner reaching this
  *  gets an error rather than the figures. */

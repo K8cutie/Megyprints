@@ -34,7 +34,8 @@ const MODEL: PricingModel = {
     '8x8':    { pps: 4,  hb: 350, surcharge: 0 },
     '11.5x8': { pps: 4,  hb: 450, surcharge: 300 },
     '8.5x11': { pps: 4,  hb: 500, surcharge: 300 },
-  },
+    // No A5: the Megy Mini isn't priced from the album model (0062, miniPriceBreakdown).
+  } as PricingModel['sizes'],
 };
 
 const SIZE_KEYS = Object.keys(MODEL.sizes) as AlbumSizePreset[];

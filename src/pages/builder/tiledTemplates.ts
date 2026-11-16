@@ -45,6 +45,7 @@ const INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '8x8':    { w: 8,    h: 8  },
   '11.5x8': { w: 11.5, h: 8  },
   '8.5x11': { w: 8.5,  h: 11 },
+  '5.8x8.3': { w: 148 / 25.4, h: 210 / 25.4 },  // A5, the Megy Mini (authored: rectTemplates)
 };
 
 /** Square albums this generator serves. Per-size-authored sizes (6x6/8x8)
