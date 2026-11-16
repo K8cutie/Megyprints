@@ -98,7 +98,7 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.2', () => {
+  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.3', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
     // 100 (2.0.0) was built 2026-11-03 but never uploaded; 101 (2.0.1) went to Alpha 2026-11-04;
@@ -118,8 +118,11 @@ describe('the Play build is the 1.x app, a newer version', () => {
     // 112 (2.1.2) Megy's photo check on the phone: blurry shots and repeats suggested out on the
     //             Photos step, full pages from sharp photos, the cover's photos best first
     //             (owner, asked "Build the blur check into the app?": "Yes, for 2.1.2").
-    expect(play.android.versionCode).toBe(112);
-    expect(play.version).toBe('2.1.2');
+    // 113 (2.1.3) the Megy Mini's own layouts: every page filled edge to edge, photos to the
+    //             staple fold (owner: "im trying to avoid pages with lots of free spaces";
+    //             "Yes, build it").
+    expect(play.android.versionCode).toBe(113);
+    expect(play.version).toBe('2.1.3');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {

@@ -4594,6 +4594,34 @@ count needs the phone's photo check, which is not in the app yet.)
 
 If 2.1.1 was never uploaded, 2.1.2 goes up instead and takes 2.1.1's lines too (Megy Mini, its middle pages, the Mini offered under 40 photos, faces in frames).
 
+## The Megy Mini's own layouts: every page full (2.1.3, 2026-11-17, `feat/port-mini-full-pages`)
+
+Owner, 2026-11-17, after seeing a Mini drawn by the print renderer: "im trying to avoid pages with lots of free spaces since the pages for mini are very few", then "Yes, build it" to the draft layouts, a lone landscape cropped to fill its page with the faces kept, and photos to the staple fold.
+
+**What was wrong.** The Mini dealt the 6x8 album's 38 layouts re-cut for A5 (`templatesA5.ts`): 30 of them carry a word box. A seeded Mini from 30 sample photos printed an empty white box on 8 of its 16 pages, and every full page stopped 3/8" (9.5 mm) short of the staple fold (`bindingInchesFor('staple')` was the softcover allowance, set before the Mini existed).
+
+**What it is now.**
+- `src/pages/builder/miniTemplates.ts`: the Mini's own 12 layouts, no word boxes, photos to every edge. Eight are A-shapes (A5 halved is an A6 landscape frame, halved again an A7 portrait, again an A8 small landscape: a phone or camera photo loses at most about 6%). Four are one layout in four ways round, a landscape over a portrait and a landscape (THIRD_ROW): A-shapes alone keep (photos - pages + landscape frames) a multiple of 3, so two rolls in three could not fill 16 pages without cutting a photo to half; this layout breaks that, at about 13% off the sides of a phone landscape.
+- `src/pages/builder/miniPlanner.ts`: picks how many of each layout fill exactly the pages with exactly the photos (fewest photos crossed into a frame of the other shape, a landscape crossed costing more than two portraits; then few THIRD_ROW pages, even pages, few small frames, variety), then lays them out page by page in the order the photos were taken, never the same layout twice in a row when another fits nearly as well. `generateAlbum` routes the Mini to it (`dealMiniPages`): the opening full page, the two video pages and the middle spread stay as they were.
+- The old A5 ids are in `RETIRED_TEMPLATE_IDS`: a Mini made before opens and prints as it was; they are never dealt or offered again.
+- `binding.ts`: `MINI_FOLD_INCHES = 0`, so the Mini keeps no allowance at the fold in the editor, the app and print alike.
+- `useBuilderState`: after a Mini is made, a photo in a frame of the other shape is moved to show its face (`showCrossedFaces`, its own "Finding the faces" step with a count, at most 8 s); with no face found, a portrait in a landscape frame keeps its upper part.
+- "Change layout" on a Mini page keeps each photo in a frame of its own shape (`miniReflow`), so Landscape over two portraits turns into Two portraits over landscape without crossing a photo.
+
+**When a photo still crosses** (tests in `miniPlanner.spec.ts`): never in a Mini of 22-40 photos with 5 landscapes up to half of them. A roll of almost only portraits (0-4 landscapes) puts at most 2 portraits in landscape frames, faces kept; a small roll of mostly landscapes (16-19 photos) puts a landscape alone on a full page, sides cut, as the owner chose.
+
+**Pictures:** `store/mini-layouts/` (sample photos, safe to share): 1 and 2 = before, 5 and 6 = after, drawn by the website's print renderer.
+
+### Release notes 2.1.3 (code 113: 2.1.2 + `feat/port-mini-full-pages`; check against the app on upload day)
+
+    <en-US>
+    New:
+    • Megy Mini pages are filled with photos edge to edge, with no empty boxes
+    • Megy Mini photos now run all the way to the staples
+    </en-US>
+
+If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2.1.2's lines too.
+
 ## Events switched off in the app (2026-11-16, `feat/port-remove-events`)
 
 The owner decided on 2026-11-16, in three steps:
