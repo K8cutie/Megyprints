@@ -185,3 +185,44 @@ describe('the 40-photo minimum (the website\'s own rule and words)', () => {
     expect(pickerProgress(14, 26)).toBe('Enough photos for an album.');
   });
 });
+
+/* MEGY MINI (owner, 2026-11-16): "if they have less than 40 pictures we will
+   recommend megy mini". While the Mini is on sale, an album short of 40 is
+   offered "Make a Megy Mini instead"; the album's own way on stays the filled
+   button. A Mini has its own step: 16 to 40 photos. */
+describe('the photos step and the Megy Mini', () => {
+  const MINI = '5.8x8.3';
+
+  it('an album with 16-39 photos: the Mini is offered, and the photos fit it', () => {
+    const s = photoStep(range(0, 25), '8x8', { miniOnSale: true });
+    expect(s).toMatchObject({ count: 25, short: 15, canGoOn: false, main: 'pick', mainLabel: 'Add 15 more photos', suggestMini: true });
+    expect(s.message).toBe('You have 25 photos. Albums need at least 40, one for every page: add 15 more to make your album. Or make a Megy Mini: 16 A5 pages, and your 25 photos fit.');
+  });
+
+  it('an album with under 16 photos: the Mini is offered, and says it needs only 16', () => {
+    const s = photoStep(range(0, 10), '8x8', { miniOnSale: true });
+    expect(s.suggestMini).toBe(true);
+    expect(s.message).toMatch(/Or make a Megy Mini: it needs only 16 photos for its 16 A5 pages\.$/);
+  });
+
+  it('no offer while the Mini is off, with no photos yet, or at 40 and more', () => {
+    expect(photoStep(range(0, 25), '8x8').suggestMini).toBeFalsy();
+    expect(photoStep(range(0, 25), '8x8', { miniOnSale: false }).suggestMini).toBeFalsy();
+    expect(photoStep([], '8x8', { miniOnSale: true }).suggestMini).toBeFalsy();
+    expect(photoStep(range(0, 40), '8x8', { miniOnSale: true }).suggestMini).toBeFalsy();
+  });
+
+  it('a Mini: 16 to 40 photos; past 40 its one button is "Make an album instead"', () => {
+    expect(photoStep(range(0, 10), MINI, { miniOnSale: true })).toMatchObject({ short: 6, canGoOn: false, mainLabel: 'Add 6 more photos' });
+    expect(photoStep(range(0, 16), MINI)).toMatchObject({ canGoOn: true, main: 'next', secondLabel: 'Add more photos' });
+    expect(photoStep(range(0, 40), MINI)).toMatchObject({ canGoOn: true, main: 'next', secondLabel: null });
+    expect(photoStep(range(0, 43), MINI)).toMatchObject({ canGoOn: false, main: 'size', mainLabel: 'Make an album instead' });
+    expect(photoStep(range(0, 25), MINI, { miniOnSale: true }).suggestMini).toBeFalsy();
+  });
+
+  it('the picker counts toward 16 to 40 for a Mini', () => {
+    expect(pickerProgress(10, 0, MINI)).toBe('A Megy Mini needs at least 16 photos. Pick 6 more.');
+    expect(pickerProgress(10, 6, MINI)).toBe('Enough photos for a Megy Mini.');
+    expect(pickerProgress(30, 13, MINI)).toBe('A Megy Mini holds up to 40 photos: 3 too many.');
+  });
+});

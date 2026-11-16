@@ -108,6 +108,17 @@ export function miniOfferOf(schedule: { mini?: unknown } | null | undefined): Mi
 /** "16–40 photos" for the Mini's own words. */
 export const MINI_PHOTO_RANGE = `${MINI_MIN_PHOTOS}–${MINI_MAX_PHOTOS}`;
 
+/** An ALBUM short of its 40 photos, while Megy Mini is on sale: the Mini is
+ *  offered instead (owner, 2026-11-16: "if they have less than 40 pictures we
+ *  will recommend megy mini"). The button, and the line after "add N more". */
+export const MINI_INSTEAD = 'Make a Megy Mini instead';
+export function miniSuggestion(count: number): string {
+  if (count >= MINI_MIN_PHOTOS && count <= MINI_MAX_PHOTOS) {
+    return `Or make a ${MINI_NAME}: ${MINI_PAGES} A5 pages, and your ${count} photos fit.`;
+  }
+  return `Or make a ${MINI_NAME}: it needs only ${MINI_MIN_PHOTOS} photos for its ${MINI_PAGES} A5 pages.`;
+}
+
 /** Why a Mini can't be made from this many photos, or null when it can. */
 export function miniPhotoProblem(count: number): string | null {
   if (count < MINI_MIN_PHOTOS) {
