@@ -122,6 +122,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/lookRules.ts',
   'src/pages/builder/maskArt.ts',
   'src/pages/builder/maskShapes.ts',
+  'src/pages/builder/miniSpread.ts',
   'src/pages/builder/orderReadiness.ts',
   'src/pages/builder/ornamentFit.ts',
   'src/pages/builder/pageColors.ts',

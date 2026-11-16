@@ -12,7 +12,7 @@
    website can never disagree about it.
    ══════════════════════════════════════════════════════════════════════════ */
 import { addMoreLabel, MIN_ALBUM_PHOTOS, photosGoingIn, photosOverBy, photosShortBy, photoWord } from '@web/pages/builder/albumMinimum';
-import { isMiniSize, MINI_MAX_PHOTOS, MINI_MIN_PHOTOS, MINI_NAME, MINI_PAGES, MINI_SIZE } from '@web/lib/megyMini';
+import { isMiniSize, miniSuggestion, MINI_MAX_PHOTOS, MINI_MIN_PHOTOS, MINI_NAME, MINI_PAGES, MINI_SIZE } from '@web/lib/megyMini';
 import { formatCount } from './photoDays';
 import { orderTime } from './photoTime';
 
@@ -213,6 +213,9 @@ export interface PhotoStep {
   secondLabel: string | null;
   /** The sentence above the buttons. */
   message: string;
+  /** An album short of its 40 photos while Megy Mini is on sale: offer the
+   *  Mini instead (MINI_INSTEAD, a plain button; owner, 2026-11-16). */
+  suggestMini?: boolean;
 }
 
 export const PICK_PHOTOS = 'Pick photos';
@@ -223,8 +226,14 @@ export const MAKE_ALBUM_INSTEAD = 'Make an album instead';
 
 /** The words and the way on, from the website's 40-photo rule (16 to 40 for
  *  a Megy Mini: pass the album's size). */
-export function photoStep(photos: readonly DraftPhoto[], size?: string | null): PhotoStep {
-  return photoStepFor(photosGoingIn(photos), size);
+export function photoStep(photos: readonly DraftPhoto[], size?: string | null, opts?: PhotoStepOptions): PhotoStep {
+  return photoStepFor(photosGoingIn(photos), size, opts);
+}
+
+export interface PhotoStepOptions {
+  /** Megy Mini is on sale (the price list has "mini"): an album short of 40
+   *  photos is offered the Mini. */
+  miniOnSale?: boolean;
 }
 
 /** The Megy Mini's photos step (lib/megyMini): 16 to 40 photos, its 16 pages. */
@@ -258,7 +267,7 @@ function miniPhotoStep(count: number): PhotoStep {
 /** The same, for `count` photos going in (the album builder's count, which
  *  can be lower than the photos picked: the same photo picked twice goes in
  *  once, and one the phone can't open doesn't go in). */
-export function photoStepFor(count: number, size?: string | null): PhotoStep {
+export function photoStepFor(count: number, size?: string | null, opts?: PhotoStepOptions): PhotoStep {
   if (isMiniSize(size)) return miniPhotoStep(count);
   const short = photosShortBy(count);
   if (count === 0) {
@@ -268,10 +277,11 @@ export function photoStepFor(count: number, size?: string | null): PhotoStep {
     };
   }
   if (short > 0) {
-    return {
-      count, short, canGoOn: false, main: 'pick', mainLabel: addMoreLabel(short), secondLabel: null,
-      message: `You have ${formatCount(count)} ${photoWord(count)}. Albums need at least ${MIN_ALBUM_PHOTOS}, one for every page: add ${short} more to make your album.`,
-    };
+    const message = `You have ${formatCount(count)} ${photoWord(count)}. Albums need at least ${MIN_ALBUM_PHOTOS}, one for every page: add ${short} more to make your album.`;
+    // Under 40 photos, the Megy Mini (16 pages) while it is on sale.
+    return opts?.miniOnSale
+      ? { count, short, canGoOn: false, main: 'pick', mainLabel: addMoreLabel(short), secondLabel: null, message: `${message} ${miniSuggestion(count)}`, suggestMini: true }
+      : { count, short, canGoOn: false, main: 'pick', mainLabel: addMoreLabel(short), secondLabel: null, message };
   }
   return {
     count, short, canGoOn: true, main: 'next', mainLabel: NEXT, secondLabel: ADD_MORE_PHOTOS,

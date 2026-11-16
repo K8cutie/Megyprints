@@ -28,7 +28,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { photosOverBy, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { inspectPhotos, releasePickedFiles } from '../../modules/photo-files';
 import { useBuilder } from '../builder/BuilderProvider';
-import { albumMade, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MADE_ALBUM_PHOTOS_NOTE, REMAKE_ALBUM, remakeQuestion, saveStep, syncNote, syncPhotos, TO_COVER, type PhotoSync } from '../builder/albumFlow';
+import { albumMade, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MADE_ALBUM_PHOTOS_NOTE, REMAKE_ALBUM, remakeQuestion, resizeMadeAlbum, saveStep, sizeTap, syncNote, syncPhotos, TO_COVER, type PhotoSync } from '../builder/albumFlow';
+import { MINI_INSTEAD, MINI_SIZE, miniOfferOf } from '@web/lib/megyMini';
+import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
+import { supabase, supabaseConfigured } from '../lib/supabase';
 import { useGoToPreview } from '../builder/useGoToPreview';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
@@ -59,10 +62,27 @@ export default function YourPhotos() {
   // only while the picked photos are the same as then.
   const [took, setTook] = useState<{ at: number; goingIn: number; note: string } | null>(null);
   const tookNow = took && took.at === draft.updatedAt ? took : null;
+  // Megy Mini on sale (the price list's "mini"): an album short of 40 photos
+  // is offered the Mini (owner, 2026-11-16).
+  const loadSchedule = useCallback(() => loadPriceSchedule(supabase, supabaseConfigured), []);
+  const prices = usePriceSchedule(loadSchedule);
+  const miniOnSale = !!miniOfferOf(prices.schedule);
   // A Megy Mini (16 to 40 photos) or an album (40 or more): the album's size says.
-  const picked = photoStep(draft.photos, builder.albumSize);
+  const picked = photoStep(draft.photos, builder.albumSize, { miniOnSale });
   // Fewer went in than were picked: the builder's count decides.
-  const step = tookNow && tookNow.goingIn < picked.count ? photoStepFor(tookNow.goingIn, builder.albumSize) : picked;
+  const step = tookNow && tookNow.goingIn < picked.count ? photoStepFor(tookNow.goingIn, builder.albumSize, { miniOnSale }) : picked;
+  // "Make a Megy Mini instead": the size step's own tap on the Mini (asked
+  // first only when the album already has pages).
+  const toMini = () => {
+    const tap = sizeTap(builder, MINI_SIZE);
+    if (tap.kind === 'same') return;
+    if (tap.kind === 'set') { builder.setAlbumSize(MINI_SIZE); return; }
+    if (tap.kind === 'tooFew') { Alert.alert('Add more photos first', tap.message); return; }
+    Alert.alert('Make it a Megy Mini?', tap.question, [
+      { text: 'Keep my album', style: 'cancel' },
+      { text: 'Make a Megy Mini', onPress: () => { void resizeMadeAlbum(builder, MINI_SIZE); } },
+    ]);
+  };
 
   const undoing = useRef<DraftPhoto | null>(null);
 
@@ -238,6 +258,7 @@ export default function YourPhotos() {
           <>
             <Button label={step.main === 'next' ? TO_COVER : step.mainLabel} onPress={once(goOn)} busy={going} testID="photos-main" />
             {!made && step.secondLabel && <Button label={step.secondLabel} kind="plain" onPress={once(() => router.push('/pick-photos'))} testID="photos-add-more" />}
+            {step.suggestMini && <Button label={MINI_INSTEAD} kind="plain" onPress={toMini} testID="photos-to-mini" />}
             {made && <Button label={KEEP_PAGES} kind="plain" onPress={once(keepPages)} testID="photos-keep-pages" />}
           </>
         )}

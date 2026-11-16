@@ -22,6 +22,7 @@ import { PER_SIZE_AUTHORED } from './templateKit';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
 import { isMiniSize, MINI_SIZE, MINI_PAGES, MINI_MEMORY_PAGES, MINI_OPENING_PAGES } from '../../lib/megyMini';
+import { pickSpreadPhoto, spreadPages, SPREAD_LEFT_INDEX } from './miniSpread';
 
 /* ══════════════════════════════════════════════════════════════════════════
    SMART ALBUM GENERATION — Ratio-aware template matching
@@ -1471,13 +1472,39 @@ function generateMiniBook(
   options: GenerateOptions | undefined,
 ): AlbumPage[] {
   const wanted = Math.max(1, Math.floor(options?.minPages ?? MINI_PAGES));
-  const opts: GenerateOptions = { ...options, minPages: wanted, memoryPages: MINI_MEMORY_PAGES, openingPages: MINI_OPENING_PAGES };
-  let pages = generateAlbum(photos, MINI_SIZE, photosPerPage, background, opts);
-  for (const denser of [2, 3, 4]) {
-    if (pages.length <= wanted) break;
-    if (photosPerPage != null && denser <= photosPerPage) continue;
-    pages = generateAlbum(photos, MINI_SIZE, denser, background, opts);
-  }
+  const deal = (pool: UploadedPhoto[], o: GenerateOptions | undefined, want: number): AlbumPage[] => {
+    const opts: GenerateOptions = { ...o, minPages: want, memoryPages: MINI_MEMORY_PAGES, openingPages: MINI_OPENING_PAGES };
+    let pages = generateAlbum(pool, MINI_SIZE, photosPerPage, background, opts);
+    for (const denser of [2, 3, 4]) {
+      if (pages.length <= want) break;
+      if (photosPerPage != null && denser <= photosPerPage) continue;
+      pages = generateAlbum(pool, MINI_SIZE, denser, background, opts);
+    }
+    return pages;
+  };
+
+  // THE MIDDLE SPREAD (miniSpread.ts): one landscape photo across pages 8 and
+  // 9, the stapled booklet's centre. Never a video memory's own photo. A roll
+  // with no landscape photo that fits is made without one, as before.
+  const carried = new Set((options?.memories ?? []).map((m) => m.photo));
+  const spread = wanted >= SPREAD_LEFT_INDEX + 2 ? pickSpreadPhoto(photos, carried) : null;
+  if (spread == null) return deal(photos, options, wanted);
+
+  const restMap = photos.map((_, i) => i).filter((i) => i !== spread);
+  const toRest = (i: number) => (i < spread ? i : i - 1);
+  const faceCenters = options?.faceCenters
+    ? Object.fromEntries(Object.entries(options.faceCenters).filter(([k]) => +k !== spread).map(([k, v]) => [toRest(+k), v]))
+    : undefined;
+  const pages = deal(restMap.map((i) => photos[i]), {
+    ...options,
+    ...(faceCenters ? { faceCenters } : {}),
+    memories: options?.memories?.map((m) => ({ ...m, photo: toRest(m.photo) })),
+  }, wanted - 2);
+  remapSlotFills(pages, restMap);
+  const at = Math.min(SPREAD_LEFT_INDEX, pages.length);
+  const pair = spreadPages(createEmptyPage(at, MINI_SIZE, background, options?.border), createEmptyPage(at + 1, MINI_SIZE, background, options?.border), spread);
+  pages.splice(at, 0, ...pair);
+  pages.forEach((p, i) => { p.id = makePageId(i); });
   return pages;
 }
 

@@ -75,12 +75,15 @@ export function applyBindingMargin(margin: Margin, albumSize: string, pageIndex:
  *  IS the spine, handled by the wrap compositor), so cover pages pass this to
  *  keep the plain template margins and skip applyBindingMargin. */
 export function marginForTemplate(
-  template: { fullBleed?: boolean } | null | undefined,
+  template: { fullBleed?: boolean; spreadHalf?: 'left' | 'right' } | null | undefined,
   baseMargin: Margin,
   albumSize: string,
   pageIndex: number,
   opts?: { noBinding?: boolean; bindingIn?: number },
 ): Margin {
+  // The Megy Mini's middle spread (miniSpread.ts): pages 8 and 9 are one
+  // piece of paper, so its photo runs straight across the fold. No spine margin.
+  if (template?.spreadHalf) return { top: 0, bottom: 0, left: 0, right: 0 };
   if (template?.fullBleed) {
     // A full-bleed page bleeds off THREE edges — top, bottom and the OUTER
     // edge — but still stops short of the spine. It used to run to all four,
