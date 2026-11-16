@@ -11,6 +11,8 @@ import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
+import MegyMiniPricing from './MegyMiniPricing';
+import { isMiniSize } from '../../lib/megyMini';
 import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '11.5x8', '8.5x11'];
@@ -325,6 +327,9 @@ export default function PricingPanel() {
           {shipErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {shipErr}</p>}
         </div>
 
+        {/* Megy Mini (0062): its own price, shipping on top, off until turned on */}
+        <MegyMiniPricing model={model} onSaved={setModel} />
+
         {/* Crossed-out "was" price — the real old price, with an end date */}
         <div className="mt-5 pt-5 border-t border-sand-deep">
           <h4 className="font-semibold text-dark">Was price (crossed out at checkout)</h4>
@@ -413,7 +418,7 @@ export default function PricingPanel() {
           </button>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4">
-          {ALBUM_SIZES.map((s) => {
+          {ALBUM_SIZES.filter((s) => !isMiniSize(s.preset)).map((s) => {
             const on = !disabledSizes.includes(s.preset);
             return (
               <button key={s.preset} onClick={() => toggleSize(s.preset)} aria-pressed={on}

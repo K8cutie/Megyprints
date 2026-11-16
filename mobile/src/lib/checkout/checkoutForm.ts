@@ -54,6 +54,8 @@ export interface CheckoutCheckInput {
    *  asked for yet. */
   openOrderUnanswered: boolean;
   pages: readonly AlbumPage[];
+  /** The album's size: a Megy Mini needs 16 photos, an album 40. */
+  size?: string | null;
 }
 
 export function checkCheckout(i: CheckoutCheckInput): CheckoutCheck {
@@ -72,7 +74,7 @@ export function checkCheckout(i: CheckoutCheckInput): CheckoutCheck {
   if (!i.signedIn) return { ok: false, kind: 'message', message: SIGN_IN_PROBLEM, signIn: true, name, phone };
   if (i.openOrderUnanswered) return { ok: false, kind: 'askSecond', name, phone };
   const have = albumPhotoCount(i.pages);
-  if (photosShortBy(have) > 0) return { ok: false, kind: 'message', message: tooFewToOrderMessage(have), openAlbum: true, name, phone };
+  if (photosShortBy(have, i.size) > 0) return { ok: false, kind: 'message', message: tooFewToOrderMessage(have, i.size), openAlbum: true, name, phone };
   return { ok: true, name, phone };
 }
 

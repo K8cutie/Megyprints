@@ -27,7 +27,8 @@ import { pickReceipt, receiptLabel, type PickedReceipt } from '../../lib/checkou
 import { sitePage } from '../../lib/checkout/site';
 import { colors, space } from '../../lib/theme';
 
-export interface PaySummary { albumLine: string; breakdown: { label: string; amount: number }[]; total: number; wasTotal: number | null }
+/** shipsFree: false for a Megy Mini, whose shipping is a line of its breakdown. */
+export interface PaySummary { albumLine: string; breakdown: { label: string; amount: number }[]; total: number; wasTotal: number | null; shipsFree?: boolean }
 
 /** The payment step. `order` is an order already placed (opened from "this
  *  album already has an order", or from Your orders): its number is said, as
@@ -141,7 +142,7 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
           <View style={styles.summary}>
             <Row label="Album" value={summary.albumLine} accent />
             {summary.breakdown.map((item) => <Row key={item.label} label={item.label} value={peso(item.amount)} />)}
-            <Row label="Shipping" value="Free" good />
+            {summary.shipsFree !== false && <Row label="Shipping" value="Free" good />}
             <View style={styles.totalRow}>
               <Text style={styles.strong}>Total</Text>
               <Text style={styles.total}>{summary.wasTotal !== null && <Text style={styles.was}>{peso(summary.wasTotal)}  </Text>}{peso(summary.total)}</Text>

@@ -46,7 +46,7 @@ import { fill, ALBUM_INCHES, gutterFrac } from './templateKit';
  *  ══════════════════════════════════════════════════════════════════════════ */
 
 const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
-const PREFIX: Record<string, string> = { '8x6': 't86', '6x8': 't68' };
+const PREFIX: Record<string, string> = { '8x6': 't86', '6x8': 't68', '5.8x8.3': 'ta5' };
 
 const FLIP: Record<PhotoRatio, PhotoRatio> = {
   '4:3': '3:4', '3:4': '4:3', '3:2': '2:3', '2:3': '3:2', '16:9': '9:16', '9:16': '16:9', '1:1': '1:1',

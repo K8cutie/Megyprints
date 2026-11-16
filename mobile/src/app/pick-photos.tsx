@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { photoWord } from '@web/pages/builder/albumMinimum';
 import { releasePickedFiles } from '../../modules/photo-files';
 import { AskForPhotos } from '../components/AskForPhotos';
+import { useBuilder } from '../builder/BuilderProvider';
 import { Button } from '../components/Button';
 import { Thumb } from '../components/Thumb';
 import { useDraft } from '../lib/draftStore';
@@ -36,6 +37,8 @@ const GAP = 2;
 export default function PickPhotos() {
   const gallery = useGallery();
   const { draft, loading: draftLoading, add, peek } = useDraft();
+  // A Megy Mini counts toward 16 to 40 photos, an album toward 40 or more.
+  const { builder } = useBuilder();
   const [selection, setSelection] = useState<Selection>(nothingSelected);
   const [adding, setAdding] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -217,7 +220,7 @@ export default function PickPhotos() {
         <Text style={styles.count} testID="picked-count">
           {picked > 0 ? `${formatCount(picked)} ${photoWord(picked)} selected` : pickable > 0 ? TAP_TO_PICK : ALL_IN_ALBUM}
         </Text>
-        <Text style={styles.progress}>{pickerProgress(draft.photos.length, picked)}</Text>
+        <Text style={styles.progress}>{pickerProgress(draft.photos.length, picked, builder.albumSize)}</Text>
         {picked > 0 && (
           <Button label={addPhotosLabel(picked)} busy={adding} onPress={() => { void addPicked(); }} testID="add-photos" />
         )}

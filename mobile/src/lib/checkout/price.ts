@@ -14,19 +14,23 @@ import {
   hdMemoriesPriceOf,
   hostingTiersOf,
   includedHostingYears,
+  miniPriceBreakdown,
   priceBreakdown,
   priceOf,
+  FREE_QR_MEMORIES,
   type Binding,
   type HostingTier,
   type PriceBreakdown,
   type PriceSchedule,
 } from '@web/lib/pricing';
 import type { AlbumSizePreset, CoverType } from '@web/pages/builder/types';
+import { isMiniSize, miniOfferOf } from '@web/lib/megyMini';
 import { amountToPay, type TesterCode } from './testerCode';
 
-/** Cover choice → binding: anything but softcover is hardbound. */
+/** Cover choice → binding: anything but softcover (and the Megy Mini's soft,
+ *  stapled cover) is hardbound. */
 export function bindingOf(cover: CoverType): Binding {
-  return cover === 'softcover' ? 'soft' : 'hard';
+  return cover === 'softcover' || cover === 'staple' ? 'soft' : 'hard';
 }
 
 export interface PriceInput {
@@ -59,6 +63,14 @@ export interface CheckoutPrice {
   effectiveYears: number | null;
   tiers: HostingTier[];
   hdPrice: number;
+  /** A Megy Mini (lib/megyMini): its own price, shipping on top. */
+  mini: boolean;
+  /** A Megy Mini that isn't on sale now (the price list has no "mini"). */
+  miniOff: boolean;
+  /** Shipping paid on top (a Megy Mini); null = shipping is free (albums). */
+  shipping: number | null;
+  /** The video memories included: 7 on an album, the Mini's own (2). */
+  freeVideos: number;
 }
 
 export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput): CheckoutPrice {
@@ -67,6 +79,29 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
   const includedYears = schedule ? includedHostingYears(schedule) : null;
   const effectiveYears = input.qrCount > 0 ? (input.hostingYears ?? includedYears) : null;
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
+  if (isMiniSize(input.albumSize)) {
+    // MEGY MINI (0062): a set price + shipping on top; never a "was" price.
+    const offer = schedule ? miniOfferOf(schedule) : null;
+    const breakdown = schedule && offer
+      ? miniPriceBreakdown(schedule, offer, input.qrCount, effectiveYears, input.hdMemories)
+      : { items: [], total: 0 };
+    return {
+      ready: schedule !== null && offer !== null,
+      breakdown,
+      total: breakdown.total,
+      payTotal: amountToPay(breakdown.total, input.tester),
+      wasTotal: null,
+      freeShippingValue: 0,
+      includedYears,
+      effectiveYears,
+      tiers,
+      hdPrice,
+      mini: true,
+      miniOff: schedule !== null && offer === null,
+      shipping: offer ? offer.shipping_fee : null,
+      freeVideos: offer ? offer.free_qr : 0,
+    };
+  }
   const breakdown = schedule
     ? priceBreakdown(schedule, input.albumSize, binding, input.pageCount, input.qrCount, effectiveYears, input.hdMemories)
     : { items: [], total: 0 };
@@ -88,6 +123,10 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
     effectiveYears,
     tiers,
     hdPrice,
+    mini: false,
+    miniOff: false,
+    shipping: null,
+    freeVideos: FREE_QR_MEMORIES,
   };
 }
 
@@ -100,7 +139,9 @@ export function peso(n: number): string {
 }
 
 /** The Place order button, in the website's words. */
-export function placeOrderLabel(p: { ready: boolean; loading: boolean; retrying: boolean; tester: boolean; total: number }): string {
+export function placeOrderLabel(p: { ready: boolean; loading: boolean; retrying: boolean; tester: boolean; total: number; miniOff?: boolean }): string {
+  // A Megy Mini the owner took off sale: the tap checks the prices again.
+  if (p.miniOff && !p.loading && !p.retrying) return "Megy Mini isn't on sale right now — tap to check again";
   if (p.ready && p.tester) return 'Place order · free with tester code';
   if (p.ready) return `Place order · pay ${peso(p.total)} by bank transfer`;
   if (p.loading || p.retrying) return 'Loading price…';

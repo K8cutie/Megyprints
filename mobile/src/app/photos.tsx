@@ -25,7 +25,7 @@ import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { photosShortBy } from '@web/pages/builder/albumMinimum';
+import { photosOverBy, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { inspectPhotos, releasePickedFiles } from '../../modules/photo-files';
 import { useBuilder } from '../builder/BuilderProvider';
 import { albumMade, KEEP_PAGES, MADE_ALBUM_PHOTOS_MESSAGE, MADE_ALBUM_PHOTOS_NOTE, REMAKE_ALBUM, remakeQuestion, saveStep, syncNote, syncPhotos, TO_COVER, type PhotoSync } from '../builder/albumFlow';
@@ -59,9 +59,10 @@ export default function YourPhotos() {
   // only while the picked photos are the same as then.
   const [took, setTook] = useState<{ at: number; goingIn: number; note: string } | null>(null);
   const tookNow = took && took.at === draft.updatedAt ? took : null;
-  const picked = photoStep(draft.photos);
+  // A Megy Mini (16 to 40 photos) or an album (40 or more): the album's size says.
+  const picked = photoStep(draft.photos, builder.albumSize);
   // Fewer went in than were picked: the builder's count decides.
-  const step = tookNow && tookNow.goingIn < picked.count ? photoStepFor(tookNow.goingIn) : picked;
+  const step = tookNow && tookNow.goingIn < picked.count ? photoStepFor(tookNow.goingIn, builder.albumSize) : picked;
 
   const undoing = useRef<DraftPhoto | null>(null);
 
@@ -123,8 +124,8 @@ export default function YourPhotos() {
     const kept = new Map(platform.photoStore.records().map((r) => [r.id, r.uri]));
     const r: PhotoSync = await syncPhotos(builder, draft.photos, inspectPhotos, { addressOf: (id) => kept.get(id) });
     const note = syncNote(r);
-    setTook(note || r.goingIn < photoStep(draft.photos).count ? { at: draft.updatedAt, goingIn: r.goingIn, note } : null);
-    return photosShortBy(r.goingIn) === 0;
+    setTook(note || r.goingIn < photoStep(draft.photos, builder.albumSize).count ? { at: draft.updatedAt, goingIn: r.goingIn, note } : null);
+    return photosShortBy(r.goingIn, builder.albumSize) === 0 && photosOverBy(r.goingIn, builder.albumSize) === 0;
   };
   const busyWhile = async <T,>(job: () => Promise<T>): Promise<T> => {
     setGoing(true);
@@ -135,6 +136,8 @@ export default function YourPhotos() {
   const once = useOncePerVisit();
 
   const goOn = () => busyWhile(async () => {
+    // Too many photos for a Megy Mini: back to the sizes, to pick an album.
+    if (step.main === 'size') { router.push('/album-size'); return true; }
     if (step.main !== 'next') { router.push('/pick-photos'); return true; }
     if (!(await putIn())) return false;
     saveStep(platform.deviceStore, 'cover');
