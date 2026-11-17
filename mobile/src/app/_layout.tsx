@@ -1,11 +1,12 @@
 import { router, Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useLayoutEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { BuilderProvider } from '../builder/BuilderProvider';
 import { AuthProvider } from '../lib/auth';
 import { useAppUpdatePrompt } from '../lib/appUpdate';
 import { useAskBeforeClosing } from '../lib/closeAsk';
 import { DraftProvider } from '../lib/draftStore';
+import { captureInstallSource } from '../lib/installSource';
 import { guardSharedRouter, rootMounted, rootUnmounted } from '../lib/routerBinding';
 import { keepTheScreenUpright } from '../lib/screenTurning';
 import { colors } from '../lib/theme';
@@ -34,6 +35,13 @@ function AskAboutUpdates() {
   return null;
 }
 
+/** Installed from a post's tagged link: the post's tag is kept for the order
+ *  (installSource.ts). Asked once per install, shows nothing, never fails. */
+function KeepInstallSource() {
+  useEffect(() => { void captureInstallSource(); }, []);
+  return null;
+}
+
 export default function RootLayout() {
   // Every screen is upright; only the Preview turns with the phone, while it
   // is on top (src/lib/screenTurning.ts). Upright from the start, too, after
@@ -48,6 +56,7 @@ export default function RootLayout() {
           <KeepRouterBound />
           <AskBeforeClosing />
           <AskAboutUpdates />
+          <KeepInstallSource />
           <Stack
             screenOptions={{
               headerStyle: { backgroundColor: colors.background },
