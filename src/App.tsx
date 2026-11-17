@@ -36,10 +36,15 @@ import ResumePrompt from './components/ResumePrompt';
 import PaidClipSweep from './components/PaidClipSweep';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
+import { captureOrderSource } from './lib/orderSource';
 
 export default function App() {
   // Load operator template overrides + the store price multiple once on start.
   useEffect(() => { void loadTemplateSettings(); void loadStoreSettings(); }, []);
+
+  // Opened from a post's link (?p=TAG, 0063): keep the tag on this device so
+  // an order placed later can say which post it came from.
+  useEffect(() => { captureOrderSource(); }, []);
 
   // Return to where the user was after an OAuth round-trip. redirectTo can't
   // carry a #hash, so Google sends us back to a bare path (→ Home on this
