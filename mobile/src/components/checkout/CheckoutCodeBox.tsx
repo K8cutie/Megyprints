@@ -14,7 +14,7 @@ const SIGN_IN_FIRST = testerCheckMessage('sign_in');
  *  comes with its Sign in button (beta round 2: the only other way to sign
  *  in from here was a button that said "pay ₱2,016"); signed in, those
  *  words go, and the code stays typed. */
-export function CheckoutCodeBox({ tester, affiliate, onTester, onAffiliate, check, signedIn, onSignIn }: {
+export function CheckoutCodeBox({ tester, affiliate, onTester, onAffiliate, check, signedIn, onSignIn, mini = false }: {
   tester: TesterCode | null;
   affiliate: AffiliateCode | null;
   onTester: (next: TesterCode | null) => void;
@@ -22,6 +22,8 @@ export function CheckoutCodeBox({ tester, affiliate, onTester, onAffiliate, chec
   check: (typed: string) => Promise<CodeCheck | TesterCheck>;
   signedIn: boolean;
   onSignIn: () => void;
+  /** A Megy Mini: an affiliate code takes nothing off (0065). */
+  mini?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');
@@ -32,7 +34,7 @@ export function CheckoutCodeBox({ tester, affiliate, onTester, onAffiliate, chec
   if (affiliate && !tester) {
     return (
       <View style={styles.on} testID="affiliate-code-on">
-        <Text style={styles.onText}>✓ {affiliateLine(affiliate)}</Text>
+        <Text style={styles.onText}>✓ {affiliateLine(affiliate, mini)}</Text>
         <Pressable accessibilityRole="button" onPress={() => { onAffiliate(null); setTyped(''); setError(''); }} testID="affiliate-code-remove">
           <Text style={styles.link}>Remove</Text>
         </Pressable>

@@ -631,11 +631,12 @@ export default function OrderScreen() {
         {/* A Megy Mini's shipping is a line of its own bill (above), paid on top. */}
         {!price.mini && <Row label="Shipping" value="Free" good testID="order-shipping" />}
         {!eventLink && tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
-        {!eventLink && !tester && affiliate && price.ready && <Row label={affiliateLine(affiliate)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-affiliate-line" />}
+        {/* A Megy Mini takes no affiliate discount (0065): the line says so, with no amount. */}
+        {!eventLink && !tester && affiliate && price.ready && <Row label={affiliateLine(affiliate, mini)} value={mini ? '' : `−${peso(price.total - price.payTotal)}`} good testID="order-affiliate-line" />}
         <View style={styles.totalRow}>
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
-            {!eventLink && price.ready && (tester || affiliate) && <Text style={styles.was}>{peso(price.total)}  </Text>}
+            {!eventLink && price.ready && price.payTotal < price.total && (tester || affiliate) && <Text style={styles.was}>{peso(price.total)}  </Text>}
             {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
             {eventLink ? '₱0' : price.ready ? peso(price.payTotal) : '—'}
           </Text>
@@ -648,7 +649,7 @@ export default function OrderScreen() {
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
             test album writes nothing, so it checks the code's shape only. */}
-        {!eventLink && price.ready && <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} onAffiliate={setAffiliate}
+        {!eventLink && price.ready && <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} onAffiliate={setAffiliate} mini={mini}
           check={(typed) => (live && userId ? checkCheckoutCode(typed) : checkTesterCodeOffline(typed, !!userId))}
           signedIn={!!userId} onSignIn={signIn} />}
         <View style={styles.included} testID="order-included">

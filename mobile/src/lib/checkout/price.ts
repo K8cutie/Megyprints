@@ -92,7 +92,8 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
       ready: schedule !== null && offer !== null,
       breakdown,
       total: breakdown.total,
-      payTotal: checkoutPayTotal(breakdown.total, input.tester, input.affiliate ?? null),
+      // A Megy Mini takes no affiliate discount (0065); the affiliate still earns.
+      payTotal: checkoutPayTotal(breakdown.total, input.tester, input.affiliate ?? null, true),
       wasTotal: null,
       freeShippingValue: 0,
       includedYears,
