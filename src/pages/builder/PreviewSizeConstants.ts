@@ -14,4 +14,5 @@ export const PREVIEW_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
   '6x8':    { w: 420, h: 560 },   // portrait 3:4
   '11.5x8': { w: 575, h: 400 },   // landscape ~1.44:1
   '8.5x11': { w: 440, h: 570 },   // portrait ~0.77:1
+  '5.8x8.3': { w: 396, h: 560 },  // A5 portrait ~0.71:1 (Megy Mini)
 };

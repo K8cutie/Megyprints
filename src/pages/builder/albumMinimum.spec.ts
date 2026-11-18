@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { isMiniSize } from '../../lib/megyMini';
 import {
   MIN_ALBUM_PHOTOS, photosGoingIn, photosShortBy, albumPhotoCount, addMoreLabel,
   tooFewToMakeMessage, tooFewToOrderMessage, TooFewPhotosError,
@@ -75,7 +76,7 @@ describe('40 is exactly enough: every page of every size fills, at every photos-
   });
   const photosOn = (p: AlbumPage) => (p.slotFills ?? []).filter((f) => f != null).length + (p.textSlotFills ?? []).filter((f) => f != null).length;
 
-  for (const size of Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[]) {
+  for (const size of (Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[]).filter((s) => !isMiniSize(s))) {
     for (const ppp of [undefined, ...DENSITY_BY_SIZE[size]]) {
       it(`${size}, ${ppp ?? 'Surprise'} per page: 40 photos → 40 pages, none blank, all 40 placed`, () => {
         const pages = generateAlbum(roll(40), size, ppp);
@@ -88,7 +89,7 @@ describe('40 is exactly enough: every page of every size fills, at every photos-
 
   // The sweep above caught "1 · Big & bold" dealing a 3-4-photo MIXED page
   // (portrait + squares) and leaving the last pages blank at 40 photos.
-  for (const size of Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[]) {
+  for (const size of (Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[]).filter((s) => !isMiniSize(s))) {
     it(`${size}, 1 per page is one photo a page at 40, 80 and 120 photos`, () => {
       for (const n of [40, 80, 120]) {
         const pages = generateAlbum(roll(n), size, 1);

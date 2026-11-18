@@ -30,9 +30,10 @@ export const BINDING_INCHES = 0.375;
 export const HARDBOUND_BINDING_INCHES = 0.5;
 
 /** The binding side allowance for an order's cover: 1/2" hardbound (every
- *  cover but softcover binds as a hardcover), 3/8" softcover or not chosen. */
+ *  cover but softcover and the Megy Mini's staple cover binds as a hardcover),
+ *  3/8" softcover, staples or not chosen. */
 export function bindingInchesFor(cover?: string | null): number {
-  return cover && cover !== 'softcover' ? HARDBOUND_BINDING_INCHES : BINDING_INCHES;
+  return cover && cover !== 'softcover' && cover !== 'staple' ? HARDBOUND_BINDING_INCHES : BINDING_INCHES;
 }
 
 /** Which side of the open book page 1 is on. Every album is 'right' now.
