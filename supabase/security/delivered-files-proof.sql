@@ -6,7 +6,7 @@
 --           never an order delivered 89 days ago, one still on its way, one
 --           with no delivery date in its history (updated_at keeps it), an
 --           order copies print from, or a copy order;
---    D7–D10 claim, then no going back to printing (MP010), an unclaimed
+--    D7–D10 claim, then no going back to printing (MP011), an unclaimed
 --           order still can go back; finish records it once, it leaves the
 --           list, and a refund can still cancel it;
 --    D11–D13 only the service role can list, claim or finish; anyone can
@@ -137,7 +137,7 @@ begin
     got := pg_temp.do_as(null, 'service_role', format('select public.claim_delivered_order_file_purge(%L)::text', o_recent), 'value');
     r := r || pg_temp.line('D7b', '...but not one that is not due', 'false', got);
     got := pg_temp.do_as(null, 'postgres', format('update public.orders set status = %L where id = %L', 'printed', o_old));
-    r := r || pg_temp.line('D8', 'a claimed order cannot go back to printing', 'REFUSED MP010', got);
+    r := r || pg_temp.line('D8', 'a claimed order cannot go back to printing', 'REFUSED MP011', got);
     r := r || pg_temp.line('D8b', '...with the sentence', 'true', (got like '%print files were removed 90 days after it was delivered%order the album again from their phone%')::text);
     got := pg_temp.do_as(null, 'postgres', format('update public.orders set status = %L where id = %L', 'printed', o_back));
     r := r || pg_temp.line('D9', 'an unclaimed delivered order can still go back to printing', 'ALLOWED', got);

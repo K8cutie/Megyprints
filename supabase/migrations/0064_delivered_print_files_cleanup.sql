@@ -16,7 +16,7 @@
 --       (finish_delivered_order_file_purge). SQL cannot delete Storage files,
 --       see api/delete-account.mjs.
 --    3. Once that has started, the order can't be moved back to Paid, In
---       production, Printed or Shipped (MP010): there would be nothing to
+--       production, Printed or Shipped (MP011): there would be nothing to
 --       print. The customer orders the album again from their phone instead:
 --       the album stays in their account and the photos stay on their phone.
 --
@@ -156,7 +156,7 @@ begin
      and new.status in ('pending_payment', 'paid', 'in_production', 'printed', 'shipped') then
     raise exception 'This album''s print files were removed % days after it was delivered, so it can''t go back to printing. Ask the customer to order the album again from their phone: the album and its photos are still there.',
       public.delivered_files_keep_days()
-      using errcode = 'MP010';
+      using errcode = 'MP011';
   end if;
   return new;
 end;

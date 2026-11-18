@@ -147,6 +147,6 @@ describe('delivered orders keep their print files for the database\'s number of 
     expect(deliveredMigration).toMatch(/o\.event_booking_id is null/);
     expect(deliveredMigration).toMatch(/o\.copy_of_order_id is null/);
     expect(deliveredMigration).toMatch(/not exists \(select 1 from public\.orders c where c\.copy_of_order_id = o\.id\)/);
-    expect(deliveredMigration).toMatch(/errcode = 'MP010'/);
+    expect(deliveredMigration).toMatch(/errcode = 'MP011'/);
   });
 });
