@@ -11,6 +11,10 @@
    page is laid out again for the new shape, asked first (albumFlow.sizeTap,
    resizeMadeAlbum). Setting the size alone left the old layout squashed onto
    the new size (1-star testers, 2026-10-04).
+
+   Each album size says what it starts at (lib/checkout/startsAt.ts):
+   checkout's total for a 40-page soft-cover album of that size, from the
+   same live price list. Nothing is said until the list is read.
    ══════════════════════════════════════════════════════════════════════════ */
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -24,11 +28,14 @@ import { offerableSizes, pagesHoldPhotos, resizeMadeAlbum, saveStep, SIZE_LINE, 
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
+import type { PriceSchedule } from '@web/lib/pricing';
+import { startsAt, startsAtLine } from '../lib/checkout/startsAt';
 
 /** From the price list (public_price_schedule): the sizes the owner switched
- *  off, or none; and the Megy Mini while it is on sale (0062), or null. */
-async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null }> {
-  if (!supabaseConfigured) return { off: [], mini: null };
+ *  off, or none; the Megy Mini while it is on sale (0062), or null; and the
+ *  list itself, for each size's "Starts at" (null when it can't be read). */
+async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null; schedule: PriceSchedule | null }> {
+  if (!supabaseConfigured) return { off: [], mini: null, schedule: null };
   try {
     const { data, error } = await supabase.rpc('public_price_schedule');
     const schedule = !error && data && typeof data === 'object' ? (data as { disabled_sizes?: unknown; mini?: unknown }) : null;
@@ -36,9 +43,10 @@ async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null }> 
     return {
       off: Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [],
       mini: miniOfferOf(schedule),
+      schedule: schedule as PriceSchedule | null,
     };
   } catch {
-    return { off: [], mini: null };
+    return { off: [], mini: null, schedule: null };
   }
 }
 
@@ -49,6 +57,7 @@ export default function AlbumSize() {
   const { builder, platform } = useBuilder();
   const [sizes, setSizes] = useState<AlbumSizeConfig[]>(() => offerableSizes());
   const [mini, setMini] = useState<MiniOffer | null>(null);
+  const [prices, setPrices] = useState<PriceSchedule | null>(null);
   const [resizing, setResizing] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   // The builder as of now, for answers that arrive later.
@@ -56,8 +65,9 @@ export default function AlbumSize() {
   now.current = builder;
   useEffect(() => {
     let live = true;
-    void sizeOffers().then(({ off, mini: offer }) => {
+    void sizeOffers().then(({ off, mini: offer, schedule }) => {
       if (!live) return;
+      setPrices(schedule);
       const next = offerableSizes(off);
       setSizes(next);
       setMini(offer);
@@ -109,6 +119,7 @@ export default function AlbumSize() {
         {!resizing && said && <Text style={styles.said} testID="size-said">{said}</Text>}
         {sizes.map((s) => {
           const on = s.preset === builder.albumSize;
+          const from = startsAt(prices, s.preset);
           return (
             <Pressable key={s.preset} accessibilityRole="radio" accessibilityState={{ checked: on, busy: resizing === s.preset }} onPress={() => pick(s)}
               style={[styles.card, on && styles.cardOn]} testID={`size-${s.preset}`}>
@@ -117,6 +128,7 @@ export default function AlbumSize() {
                 <View style={styles.cardWords}>
                   <Text style={styles.name}>{s.name}</Text>
                   <Text style={styles.perPage}>{sizePhotosPerPage(s.preset)}</Text>
+                  {from !== null && <Text style={styles.price} testID={`size-price-${s.preset}`}>{startsAtLine(from)}</Text>}
                 </View>
                 {resizing === s.preset ? <ActivityIndicator color={colors.accent} />
                   : on && <Text style={styles.tick} accessibilityLabel="Picked">✓</Text>}
@@ -178,6 +190,7 @@ const styles = StyleSheet.create({
   cardWords: { flex: 1 },
   name: { fontSize: 18, fontWeight: '700', color: colors.text },
   perPage: { fontSize: 14, color: colors.muted },
+  price: { fontSize: 15, fontWeight: '700', color: colors.accent, marginTop: 2 },
   tick: { fontSize: 22, fontWeight: '800', color: colors.accent },
   line: { fontSize: 15, color: colors.text },
   said: { fontSize: 15, lineHeight: 21, color: colors.text, backgroundColor: '#FFF5F0', borderRadius: 10, padding: space.sm },
