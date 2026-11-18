@@ -50,6 +50,7 @@ import { planTurn, type TurnFace, type TurnPlan } from '@web/pages/builder/pageT
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { markAccountSaved } from '../builder/accountSave';
+import { takeOrderRequest } from '../builder/orderRequest';
 import { missingOnPhoneMessage, NOT_DRAWN_LINE, PAGE_NOT_SHOWN } from '../builder/screenWords';
 import { forgetPhotoPictures, preparePagePicture, PRIORITY, usePagePicture } from '../builder/usePagePicture';
 import { useJustArrived, useOncePerVisit } from '../lib/useOncePerVisit';
@@ -479,6 +480,14 @@ export default function Preview() {
     }
     router.push({ pathname: '/order', params: albumId ? { albumId } : {} });
   };
+  // An order asked from outside ("Order this album again" on an order,
+  // builder/orderRequest.ts) lands here and orders exactly like the button
+  // above: its checks, its save, then checkout. Taken first, so coming back
+  // to the Preview never orders again (the website's BuilderPreview).
+  useEffect(() => {
+    if (takeOrderRequest(builder.getAlbumId())) void order();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // "Show me" / "Back to my pages": the cover editor, or the pages at the first one to fix.
   const showOrderFix = () => {
     const ask = orderAsk;

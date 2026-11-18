@@ -11,8 +11,10 @@
 import {
   cancelMyUnpaidOrderWith,
   getMyOrderWith,
+  lastOrderForAlbumWith,
   lastShippingWith,
   listMyOrdersWith,
+  type LastFinish,
   type LastShipping,
   type MyOrder,
   type OrdersCaller,
@@ -49,4 +51,10 @@ export function lastShipping(client: OrdersReader, userId: string): Promise<Last
   return lastShippingWith(client, userId);
 }
 
-export type { LastShipping };
+/** The paper and cover this album was last ordered with (not a cancelled
+ *  order), or null: a second copy starts from it (lib/checkout/sameFinish.ts). */
+export function lastFinishForAlbum(client: OrdersReader, userId: string, albumId: string): Promise<LastFinish | null> {
+  return lastOrderForAlbumWith(client, userId, albumId);
+}
+
+export type { LastFinish, LastShipping };

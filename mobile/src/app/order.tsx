@@ -66,6 +66,8 @@ import { useOptionalBuilder } from '../builder/BuilderProvider';
 import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
 import { TesterCodeGoneError } from '../lib/checkout/testerCode';
 import type { PlacedOrder } from '../lib/checkout/sendOrder';
+import { finishToCopy, sameFinishNote, type CopiedFinish } from '../lib/checkout/sameFinish';
+import { lastFinishForAlbum } from '../lib/orders/myOrders';
 import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
@@ -267,6 +269,34 @@ export default function OrderScreen() {
     setEventBooking(undefined);
     setMessage('');
   };
+
+  // A SECOND COPY STARTS FROM THE FIRST (lib/checkout/sameFinish.ts, the
+  // website's RC-1): this album's last order's paper and cover, once, when
+  // checkout had no form of its own to bring back, into a finish still
+  // untouched. Never an event album's (its deal fixes the cover). The note
+  // shows while the finish is still the copied one.
+  const [copied, setCopied] = useState<CopiedFinish | null>(null);
+  const finishAsked = useRef(false);
+  const finishNow = useRef({ material, cover, eventLink });
+  finishNow.current = { material, cover, eventLink };
+  useEffect(() => {
+    if (!live || !userId || !supabaseConfigured || kept || step !== 'form' || finishAsked.current) return;
+    finishAsked.current = true;
+    let alive = true;
+    lastFinishForAlbum(supabase, userId, album.albumId)
+      .then((last) => {
+        const now = finishNow.current;
+        if (!alive || now.eventLink) return;
+        const c = finishToCopy(last, now, { material: DEFAULT_MATERIAL, cover: DEFAULT_COVER });
+        if (!c) return;
+        setMaterial(c.material);
+        setCover(c.cover);
+        setCopied(c);
+      })
+      .catch(() => { /* can't tell: the usual finish */ });
+    return () => { alive = false; };
+  }, [live, userId, kept, step, album.albumId]);
+  const sameFinish = copied && !eventLink && copied.material === material && copied.cover === cover ? copied.from : null;
 
   // HD memories: the quality the album's videos were made for (the website's
   // albumTier), read before the price is shown.
@@ -541,6 +571,7 @@ export default function OrderScreen() {
         </View>
       </View>
 
+      {!!sameFinish && <Text style={styles.small} accessibilityRole="text" testID="order-prefilled">{sameFinishNote(sameFinish)}</Text>}
       <Section title="Paper Material">
         {MATERIALS.map((m) => (
           <Choice key={m.type} on={material === m.type} title={m.name} body={m.description} onPress={() => setMaterial(m.type)} />

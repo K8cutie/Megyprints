@@ -23,6 +23,9 @@ jest.mock('expo-router', () => ({
   Redirect: ({ href }: { href: string }) => { const { Text } = jest.requireActual('react-native'); return <Text>{`redirect:${href}`}</Text>; },
   useLocalSearchParams: () => mockParams,
 }));
+// "Order this album again" opens the album in the builder: its own walk is
+// test/orderAgain.test.tsx. Here there is no builder, so it doesn't show.
+jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => null }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: async () => ({ canceled: true, assets: null }) }));
 // "I've sent" on a real order records the payment (lib/checkout/phoneSend.ts;
 // the sender itself: sendOrder.test.ts). A stand-in that writes down what it was asked.

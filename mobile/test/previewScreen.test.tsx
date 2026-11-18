@@ -121,6 +121,7 @@ import { UPRIGHT_AFTER_MS } from '../src/lib/screenTurning';
 import { ARRIVING_MS } from '../src/lib/useOncePerVisit';
 import { PAGE_FLIP_KEY, PAGE_FLIP_LABEL } from '../src/lib/pageFlip';
 import { askPreviewAtCover } from '../src/builder/previewCover';
+import { requestOrder, takeOrderRequest } from '../src/builder/orderRequest';
 const pastUprightWait = () => act(async () => { await new Promise((r) => setTimeout(r, UPRIGHT_AFTER_MS + 30)); });
 
 const DEFAULT = 0;
@@ -639,6 +640,36 @@ describe('"Order this album" at the album\'s end (Phase 5, step 2: lib/checkout/
     await order();
     expect(mockSeen.save).not.toHaveBeenCalled();
     expect(mockNav.push).toHaveBeenCalledWith({ pathname: '/order', params: { albumId: builder().getAlbumId() } });
+  });
+
+  it('"Order this album again" (Your orders): the Preview it opens orders the album by itself, the same way, once', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    const id = builder().getAlbumId();
+    expect(id).toBeTruthy();
+    requestOrder(id!);
+    await open();
+    // The same door as the button: its warning (an empty caption box here) is said, and answered.
+    if (all('preview-order-anyway').length) await press('preview-order-anyway');
+    expect(mockSeen.save).toHaveBeenCalled();
+    expect(mockNav.push).toHaveBeenCalledWith({ pathname: '/order', params: { albumId: id } });
+    expect(takeOrderRequest(id)).toBe(false); // taken
+    // Drawn again, or opened again later: it orders nothing more.
+    mockNav.push.mockClear();
+    await refresh();
+    await act(async () => { screen!.unmount(); });
+    await open();
+    expect(mockNav.push).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/order' }));
+  });
+
+  it('a request for a different album than the one on screen orders nothing, and is dropped', async () => {
+    await madeAlbum(SCENARIOS[0]);
+    mockSeen.session = { user: { id: 'user-1' } };
+    requestOrder('another-album');
+    await open();
+    expect(all('preview-order-ask-box')).toHaveLength(0);
+    expect(mockNav.push).not.toHaveBeenCalledWith(expect.objectContaining({ pathname: '/order' }));
+    expect(takeOrderRequest('another-album')).toBe(false);
   });
 
   it('fewer than 40 photos: said, with the way back to the pages; checkout does not open', async () => {

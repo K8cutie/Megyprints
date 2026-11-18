@@ -46,7 +46,14 @@ function from(table: string) {
     async maybeSingle() {
       rec.reads.push(read);
       if (table === 'albums') return { data: fake.albumRow, error: null };
-      if (table === 'orders') return { data: fake.orderRow, error: null };
+      // An order read for one status (the album's order still waiting for
+      // payment) doesn't find an order in another (the delivered one a
+      // second copy takes its paper and cover from).
+      if (table === 'orders') {
+        const r = fake.orderRow;
+        const otherStatus = !!r && 'status' in read.filters && 'status' in r && r.status !== read.filters.status;
+        return { data: otherStatus ? null : r, error: null };
+      }
       if (table === 'event_bookings') return { data: bookingsFor(read.filters)[0] ?? null, error: null };
       return { data: null, error: null };
     },

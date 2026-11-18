@@ -382,7 +382,7 @@ export async function makeAlbum(builder: Pick<BuilderActions, 'generateAlbum'>):
 /** The step the customer last reached, kept with the album on the phone. */
 export const APP_STEP_KEY = 'megy-2.0-album-step';
 export type AlbumStep = 'name' | 'size' | 'photos' | 'cover';
-const ROUTE: Record<AlbumStep | 'preview', string> = {
+export const ROUTE: Record<AlbumStep | 'preview', string> = {
   name: '/album-name', size: '/album-size', photos: '/photos', cover: '/album-cover', preview: '/preview',
 };
 

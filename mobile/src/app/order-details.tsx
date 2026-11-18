@@ -10,10 +10,21 @@
    (cancel_my_unpaid_order, 0042: the database decides). A free test order
    that didn't finish has nothing to pay, so it has only "Cancel this order":
    it counts as unpaid, and the message at 3 unpaid orders says to cancel one.
+
+   Every other order with its album still saved: "Order this album again"
+   (the website's link, MyOrders.tsx). It opens the album, as My albums does,
+   then the Preview orders it through its own "Order this album" (its checks
+   and save: builder/orderRequest.ts), so checkout makes a new print file
+   from the photos on this phone. Filled on a delivered or cancelled order
+   (the way forward there), plain while one is still on its way.
    ══════════════════════════════════════════════════════════════════════════ */
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { resumeRoute, ROUTE } from '../builder/albumFlow';
+import { useOptionalBuilder } from '../builder/BuilderProvider';
+import { requestOrder } from '../builder/orderRequest';
+import { useOpenAlbum } from '../builder/useOpenAlbum';
 import { Button } from '../components/Button';
 import { PaymentStep } from '../components/checkout/PaymentStep';
 import { OrderTracker } from '../components/orders/OrderTracker';
@@ -28,7 +39,11 @@ import {
   CANCELLED_NOTE,
   CANCELLED_NOTE_NO_ALBUM,
   cancelYes,
+  canOrderAgain,
   KEEP_IT,
+  ORDER_AGAIN,
+  ORDER_AGAIN_FAILED,
+  ORDER_AGAIN_NOTE,
   orderView,
   payButton,
   payHeadline,
@@ -159,6 +174,9 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
           {cancelButtons}
         </View>
       )}
+      {canOrderAgain(order, track.awaitingPayment) && (
+        <OrderAgain albumId={order.album_id!} main={order.status === 'delivered' || track.cancelled} note={order.status === 'delivered'} />
+      )}
       {!!cancelErr && (
         <View style={styles.errBox}>
           <Text style={styles.error} accessibilityRole="alert" testID="order-cancel-error">{cancelErr}</Text>
@@ -169,7 +187,36 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
   );
 }
 
+/** "Order this album again": the album opened (My albums' way), then the
+ *  Preview asked to order it (its checks, its save, then checkout). An album
+ *  that is not made yet opens at its next step, and orders nothing. */
+function OrderAgain({ albumId, main, note }: { albumId: string; main: boolean; note: boolean }) {
+  const own = useOptionalBuilder();
+  if (!own) return null;
+  return <OrderAgainButton own={own} albumId={albumId} main={main} note={note} />;
+}
+
+type Own = NonNullable<ReturnType<typeof useOptionalBuilder>>;
+
+function OrderAgainButton({ own, albumId, main, note }: { own: Own; albumId: string; main: boolean; note: boolean }) {
+  const { builder, platform } = own;
+  const { open, opening, couldNot } = useOpenAlbum(builder, (id) => {
+    builder.goToPage(0);
+    const route = resumeRoute(builder, platform.deviceStore);
+    if (route === ROUTE.preview) requestOrder(id);
+    router.push(route);
+  });
+  return (
+    <View style={styles.again} testID="order-again-box">
+      {note && <Text style={styles.small} testID="order-again-note">{ORDER_AGAIN_NOTE}</Text>}
+      <Button label={ORDER_AGAIN} kind={main ? 'main' : 'plain'} busy={opening === albumId} onPress={() => { void open(albumId); }} testID="order-again" />
+      {couldNot === albumId && <Text style={styles.error} accessibilityRole="alert" testID="order-again-error">{ORDER_AGAIN_FAILED}</Text>}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  again: { gap: space.sm },
   page: { padding: space.md, gap: space.md, paddingBottom: space.xl * 2, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: space.lg, gap: space.md, backgroundColor: colors.background },
   wide: { alignSelf: 'stretch' },
