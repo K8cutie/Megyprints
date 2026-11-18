@@ -10,7 +10,9 @@ import {
   Trash2,
   ChevronLeft,
   Loader2,
+  BadgePercent,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/authContext';
 import { useAlbumSync } from '../lib/useAlbumSync';
 import { useAccountAlbums } from '../lib/useAccountAlbums';
@@ -285,10 +287,15 @@ export function Profile({ onBack }: ProfilePageProps) {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 text-sm text-taupe mb-4">
+              <div className="flex items-center gap-2 text-sm text-taupe mb-2">
                 <Mail size={14} />
                 <span>{user.email}</span>
               </div>
+              {/* Affiliates (0061): apply, or see your code and earnings. */}
+              <Link to="/affiliate" data-testid="profile-affiliate"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-blush-pink hover:underline mb-4">
+                <BadgePercent size={14} /> Affiliate: earn with your own code
+              </Link>
 
               {isEditing && (
                 <motion.div

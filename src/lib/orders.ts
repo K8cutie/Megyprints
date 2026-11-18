@@ -17,6 +17,7 @@ import { bindingInchesFor } from '../pages/builder/binding';
 import { selectOrderAlbum } from './orderAlbum';
 import { isUnpaidLimitError, UnpaidLimitError } from './orderExpiry';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
+import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from './orderCodes';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
@@ -68,6 +69,9 @@ export async function createOrderFromAlbum(opts: {
   /** A tester code the database said works (0057). It decides again on the
    *  insert: the order then asks ₱0, or is refused if the code stopped. */
   testerCode?: string | null;
+  /** An affiliate code the database said works (0061). It decides again on
+   *  the insert: the order then asks the discount less, or is refused. */
+  affiliateCode?: string | null;
 }): Promise<CreatedOrder> {
   // 1. Load the album being ordered to freeze into the order. '*' rather than a
   //    column list so its front cover (cover_front, 0036) comes along when the
@@ -140,6 +144,8 @@ export async function createOrderFromAlbum(opts: {
       // Only with a code: an order without one never names the column, so
       // checkout keeps working on a database without 0057.
       ...(opts.testerCode ? { tester_code: opts.testerCode } : {}),
+      // The same for an affiliate code: only named with one (0061).
+      ...(opts.affiliateCode ? { affiliate_code: opts.affiliateCode } : {}),
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')
@@ -149,6 +155,8 @@ export async function createOrderFromAlbum(opts: {
   // database message.
   if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
   if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(opts.testerCode ?? '');
+  if (isAffiliateCodeGoneError(error)) throw new AffiliateCodeGoneError(error?.message ?? '');
+  if (isAffiliateCodeGoneError(error)) throw new AffiliateCodeGoneError(error?.message ?? '');
   if (error) throw new Error(`Could not place your order: ${error.message}`);
 
   // NOTE: the QR "living memory" reliability belt runs in Order.handlePay over

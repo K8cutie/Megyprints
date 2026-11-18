@@ -42,6 +42,12 @@ vi.mock('../lib/testerCode', async (importOriginal) => ({
   checkTesterCode: async (raw: string) => { h.checks.push(raw); return h.check; },
   claimTesterOrder: async (id: string) => { h.steps.push(`claim ${id}`); },
 }));
+// The checkout's one code box (0061) asks check_order_code; here it answers
+// what the tester check would.
+vi.mock('../lib/affiliates', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../lib/affiliates')>()),
+  checkCheckoutCode: async (raw: string) => { h.checks.push(raw); return h.check; },
+}));
 vi.mock('../lib/orders', () => ({
   createOrderFromAlbum: async (opts: Record<string, unknown>) => {
     if (h.codeGone) { const { TesterCodeGoneError } = await import('../lib/testerCode'); throw new TesterCodeGoneError(String(opts.testerCode)); }

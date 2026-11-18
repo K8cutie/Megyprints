@@ -77,6 +77,9 @@ export interface OrderQuote {
   hd_fee: number;
   /** A tester code made it free (0057); total stays the real price. */
   tester?: { code: string; real_total: number | null } | null;
+  /** An affiliate code took `discount` off (0061); total stays the real price,
+   *  the order asks total − discount. */
+  affiliate?: { code: string; discount: number; real_total: number | null } | null;
 }
 
 /** "album ₱890 + 2 extra QR ₱40 + 10 years ₱99 + HD ₱49": the parts the
@@ -87,7 +90,9 @@ export function quoteParts(q: OrderQuote): string {
   if (q.qr_fee > 0) parts.push(`${q.extra_qr} extra QR ${peso(q.qr_fee)}`);
   if (q.term_fee > 0) parts.push(`${q.years} years ${peso(q.term_fee)}`);
   if (q.hd_fee > 0) parts.push(`HD ${peso(q.hd_fee)}`);
-  return parts.join(' + ');
+  const joined = parts.join(' + ');
+  // An affiliate code's discount comes off the sum (0061).
+  return q.affiliate && q.affiliate.discount > 0 ? `${joined} − code ${q.affiliate.code} ${peso(q.affiliate.discount)}` : joined;
 }
 
 /** The order whose print files this order prints from: its own, or for a
