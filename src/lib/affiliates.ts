@@ -22,7 +22,7 @@ import {
 } from './orderCodes';
 
 export {
-  AFFILIATE_CODE_GONE_SQLSTATE, AFFILIATE_CODE_PATTERN, affiliateLine, AffiliateCodeGoneError, affiliateTerms, applicationProblem,
+  AFFILIATE_CODE_GONE_SQLSTATE, AFFILIATE_CODE_PATTERN, affiliateDiscountOn, affiliateLine, AffiliateCodeGoneError, affiliateTerms, applicationProblem,
   checkoutPayTotal, codeCheckMessage, exampleCommission, isAffiliateCodeGoneError, normalizeAffiliateCode, parseMyAffiliate,
   parseProgram, saleStatusLabel,
 } from './orderCodes';

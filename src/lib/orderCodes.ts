@@ -73,17 +73,25 @@ export function affiliateLinkOn(origin: string, code: string): string {
   return `${origin.replace(/\/+$/, '')}/?ref=${encodeURIComponent(code)}`;
 }
 
+/** What an affiliate code takes off this order. A Megy Mini takes nothing
+ *  off (owner, 2026-11-19: "only mini"): its client pays the full price and
+ *  the affiliate still earns their commission on it. The database decides the
+ *  same on the order (0065). */
+export function affiliateDiscountOn(a: AffiliateCode, mini: boolean): number {
+  return mini ? 0 : Math.max(0, Math.round(a.discount));
+}
+
 /** What the customer pays: nothing with the tester code, the discount less
- *  with an affiliate code (never below zero), else the total. */
-export function checkoutPayTotal(total: number, tester: TesterCode | null, affiliate: AffiliateCode | null): number {
+ *  with an affiliate code (never below zero; none on a Megy Mini), else the total. */
+export function checkoutPayTotal(total: number, tester: TesterCode | null, affiliate: AffiliateCode | null, mini = false): number {
   if (tester) return 0;
-  if (affiliate) return Math.max(0, total - Math.max(0, Math.round(affiliate.discount)));
+  if (affiliate) return Math.max(0, total - affiliateDiscountOn(affiliate, mini));
   return total;
 }
 
 /** The checkout line under the price. */
-export function affiliateLine(a: AffiliateCode): string {
-  return `Code ${a.code}: ${peso(a.discount)} off`;
+export function affiliateLine(a: AffiliateCode, mini = false): string {
+  return mini ? `Code ${a.code}: no discount on a Megy Mini` : `Code ${a.code}: ${peso(a.discount)} off`;
 }
 
 export type CodeCheck =
@@ -316,6 +324,7 @@ export function exampleCommission(albumPrice: number, s: Pick<AffiliateProgram, 
 export function affiliateTerms(p: AffiliateProgram): string[] {
   return [
     `You earn ${p.ratePct}% of the album price (the album with its included pages, after your client's ${peso(p.discount)} off) on every order placed with your code, or within ${p.windowDays} days of your client opening your link. Extra pages and add-ons don't earn.`,
+    `A Megy Mini has no discount for your client, and you still earn ${p.ratePct}% of its price.`,
     'A sale is paid once its album is delivered. A cancelled or refunded order earns nothing.',
     `We pay by GCash to the number you give us, once you have at least ${peso(p.minPayout)} to be paid. Your earnings are yours to declare for tax; we withhold tax where the law requires it.`,
     "Your own orders don't earn and don't get the discount. An order sent to your own number or name is checked and may be cancelled.",
