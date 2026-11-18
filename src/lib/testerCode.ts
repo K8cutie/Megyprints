@@ -11,35 +11,11 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { supabase, supabaseConfigured } from './supabase';
 
-/** A code the database said works: the album is free. */
-export interface TesterCode { code: string }
-
-/** The shape the database keeps a code in (store_settings_tester_code_chk). */
-export const TESTER_CODE_PATTERN = /^[A-Z0-9]{4,24}$/;
-/** The order was placed with a code that has since stopped working (0057). */
-export const TESTER_CODE_GONE_SQLSTATE = 'MP007';
-
-/** As the database compares it: no spaces, capitals. */
-export function normalizeTesterCode(raw: string): string {
-  return raw.replace(/\s+/g, '').toUpperCase();
-}
-
-/** What a tester pays: nothing while a code is on, else the total. */
-export function amountToPay(total: number, tester: TesterCode | null): number {
-  return tester ? 0 : total;
-}
-
-/** The checkout line under the real price. */
-export function testerLine(t: TesterCode): string {
-  return `Tester code ${t.code}: free`;
-}
-
-/** Why a code didn't work, in the customer's words. */
-export function testerCheckMessage(reason: string | undefined): string {
-  if (reason === 'sign_in') return 'Sign in first, then type the code.';
-  if (reason === 'too_many') return 'Too many wrong codes. Try again in an hour.';
-  return "That code doesn't work. Check the spelling.";
-}
+// The rules (the code's shape, its words, what a tester pays) are in
+// lib/orderCodes.ts, shared with the 2.0 app.
+import { normalizeTesterCode, TESTER_CODE_GONE_SQLSTATE, TESTER_CODE_PATTERN, testerCheckMessage, type TesterCode } from './orderCodes';
+export { amountToPay, normalizeTesterCode, TESTER_CODE_GONE_SQLSTATE, TESTER_CODE_PATTERN, testerCheckMessage, testerLine } from './orderCodes';
+export type { TesterCode } from './orderCodes';
 
 export type TesterCheck = { ok: true; tester: TesterCode } | { ok: false; message: string };
 

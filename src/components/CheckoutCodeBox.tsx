@@ -1,14 +1,19 @@
 import { useState } from 'react';
 import { Check, Loader2, Ticket } from 'lucide-react';
-import { checkTesterCode, testerLine, type TesterCode } from '../lib/testerCode';
+import { testerLine, type TesterCode } from '../lib/testerCode';
+import { affiliateLine, checkCheckoutCode, type AffiliateCode } from '../lib/affiliates';
 
-/* The tester code at checkout (0057). Closed, it is one line: "Have a tester
-   code?". Open, a box and "Use code"; the database answers. Once a code works
-   it shows what it does, and "Remove" — until the order is placed: the order
-   row keeps its code (`locked`). */
-export default function TesterCodeBox({ tester, onChange, locked }: {
+/* The code box at checkout: the tester code (0057) or an affiliate code
+   (0061), one box for both. Closed, it is one line: "Have a code?". Open, a
+   box and "Use code"; the database answers which kind it is. Once a code
+   works it shows what it does, and "Remove" — until the order is placed: the
+   order row keeps its code (`locked`). */
+export default function CheckoutCodeBox({ tester, affiliate, onTester, onAffiliate, locked }: {
   tester: TesterCode | null;
-  onChange: (next: TesterCode | null) => void;
+  affiliate: AffiliateCode | null;
+  onTester: (next: TesterCode | null) => void;
+  /** `removed` = the customer took it off (so a kept link isn't put back). */
+  onAffiliate: (next: AffiliateCode | null, removed?: boolean) => void;
   /** An order is placed: the code is on it now and can't be changed here. */
   locked: boolean;
 }) {
@@ -17,12 +22,15 @@ export default function TesterCodeBox({ tester, onChange, locked }: {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
 
-  if (tester) {
+  const on = tester ? testerLine(tester) : affiliate ? affiliateLine(affiliate) : null;
+  if (on) {
     return (
-      <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#CDE5D3] bg-[#EEF7F0] px-3 py-2.5" data-testid="tester-code-on">
-        <p className="text-sm font-semibold text-[#2E6B3F] flex items-center gap-1.5"><Check size={15} className="shrink-0" />{testerLine(tester)}</p>
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[#CDE5D3] bg-[#EEF7F0] px-3 py-2.5"
+        data-testid={tester ? 'tester-code-on' : 'affiliate-code-on'}>
+        <p className="text-sm font-semibold text-[#2E6B3F] flex items-center gap-1.5"><Check size={15} className="shrink-0" />{on}</p>
         {!locked && (
-          <button type="button" onClick={() => { onChange(null); setTyped(''); setError(''); }} data-testid="tester-code-remove"
+          <button type="button" data-testid={tester ? 'tester-code-remove' : 'affiliate-code-remove'}
+            onClick={() => { if (tester) onTester(null); else onAffiliate(null, true); setTyped(''); setError(''); }}
             className="text-xs font-semibold text-medium underline shrink-0">Remove</button>
         )}
       </div>
@@ -33,7 +41,7 @@ export default function TesterCodeBox({ tester, onChange, locked }: {
     return (
       <button type="button" onClick={() => setOpen(true)} data-testid="tester-code-open"
         className="mt-3 text-xs font-semibold text-medium underline flex items-center gap-1.5">
-        <Ticket size={14} className="shrink-0" /> Have a tester code?
+        <Ticket size={14} className="shrink-0" /> Have a code?
       </button>
     );
   }
@@ -41,14 +49,15 @@ export default function TesterCodeBox({ tester, onChange, locked }: {
     if (checking) return;
     setError('');
     setChecking(true);
-    const r = await checkTesterCode(typed);
+    const r = await checkCheckoutCode(typed);
     setChecking(false);
-    if (r.ok) onChange(r.tester);
-    else setError(r.message);
+    if (!r.ok) { setError(r.message); return; }
+    if ('tester' in r) { onAffiliate(null); onTester(r.tester); }
+    else { onTester(null); onAffiliate(r.affiliate); }
   };
   return (
     <div className="mt-3" data-testid="tester-code-box">
-      <label htmlFor="tester-code" className="text-xs font-semibold text-dark block mb-1">Tester code</label>
+      <label htmlFor="tester-code" className="text-xs font-semibold text-dark block mb-1">Your code</label>
       <div className="flex gap-2">
         {/* Its own border and fill, not border-line: on a white summary card a
             hairline box with no text inside read as no box at all, and the

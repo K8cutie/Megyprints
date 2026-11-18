@@ -31,19 +31,26 @@ const EventCards = lazy(() => import('./pages/EventCards'));
 const EventGuest = lazy(() => import('./pages/EventGuest'));
 const EventScreen = lazy(() => import('./pages/EventScreen'));
 const EventCopy = lazy(() => import('./pages/EventCopy'));
+// Become an affiliate / the affiliate's own page (0061).
+const Affiliate = lazy(() => import('./pages/Affiliate'));
 import InstallPrompt from './components/InstallPrompt';
 import ResumePrompt from './components/ResumePrompt';
 import PaidClipSweep from './components/PaidClipSweep';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
+import { captureAffiliateRef } from './lib/affiliates';
 import { captureOrderSource } from './lib/orderSource';
 
 export default function App() {
   // Load operator template overrides + the store price multiple once on start.
   useEffect(() => { void loadTemplateSettings(); void loadStoreSettings(); }, []);
 
+  // Opened from an affiliate's link (?ref=CODE, 0061): keep the code on this
+  // device, so checkout can apply it, and tidy it out of the address bar.
+  useEffect(() => { captureAffiliateRef(); }, []);
   // Opened from a post's link (?p=TAG, 0063): keep the tag on this device so
-  // an order placed later can say which post it came from.
+  // an order placed later can say which post it came from. A link may carry
+  // both: each takes only its own word out of the address.
   useEffect(() => { captureOrderSource(); }, []);
 
   // Return to where the user was after an OAuth round-trip. redirectTo can't
@@ -96,6 +103,8 @@ export default function App() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
+          {/* Open to visitors: it explains the program and asks them to sign in to apply. */}
+          <Route path="/affiliate" element={<Affiliate />} />
         </Route>
         {/* Builder — a full-screen app with its own chrome. Kept OUTSIDE Layout so the
             marketing Lenis smooth-scroll (which hijacks the mouse wheel and scrolls the

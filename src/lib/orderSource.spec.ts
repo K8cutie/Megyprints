@@ -42,6 +42,7 @@ import {
   SOURCE_KEY, SOURCE_PATTERN, SOURCE_WINDOW_DAYS,
 } from './orderSource';
 import { createOrderFromAlbum } from './orders';
+import { captureAffiliateRef, storedAffiliateRef } from './affiliates';
 import { EMPTY_ADDRESS } from './contact';
 
 const DAY = 86_400_000;
@@ -91,6 +92,17 @@ describe('opening a tagged link', () => {
     expect(kept()).toEqual({ tag: 'xmas-01', at: 1000 });
     expect(window.location.search).toBe('?album=abc');
     expect(window.location.hash).toBe('#/builder');
+  });
+  it("a link with an affiliate's code too: both are kept, each takes only its own word out", () => {
+    for (const first of ['affiliate', 'post']) {
+      localStorage.clear();
+      open('/?ref=anna&p=xmas-01&album=abc#/builder');
+      if (first === 'affiliate') { captureAffiliateRef(); captureOrderSource(); } else { captureOrderSource(); captureAffiliateRef(); }
+      expect(storedOrderSource()).toBe('xmas-01');
+      expect(storedAffiliateRef()).toBe('ANNA');
+      expect(window.location.search).toBe('?album=abc');
+      expect(window.location.hash).toBe('#/builder');
+    }
   });
   it('tidies a tag that sat inside the #/route?query too', () => {
     open('/#/order?order=7&p=xmas-01');

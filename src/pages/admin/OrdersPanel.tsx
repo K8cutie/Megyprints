@@ -159,6 +159,13 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                 Tester order · {o.tester_code}
               </span>
             )}
+            {/* Owner only: the code rides on the quote (0061). */}
+            {canSeeFinancials && o.quote?.affiliate && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#E8F0FE] text-[#1F4E99]" data-testid="order-affiliate"
+                title="Placed with an affiliate's code: the customer got the discount, the affiliate earns on it once it's delivered (Affiliates tab).">
+                Affiliate · {o.quote.affiliate.code}
+              </span>
+            )}
             {o.event_booking_number && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#E6F4EA] text-success" data-testid="order-event-album"
                 title="An event album: paid by its booking, not by transfer.">
