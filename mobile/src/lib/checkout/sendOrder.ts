@@ -43,6 +43,7 @@ import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
 import { MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
 import { bookingErrorMessage } from '../events/eventDeal';
+import { isMissingSourceColumn } from '../orderSource';
 
 type DbError = { message: string; code?: string | null } | null;
 
@@ -108,6 +109,9 @@ export interface SendDeps {
   /** The files already sent (their paths), kept by the checkout across tries
    *  and visits (sentFiles.ts): each is made and sent once. */
   sent?: SentFiles;
+  /** The tag of the post this install came from, if any (lib/installSource.ts):
+   *  a note for the owner on the order row. Never part of the price. */
+  source?: string | null;
 }
 
 /** The order row as the insert answered it. */
@@ -168,7 +172,14 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
   let order = placed;
   if (!order) {
     onStep({ step: 'order' });
-    const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status').single();
+    const insert = (row: Record<string, unknown>) => db.from('orders').insert(row).select('id, order_number, status').single();
+    // The post's tag rides on the row only when there is one (the plan's row
+    // stays the website's, key by key).
+    const tag = deps.source || null;
+    let { data, error } = await insert(tag ? { ...plan.orderRow, source: tag } : plan.orderRow);
+    // A database without orders.source refuses the whole order over that one
+    // column. The tag must never cost a sale: the order goes again without it.
+    if (tag && isMissingSourceColumn(error)) ({ data, error } = await insert(plan.orderRow));
     if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
     if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(String(plan.orderRow.tester_code ?? ''));
     if (error) throw new Error(isNoConnection(error.message) ? ORDER_OFFLINE : `Could not place your order: ${error.message}`);

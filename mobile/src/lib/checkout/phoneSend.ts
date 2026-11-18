@@ -23,6 +23,7 @@ import { phoneOpenPhoto } from '../../print/phonePhotos';
 import { supabase, supabaseUrl } from '../supabase';
 import { clipStore } from '../memories/clipStore';
 import { relinkMemory } from '../memories/memories';
+import { storedOrderSource } from '../installSource';
 import type { CheckoutAlbum, PlaceOrderPlan } from './orderPayload';
 import type { PaymentSubmitPlan } from './payment';
 import type { PickedReceipt } from './receipt';
@@ -65,7 +66,9 @@ export async function sendFromPhone(o: {
     { Skia, drawer, text: o.text, files: siteFile },
   );
   try {
-    return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips, sent: o.sent }, o.placed);
+    // The post this install came from, if it was a tagged link (installSource.ts).
+    const source = await storedOrderSource();
+    return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips, sent: o.sent, source }, o.placed);
   } finally {
     files.dispose();
     drawer.dispose();
