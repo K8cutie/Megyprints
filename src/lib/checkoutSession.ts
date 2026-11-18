@@ -21,7 +21,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { TesterCode } from './testerCode';
-import type { AffiliateCode } from './affiliates';
+import type { AffiliateCode } from './orderCodes';
 import type { AlbumSizePreset, CoverType, MaterialType } from '../pages/builder/types';
 import { isEmptyAddress, type AddressValue } from './contact';
 

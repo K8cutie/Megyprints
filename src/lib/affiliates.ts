@@ -9,102 +9,47 @@
    the same 10-wrong-tries limit as the tester code), what an order asks
    (orders_with_affiliate_code), what each sale earns and when it can be paid
    (orders_affiliate_commission). The app only shows what it answered.
+   The rules and the customer's calls are in lib/orderCodes.ts, shared with
+   the 2.0 app; this file adds the website's own: its client, the ?ref= link
+   kept in the browser, and the owner's Affiliates tab.
    ══════════════════════════════════════════════════════════════════════════ */
 import { supabase, supabaseConfigured } from './supabase';
-import { normalizePHPhone } from './contact';
-import { checkTesterCode, normalizeTesterCode, testerCheckMessage, TESTER_CODE_PATTERN, type TesterCode } from './testerCode';
+import { checkTesterCode } from './testerCode';
+import {
+  AFFILIATE_CODE_PATTERN, affiliateLinkOn, applicationProblem, applyAffiliateWith, checkOrderCodeWith, DEFAULT_PUBLIC_ORIGIN,
+  fetchAffiliateProgramWith, fetchMyAffiliateWith, normalizeAffiliateCode, parseProgram,
+  type AffiliateApplication, type AffiliateProgram, type AffiliateStatus, type CodeCheck, type MyAffiliate, type SaleStatus,
+} from './orderCodes';
 
-/** A code the database said works: this much off the order. */
-export interface AffiliateCode { code: string; discount: number }
+export {
+  AFFILIATE_CODE_GONE_SQLSTATE, AFFILIATE_CODE_PATTERN, affiliateLine, AffiliateCodeGoneError, affiliateTerms, applicationProblem,
+  checkoutPayTotal, codeCheckMessage, exampleCommission, isAffiliateCodeGoneError, normalizeAffiliateCode, parseMyAffiliate,
+  parseProgram, saleStatusLabel,
+} from './orderCodes';
+export type {
+  AffiliateApplication, AffiliateCode, AffiliateProgram, AffiliateStatus, CodeCheck, MyAffiliate, SaleStatus,
+} from './orderCodes';
 
-/** The shape the database keeps an affiliate code in (affiliates_code_chk). */
-export const AFFILIATE_CODE_PATTERN = /^[A-Z0-9]{3,20}$/;
-/** The order was placed with a code that stopped working, or can't take it (0061). */
-export const AFFILIATE_CODE_GONE_SQLSTATE = 'MP009';
-
-/** As the database compares it: no spaces, capitals (the tester code's rule). */
-export const normalizeAffiliateCode = normalizeTesterCode;
+const num = (v: unknown, fallback = 0) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
+const STATUSES: AffiliateStatus[] = ['pending', 'approved', 'rejected', 'paused'];
+const SALE_STATUSES: SaleStatus[] = ['pending', 'payable', 'paid', 'void'];
+const str = (v: unknown) => (typeof v === 'string' ? v : null);
+const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') as Record<string, unknown>[] : []);
 
 /** Where a shared link points. The app inside the Android shell has its own
  *  origin, so links always name the public site (overridable like QR codes). */
 export const PUBLIC_ORIGIN: string =
-  (import.meta.env.VITE_MEMORY_BASE as string | undefined)?.replace(/\/+$/, '') || 'https://megyprints.vercel.app';
+  (import.meta.env.VITE_MEMORY_BASE as string | undefined)?.replace(/\/+$/, '') || DEFAULT_PUBLIC_ORIGIN;
 
-export const affiliateLink = (code: string): string => `${PUBLIC_ORIGIN}/?ref=${encodeURIComponent(code)}`;
-
-const peso = (n: number) => `₱${Math.round(n).toLocaleString('en-PH')}`;
+export const affiliateLink = (code: string): string => affiliateLinkOn(PUBLIC_ORIGIN, code);
 
 // ── Checkout ────────────────────────────────────────────────────────────────
 
-/** What the customer pays: nothing with the tester code, the discount less
- *  with an affiliate code (never below zero), else the total. */
-export function checkoutPayTotal(total: number, tester: TesterCode | null, affiliate: AffiliateCode | null): number {
-  if (tester) return 0;
-  if (affiliate) return Math.max(0, total - Math.max(0, Math.round(affiliate.discount)));
-  return total;
-}
-
-/** The checkout line under the price. */
-export function affiliateLine(a: AffiliateCode): string {
-  return `Code ${a.code}: ${peso(a.discount)} off`;
-}
-
-export type CodeCheck =
-  | { ok: true; tester: TesterCode }
-  | { ok: true; affiliate: AffiliateCode; windowDays: number }
-  | { ok: false; message: string; reason?: string };
-
-/** Why a code didn't work, in the customer's words. */
-export function codeCheckMessage(reason: string | undefined): string {
-  if (reason === 'own') return "That's your own affiliate code. It can't take money off your own order.";
-  return testerCheckMessage(reason);
-}
-
-/** PostgREST's answer when a function isn't there: a database without 0061. */
-const missingFunction = (e: { code?: string | null }) => e.code === 'PGRST202';
-
 /** The checkout's one code box: the tester code or an affiliate code. Never throws. */
 export async function checkCheckoutCode(raw: string): Promise<CodeCheck> {
-  const code = normalizeAffiliateCode(raw);
-  if (!code) return { ok: false, message: 'Type the code first.' };
+  if (!normalizeAffiliateCode(raw)) return { ok: false, message: 'Type the code first.' };
   if (!supabaseConfigured) return { ok: false, message: "Codes can't be checked right now. Try again later." };
-  const { data, error } = await supabase.rpc('check_order_code', { p_code: code });
-  if (error) {
-    // Before 0061 is applied the tester code still works, through its own check.
-    if (missingFunction(error)) {
-      const t = await checkTesterCode(raw);
-      return t.ok ? { ok: true, tester: t.tester } : { ok: false, message: t.message };
-    }
-    return { ok: false, message: "We couldn't check the code. Check your internet, then try again." };
-  }
-  const r = (data ?? {}) as { ok?: boolean; kind?: string; code?: unknown; discount?: unknown; window_days?: unknown; reason?: string };
-  if (r.ok && r.kind === 'tester' && typeof r.code === 'string' && TESTER_CODE_PATTERN.test(r.code)) {
-    return { ok: true, tester: { code: r.code } };
-  }
-  if (r.ok && r.kind === 'affiliate' && typeof r.code === 'string' && AFFILIATE_CODE_PATTERN.test(r.code)) {
-    const d = Number(r.discount);
-    const w = Number(r.window_days);
-    return {
-      ok: true,
-      affiliate: { code: r.code, discount: Number.isFinite(d) && d > 0 ? Math.round(d) : 0 },
-      windowDays: Number.isFinite(w) && w >= 1 ? Math.round(w) : 30,
-    };
-  }
-  return { ok: false, message: codeCheckMessage(r.reason), reason: r.reason };
-}
-
-/** The code stopped working between checking it and placing the order (the
- *  owner paused it or switched the program off), or this order can't take
- *  it. Nothing was placed; the message is the database's own. */
-export class AffiliateCodeGoneError extends Error {
-  constructor(message: string) {
-    super(message || "That code doesn't work any more, so nothing was ordered. Remove it to order at the normal price.");
-    this.name = 'AffiliateCodeGoneError';
-  }
-}
-
-export function isAffiliateCodeGoneError(error: { code?: string | null } | null | undefined): boolean {
-  return !!error && error.code === AFFILIATE_CODE_GONE_SQLSTATE;
+  return checkOrderCodeWith(supabase, raw, checkTesterCode);
 }
 
 // ── The link (?ref=CODE) ────────────────────────────────────────────────────
@@ -170,147 +115,21 @@ export function clearAffiliateRef(): void {
 
 // ── The program, and the person's own page ──────────────────────────────────
 
-export interface AffiliateProgram { on: boolean; ratePct: number; discount: number; windowDays: number; minPayout: number }
-
-const num = (v: unknown, fallback = 0) => { const n = Number(v); return Number.isFinite(n) ? n : fallback; };
-
-export function parseProgram(raw: unknown): AffiliateProgram | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  return {
-    on: r.on === true,
-    ratePct: num(r.rate_pct, 10),
-    discount: Math.round(num(r.discount, 100)),
-    windowDays: Math.round(num(r.window_days, 30)),
-    minPayout: Math.round(num(r.min_payout, 500)),
-  };
-}
-
 /** Anyone can read it: the invite page shows the rate and the discount. */
 export async function fetchAffiliateProgram(): Promise<AffiliateProgram | null> {
   if (!supabaseConfigured) return null;
-  const { data, error } = await supabase.rpc('affiliate_program');
-  if (error) return null;
-  return parseProgram(data);
-}
-
-export type AffiliateStatus = 'pending' | 'approved' | 'rejected' | 'paused';
-export type SaleStatus = 'pending' | 'payable' | 'paid' | 'void';
-
-export interface MyAffiliate {
-  program: AffiliateProgram | null;
-  affiliate: {
-    status: AffiliateStatus;
-    code: string | null;
-    fullName: string;
-    gcashLast4: string;
-    ratePct: number;
-    appliedAt: string;
-    decidedAt: string | null;
-    reapplyFrom: string | null;
-  } | null;
-  totals: { sales: number; pending: number; payable: number; paid: number; thisMonth: number; allTime: number };
-  sales: { earnedAt: string; albumSize: string | null; cover: string | null; amount: number; status: SaleStatus; paidAt: string | null }[];
-  payouts: { amount: number; reference: string; paidAt: string }[];
-}
-
-const EMPTY_TOTALS: MyAffiliate['totals'] = { sales: 0, pending: 0, payable: 0, paid: 0, thisMonth: 0, allTime: 0 };
-const STATUSES: AffiliateStatus[] = ['pending', 'approved', 'rejected', 'paused'];
-const SALE_STATUSES: SaleStatus[] = ['pending', 'payable', 'paid', 'void'];
-const str = (v: unknown) => (typeof v === 'string' ? v : null);
-const arr = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((x) => x && typeof x === 'object') as Record<string, unknown>[] : []);
-
-export function parseMyAffiliate(raw: unknown): MyAffiliate {
-  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const a = r.affiliate && typeof r.affiliate === 'object' ? r.affiliate as Record<string, unknown> : null;
-  const t = r.totals && typeof r.totals === 'object' ? r.totals as Record<string, unknown> : null;
-  const status = STATUSES.includes(a?.status as AffiliateStatus) ? a!.status as AffiliateStatus : null;
-  return {
-    program: parseProgram(r.program),
-    affiliate: a && status ? {
-      status,
-      code: str(a.code),
-      fullName: str(a.full_name) ?? '',
-      gcashLast4: str(a.gcash_last4) ?? '',
-      ratePct: num(a.rate_pct, 10),
-      appliedAt: str(a.applied_at) ?? '',
-      decidedAt: str(a.decided_at),
-      reapplyFrom: str(a.reapply_from),
-    } : null,
-    totals: t ? {
-      sales: Math.round(num(t.sales)),
-      pending: Math.round(num(t.pending)),
-      payable: Math.round(num(t.payable)),
-      paid: Math.round(num(t.paid)),
-      thisMonth: Math.round(num(t.this_month)),
-      allTime: Math.round(num(t.all_time)),
-    } : { ...EMPTY_TOTALS },
-    sales: arr(r.sales).map((s) => ({
-      earnedAt: str(s.earned_at) ?? '',
-      albumSize: str(s.album_size),
-      cover: str(s.cover),
-      amount: Math.round(num(s.amount)),
-      status: SALE_STATUSES.includes(s.status as SaleStatus) ? s.status as SaleStatus : 'pending',
-      paidAt: str(s.paid_at),
-    })),
-    payouts: arr(r.payouts).map((p) => ({
-      amount: Math.round(num(p.amount)),
-      reference: str(p.reference) ?? '',
-      paidAt: str(p.paid_at) ?? '',
-    })),
-  };
+  return fetchAffiliateProgramWith(supabase);
 }
 
 /** The signed-in person's application and earnings. Throws a plain sentence. */
 export async function fetchMyAffiliate(): Promise<MyAffiliate> {
   if (!supabaseConfigured) throw new Error('Not connected. Try again later.');
-  const { data, error } = await supabase.rpc('my_affiliate');
-  if (error) throw new Error("We couldn't load your affiliate page. Check your internet, then try again.");
-  return parseMyAffiliate(data);
-}
-
-export interface AffiliateApplication { fullName: string; gcash: string; tin: string; promoteWhere: string; agree: boolean }
-
-/** What's wrong with the form, in order, or null when it can be sent. */
-export function applicationProblem(f: AffiliateApplication): string | null {
-  const name = f.fullName.trim().replace(/\s+/g, ' ');
-  if (name.length < 2 || name.length > 80) return 'Please type your full name.';
-  if (!normalizePHPhone(f.gcash)) return 'Please type your GCash number, like 0917 123 4567.';
-  const tin = f.tin.replace(/\D/g, '');
-  if (tin && !/^\d{9,14}$/.test(tin)) return "A TIN has 9 to 14 digits. Leave it empty if you don't have one yet.";
-  const where = f.promoteWhere.trim();
-  if (where.length < 3) return "Tell us where you'll share your code.";
-  if (where.length > 300) return 'Please keep "where you\'ll share it" under 300 letters.';
-  if (!f.agree) return 'Please agree to the affiliate terms.';
-  return null;
+  return fetchMyAffiliateWith(supabase);
 }
 
 export async function applyAffiliate(f: AffiliateApplication): Promise<MyAffiliate> {
-  const problem = applicationProblem(f);
-  if (problem) throw new Error(problem);
-  if (!supabaseConfigured) throw new Error('Not connected: nothing was sent.');
-  const { data, error } = await supabase.rpc('apply_affiliate', {
-    p_full_name: f.fullName.trim(),
-    p_gcash: f.gcash,
-    p_tin: f.tin.replace(/\D/g, '') || null,
-    p_promote_where: f.promoteWhere.trim(),
-    p_agree: f.agree,
-  });
-  if (error) {
-    // The database's own sentence for its checks (MP010), a plain one otherwise.
-    throw new Error(error.code === 'MP010' && error.message ? error.message : "We couldn't send your application. Check your internet, then try again.");
-  }
-  return parseMyAffiliate(data);
-}
-
-/** A sale's status in the affiliate's words. */
-export function saleStatusLabel(s: SaleStatus): string {
-  switch (s) {
-    case 'pending': return 'Waiting for delivery';
-    case 'payable': return 'To be paid';
-    case 'paid': return 'Paid';
-    default: return 'Cancelled';
-  }
+  if (!supabaseConfigured) throw new Error(applicationProblem(f) ?? 'Not connected: nothing was sent.');
+  return applyAffiliateWith(supabase, f);
 }
 
 // ── The owner (admin Affiliates tab) ────────────────────────────────────────
@@ -486,19 +305,3 @@ export async function saveAffiliateSettings(next: AffiliateSettings): Promise<st
 
 /** What a sale earns at these settings, for the invite page's example: the
  *  rate of the album price after the customer's discount. */
-export function exampleCommission(albumPrice: number, s: Pick<AffiliateProgram, 'ratePct' | 'discount'>): number {
-  return Math.round(Math.max(0, albumPrice - s.discount) * s.ratePct / 100);
-}
-
-/** The rules, in the program's own numbers. Shown on the page and agreed to in the form. */
-export function affiliateTerms(p: AffiliateProgram): string[] {
-  return [
-    `You earn ${p.ratePct}% of the album price (the album with its included pages, after your client's ${peso(p.discount)} off) on every order placed with your code, or within ${p.windowDays} days of your client opening your link. Extra pages and add-ons don't earn.`,
-    'A sale is paid once its album is delivered. A cancelled or refunded order earns nothing.',
-    `We pay by GCash to the number you give us, once you have at least ${peso(p.minPayout)} to be paid. Your earnings are yours to declare for tax; we withhold tax where the law requires it.`,
-    "Your own orders don't earn and don't get the discount. An order sent to your own number or name is checked and may be cancelled.",
-    "Don't post your code on coupon or deal sites, and don't run ads on the Megy Prints name.",
-    'When you post about us, say it\'s an affiliate link (for example #ad or #affiliate).',
-    'We may change these terms or the rates, or end a code, at any time. Sales already delivered are still paid.',
-  ];
-}
