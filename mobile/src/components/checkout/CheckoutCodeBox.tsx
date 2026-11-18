@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { affiliateLine, type AffiliateCode, type CodeCheck } from '@web/lib/orderCodes';
 import { testerCheckMessage, testerLine, type TesterCheck, type TesterCode } from '../../lib/checkout/testerCode';
 import { colors, space } from '../../lib/theme';
 import { Button } from '../Button';
 
 const SIGN_IN_FIRST = testerCheckMessage('sign_in');
 
-/** The tester code at checkout (the website's TesterCodeBox). Closed, one
- *  line: "Have a tester code?". Open, a box and "Use code". Once a code
- *  works it says what it does, with "Remove". Signed out, "Sign in first"
+/** The code box at checkout (the website's CheckoutCodeBox): the tester code
+ *  (0057) or an affiliate code (0061), one box for both; the database says
+ *  which. Closed, one line: "Have a code?". Open, a box and "Use code". Once
+ *  a code works it says what it does, with "Remove". Signed out, "Sign in first"
  *  comes with its Sign in button (beta round 2: the only other way to sign
  *  in from here was a button that said "pay ₱2,016"); signed in, those
  *  words go, and the code stays typed. */
-export function TesterCodeBox({ tester, onChange, check, signedIn, onSignIn }: {
+export function CheckoutCodeBox({ tester, affiliate, onTester, onAffiliate, check, signedIn, onSignIn }: {
   tester: TesterCode | null;
-  onChange: (next: TesterCode | null) => void;
-  check: (typed: string) => Promise<TesterCheck>;
+  affiliate: AffiliateCode | null;
+  onTester: (next: TesterCode | null) => void;
+  onAffiliate: (next: AffiliateCode | null) => void;
+  check: (typed: string) => Promise<CodeCheck | TesterCheck>;
   signedIn: boolean;
   onSignIn: () => void;
 }) {
@@ -25,12 +29,22 @@ export function TesterCodeBox({ tester, onChange, check, signedIn, onSignIn }: {
   const [error, setError] = useState('');
   useEffect(() => { if (signedIn) setError((e) => (e === SIGN_IN_FIRST ? '' : e)); }, [signedIn]);
 
+  if (affiliate && !tester) {
+    return (
+      <View style={styles.on} testID="affiliate-code-on">
+        <Text style={styles.onText}>✓ {affiliateLine(affiliate)}</Text>
+        <Pressable accessibilityRole="button" onPress={() => { onAffiliate(null); setTyped(''); setError(''); }} testID="affiliate-code-remove">
+          <Text style={styles.link}>Remove</Text>
+        </Pressable>
+      </View>
+    );
+  }
   if (tester) {
     return (
       <View style={styles.onWrap}>
         <View style={styles.on} testID="tester-code-on">
           <Text style={styles.onText}>✓ {testerLine(tester)}</Text>
-          <Pressable accessibilityRole="button" onPress={() => { onChange(null); setTyped(''); setError(''); }} testID="tester-code-remove">
+          <Pressable accessibilityRole="button" onPress={() => { onTester(null); setTyped(''); setError(''); }} testID="tester-code-remove">
             <Text style={styles.link}>Remove</Text>
           </Pressable>
         </View>
@@ -42,7 +56,7 @@ export function TesterCodeBox({ tester, onChange, check, signedIn, onSignIn }: {
   if (!open) {
     return (
       <Pressable accessibilityRole="button" onPress={() => setOpen(true)} style={styles.openRow} testID="tester-code-open">
-        <Text style={styles.link}>Have a tester code?</Text>
+        <Text style={styles.link}>Have a code?</Text>
       </Pressable>
     );
   }
@@ -52,12 +66,12 @@ export function TesterCodeBox({ tester, onChange, check, signedIn, onSignIn }: {
     setChecking(true);
     const r = await check(typed);
     setChecking(false);
-    if (r.ok) onChange(r.tester);
-    else setError(r.message);
+    if (!r.ok) { setError(r.message); return; }
+    if ('tester' in r) { onAffiliate(null); onTester(r.tester); } else { onTester(null); onAffiliate(r.affiliate); }
   };
   return (
     <View style={styles.box} testID="tester-code-box">
-      <Text style={styles.label}>Tester code</Text>
+      <Text style={styles.label}>Your code</Text>
       <View style={styles.row}>
         <TextInput
           value={typed}
@@ -68,7 +82,7 @@ export function TesterCodeBox({ tester, onChange, check, signedIn, onSignIn }: {
           autoCorrect={false}
           placeholder="Type your code"
           placeholderTextColor={colors.muted}
-          accessibilityLabel="Tester code"
+          accessibilityLabel="Your code"
           style={[styles.input, !!error && styles.inputBad]}
           testID="tester-code-input"
         />

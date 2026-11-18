@@ -80,6 +80,7 @@ export const SHARED_MODULES = [
   'src/lib/megyMascot.ts',
   'src/lib/megyMini.ts',
   'src/lib/myOrdersCloud.ts',
+  'src/lib/orderCodes.ts',
   'src/lib/orderExpiry.ts',
   'src/lib/orderTracker.ts',
   'src/lib/passwordReset.ts',

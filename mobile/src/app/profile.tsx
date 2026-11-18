@@ -113,6 +113,10 @@ export default function Profile() {
         )}
         {saveStatus === 'saved' && <Text style={styles.good} testID="profile-saved">{SAVED}</Text>}
         {saveStatus === 'error' && <Text style={styles.bad} testID="profile-save-error">{SAVE_FAILED}</Text>}
+        {/* Affiliates (0061): apply, or see your code and earnings (the website's Profile link). */}
+        <Pressable accessibilityRole="button" onPress={() => router.push('/affiliate')} style={styles.linkWrap} testID="profile-affiliate">
+          <Text style={styles.link}>Affiliate: earn with your own code</Text>
+        </Pressable>
       </View>
 
       <View style={styles.card} testID="profile-delivery">

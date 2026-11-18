@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, LogOut, LayoutDashboard, QrCode, Package } from 'lucide-react';
+import { User, LogOut, LayoutDashboard, QrCode, Package, BadgePercent } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { resolveRole } from '../lib/roles';
 import { useAuthModal } from './AuthModalProvider';
@@ -36,6 +36,7 @@ export default function AuthNav({ variant = 'bar', onAction }: { variant?: 'bar'
         </Link>
         <Link to="/orders" onClick={onAction} className={`${big} border border-peach text-dark`} data-testid="menu-orders"><Package size={18} className="text-blush-pink" /> Your orders</Link>
         <Link to="/memories" onClick={onAction} className={`${big} border border-peach text-dark`}><QrCode size={18} className="text-blush-pink" /> Memories</Link>
+        <Link to="/affiliate" onClick={onAction} className={`${big} border border-peach text-dark`} data-testid="menu-affiliate"><BadgePercent size={18} className="text-blush-pink" /> Affiliate</Link>
         <button onClick={done(() => { logout(); navigate('/'); })} className={`${big} text-blush-pink`} data-testid="menu-sign-out">
           <LogOut size={18} /> Sign Out
         </button>

@@ -167,7 +167,7 @@ describe('the checkout screen, walked', () => {
     await fillDetails('  Juan   Dela  Cruz ', '0917 123 4567');
     expect(screen.getByTestId('address-zip').props.value).toBe('1105');
 
-    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.press(screen.getByText('Have a code?'));
     expect(screen.getByPlaceholderText('Type your code')).toBeOnTheScreen();
     await fireEvent.changeText(screen.getByTestId('tester-code-input'), ' megy test ');
     await fireEvent.press(screen.getByTestId('tester-code-apply'));
@@ -412,7 +412,7 @@ describe('the checkout screen, walked', () => {
     await render(<OrderScreen />);
     expect(await screen.findByText("Prices didn't load — tap to try again")).toBeOnTheScreen();
     expect(screen.getByTestId('order-total')).toHaveTextContent('—');
-    expect(screen.queryByText('Have a tester code?')).toBeNull();
+    expect(screen.queryByText('Have a code?')).toBeNull();
     fake.rpc.public_price_schedule = { data: LIVE, error: null };
     await fireEvent.press(screen.getByTestId('order-place'));
     expect(await screen.findByText(`Place order · pay ${peso(softPrice.total)} by bank transfer`)).toBeOnTheScreen();

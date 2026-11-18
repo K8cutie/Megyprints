@@ -35,8 +35,9 @@ import { ensureLatestApp, readUpdateNote, UPDATED_PLACE_ORDER, GETTING_NEWEST } 
 import OrderTracker from '../components/OrderTracker';
 import { eventLinkForAlbum, eventDealState, coverOrderWithBooking, bookingsWaitingForAlbum, linkFromBooking, linkAlbumToBooking, unlinkAlbum } from '../lib/eventAlbum';
 import { getMyBooking, listMyBookings, type EventBooking } from '../lib/eventBookings';
-import { amountToPay, claimTesterOrder, testerLine, TesterCodeGoneError, type TesterCode } from '../lib/testerCode';
-import TesterCodeBox from '../components/TesterCodeBox';
+import { claimTesterOrder, testerLine, TesterCodeGoneError, type TesterCode } from '../lib/testerCode';
+import { affiliateLine, AffiliateCodeGoneError, checkCheckoutCode, checkoutPayTotal, clearAffiliateRef, storedAffiliateRef, type AffiliateCode } from '../lib/affiliates';
+import CheckoutCodeBox from '../components/CheckoutCodeBox';
 import PlayFeedbackCard from '../components/PlayFeedbackCard';
 import PlaceOrderProgress from '../components/PlaceOrderProgress';
 import PayCard from '../components/PayCard';
@@ -68,7 +69,7 @@ export default function Order() {
   // stored order and the uploaded PDF silently diverge.
   // albumId = the album the order row froze; a PDF rebuild must read that one.
   const createdOrderRef = useRef<
-    { id: string; order_number: string; albumId: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset; tester?: TesterCode | null } | null
+    { id: string; order_number: string; albumId: string; material: MaterialType; cover: CoverType; albumSize: AlbumSizePreset; tester?: TesterCode | null; affiliate?: AffiliateCode | null } | null
   >(null);
   const [material, setMaterial] = useState<MaterialType>(DEFAULT_MATERIAL);
   const [cover, setCover] = useState<CoverType>(DEFAULT_COVER);
@@ -124,6 +125,9 @@ export default function Order() {
   // A tester code the database said works (0057): the album is free.
   // Once the order is placed the code is on it, and this follows the order.
   const [tester, setTester] = useState<TesterCode | null>(null);
+  // An affiliate code the database said works (0061): its discount off the
+  // total. Typed in the code box, or from a ?ref= link this device kept.
+  const [affiliate, setAffiliate] = useState<AffiliateCode | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const addressRef = useRef<HTMLDivElement>(null);
@@ -166,9 +170,10 @@ export default function Order() {
     // (1-star testers round 3, the Returning Customer). A reload still is.
     if (o && fresh && o.stage === 'tracking') return;
     if (!o) return;
-    createdOrderRef.current = { id: o.orderId, order_number: o.orderNumber, albumId: o.albumId, material: o.material, cover: o.cover, albumSize: o.albumSize, tester: o.tester ?? null };
-    orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt, userId: o.userId ?? user?.id ?? null, tester: o.tester ?? null };
+    createdOrderRef.current = { id: o.orderId, order_number: o.orderNumber, albumId: o.albumId, material: o.material, cover: o.cover, albumSize: o.albumSize, tester: o.tester ?? null, affiliate: o.affiliate ?? null };
+    orderRecordRef.current = { albumId: o.albumId, orderId: o.orderId, orderNumber: o.orderNumber, material: o.material, cover: o.cover, albumSize: o.albumSize, amount: o.amount, albumEditedAt: o.albumEditedAt, userId: o.userId ?? user?.id ?? null, tester: o.tester ?? null, affiliate: o.affiliate ?? null };
     setTester(o.tester ?? null);
+    setAffiliate(o.affiliate ?? null);
     setOrderNumber(o.orderNumber);
     setMaterial(o.material);
     setCover(o.cover);
@@ -398,9 +403,10 @@ export default function Order() {
     ? priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears, hdMemories)
     : { items: [], total: 0 };
   const totalPrice = breakdown.total;
-  // What the customer pays: the real total, or nothing with a tester code
-  // (0057). The real total still shows, crossed out.
-  const payTotal = amountToPay(totalPrice, tester);
+  // What the customer pays: the real total, nothing with a tester code
+  // (0057), or the discount less with an affiliate code (0061). The real
+  // total still shows, crossed out.
+  const payTotal = checkoutPayTotal(totalPrice, tester, affiliate);
   // Shipping is built into the price (0041), so it is free here — the value
   // shown is what the schedule says is inside the price, never an extra charge.
   const freeShippingValue = schedule ? freeShippingValueOf(schedule) : 0;
@@ -414,6 +420,28 @@ export default function Order() {
   // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
   // charge nothing for a real album.
   const priceReady = settingsReady && schedule !== null && info !== null && clipTierReady;
+
+  // A ?ref= link this device kept (0061) applies its code by itself, once:
+  // the customer sees "Code ANNA: ₱100 off" and can still remove it. The
+  // database says whether it still works and how long a link counts.
+  const refTriedRef = useRef(false);
+  const codeOnRef = useRef(false);
+  useEffect(() => { codeOnRef.current = !!(tester || affiliate || orderNumber); }, [tester, affiliate, orderNumber]);
+  useEffect(() => {
+    if (refTriedRef.current || !user || !priceReady || eventLink || codeOnRef.current) return;
+    const kept = storedAffiliateRef(365);
+    if (!kept) return;
+    refTriedRef.current = true;
+    void checkCheckoutCode(kept).then((r) => {
+      if (r.ok && 'affiliate' in r) {
+        // Older than the program's window: it no longer counts.
+        if (storedAffiliateRef(r.windowDays) === null || codeOnRef.current) return;
+        setAffiliate(r.affiliate);
+      } else if (!r.ok && (r.reason === 'wrong' || r.reason === 'own')) {
+        clearAffiliateRef();
+      }
+    });
+  }, [user, priceReady, eventLink]);
 
   // ── Back after a reload (checkoutSession) ──
   // An order already placed in this checkout returns to where it was — the
@@ -639,6 +667,7 @@ export default function Order() {
           hostingYears: effectiveYears,
           hdMemories,
           testerCode: tester?.code ?? null,
+          affiliateCode: tester ? null : affiliate?.code ?? null,
         });
         let created;
         try {
@@ -652,7 +681,7 @@ export default function Order() {
         createdOrderRef.current = {
           id: created.id, order_number: created.order_number, albumId: created.album_id,
           material, cover, albumSize, // freeze the specs the order row was built with
-          tester, // and the code it was placed with
+          tester, affiliate, // and the code it was placed with
         };
         // The next checkout on this device starts from these details (RC-1).
         if (user) saveLastDelivery({ userId: user.id, name, phone, address });
@@ -661,7 +690,7 @@ export default function Order() {
         orderRecordRef.current = {
           albumId: created.album_id, orderId: created.id, orderNumber: created.order_number,
           material, cover, albumSize, amount: payTotal, albumEditedAt: info?.editedAt ?? 0,
-          userId: user?.id ?? null, tester,
+          userId: user?.id ?? null, tester, affiliate,
         };
         recordOrder('placed');
       }
@@ -842,6 +871,7 @@ export default function Order() {
       // the message, and the operator/owner sees the cause in Sentry/the endpoint.
       if (!(err instanceof TooFewPhotosError || err instanceof PhotosNotHereError)) reportError(err, { path: 'checkout', step: 'place_order', orderId: createdOrderRef.current?.id });
       if (err instanceof TesterCodeGoneError) setTester(null);
+      if (err instanceof AffiliateCodeGoneError) { setAffiliate(null); clearAffiliateRef(); }
       setErrorMsg(err instanceof MissingClipError ? missingClipMessage(err.codes)
         : err instanceof Error ? err.message : 'Something went wrong placing your order.');
       setAlbumNotSaved(err instanceof AlbumNotSavedError || err instanceof TooFewPhotosError || err instanceof MissingClipError || err instanceof PhotosNotHereError);
@@ -1261,25 +1291,35 @@ export default function Order() {
                       <span className="font-semibold text-[#2E6B3F] text-right whitespace-nowrap">−₱{(totalPrice - payTotal).toLocaleString('en-PH')}</span>
                     </div>
                   )}
+                  {/* An affiliate code (0061): its discount, the real price crossed out. */}
+                  {!eventLink && !tester && affiliate && (
+                    <div className="flex justify-between gap-3 text-[13px]" data-testid="order-affiliate-line">
+                      <span className="font-semibold text-[#2E6B3F]">{affiliateLine(affiliate)}</span>
+                      <span className="font-semibold text-[#2E6B3F] text-right whitespace-nowrap">−₱{(totalPrice - payTotal).toLocaleString('en-PH')}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-baseline pt-2 border-t border-line-soft">
                     <span className="font-semibold text-dark">Total</span>
                     <span className="text-right">
-                      {!eventLink && priceReady && tester && (
+                      {!eventLink && priceReady && (tester || affiliate) && (
                         <s className="mr-2 text-sm font-medium text-light" data-testid="order-real-price">₱{totalPrice.toLocaleString('en-PH')}</s>
                       )}
-                      {!eventLink && priceReady && !tester && wasTotal !== null && (
+                      {!eventLink && priceReady && !tester && !affiliate && wasTotal !== null && (
                         <s className="mr-2 text-sm font-medium text-light" data-testid="order-was">₱{wasTotal.toLocaleString('en-PH')}</s>
                       )}
                       <span className="font-display text-2xl font-bold text-blush-pink" data-testid="order-total">{eventLink ? '₱0' : <>{priceReady ? `₱${payTotal.toLocaleString('en-PH')}` : '—'}</>}</span>
                     </span>
                   </div>
-                  {!eventLink && priceReady && !tester && wasTotal !== null && (
+                  {!eventLink && priceReady && !tester && !affiliate && wasTotal !== null && (
                     <p className="text-xs font-semibold text-success text-right" data-testid="order-savings">
                       New lower price: you save ₱{(wasTotal - totalPrice).toLocaleString('en-PH')}
                     </p>
                   )}
                   {coveredByBooking && <p className="text-xs text-success text-right" data-testid="order-covered">Covered by your event booking</p>}
-                  {!eventLink && priceReady && <TesterCodeBox tester={tester} onChange={setTester} locked={!!orderNumber} />}
+                  {!eventLink && priceReady && (
+                    <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} locked={!!orderNumber}
+                      onAffiliate={(next, removed) => { setAffiliate(next); if (removed) clearAffiliateRef(); }} />
+                  )}
                   {eventLink && !coveredByBooking && <p className="text-xs text-medium text-right" data-testid="order-covered-later">Your booking pays for it. See the note at the top.</p>}
                 </div>
               </div>
@@ -1382,7 +1422,7 @@ export default function Order() {
                 {submitting ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Placing your order…'}</>
                   : eventLink ? <><ShoppingCart size={16} /> Place my event album order</>
                   : priceReady && tester ? <><ShoppingCart size={16} /> Place order · free with tester code</>
-                  : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${totalPrice.toLocaleString('en-PH')}`} by bank transfer</>
+                  : priceReady ? <><ShoppingCart size={16} /> Place order · pay {`₱${payTotal.toLocaleString('en-PH')}`} by bank transfer</>
                     : !settingsReady || albumInfo === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>
                       // A tap that answers: try the prices again (they also come back on their own).
                       : retryingPrices ? <><Loader2 size={16} className="animate-spin" /> Loading price…</>

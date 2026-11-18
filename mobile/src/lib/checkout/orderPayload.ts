@@ -94,6 +94,9 @@ export interface OrderInsertInput {
   hostingYears?: number | null;
   hdMemories?: boolean;
   testerCode?: string | null;
+  /** An affiliate code the database said works (0061): it decides again on
+   *  the insert, then asks the discount less, or refuses (MP009). */
+  affiliateCode?: string | null;
   /** The clock for status_history (tests). */
   now?: Date;
 }
@@ -128,6 +131,8 @@ export function buildOrderInsert(opts: OrderInsertInput): Record<string, unknown
     hosting_years: opts.hostingYears ?? null,
     hd_memories: !!opts.hdMemories,
     ...(opts.testerCode ? { tester_code: opts.testerCode } : {}),
+    // The same for an affiliate code: only named with one (0061, the website's lib/orders.ts).
+    ...(opts.affiliateCode ? { affiliate_code: opts.affiliateCode } : {}),
     status_history: [{ status: 'pending_payment', at: (opts.now ?? new Date()).toISOString() }],
   };
 }

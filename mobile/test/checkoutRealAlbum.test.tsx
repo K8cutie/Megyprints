@@ -279,7 +279,7 @@ describe('checkout on the album "Order this album" opened it with', () => {
     await fillDetails();
     if (tester) {
       fake.rpc.check_tester_code = { data: { ok: true, code: 'MEGYTEST' }, error: null };
-      await fireEvent.press(screen.getByText('Have a tester code?'));
+      await fireEvent.press(screen.getByText('Have a code?'));
       await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
       await fireEvent.press(screen.getByTestId('tester-code-apply'));
       expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
@@ -312,13 +312,89 @@ describe('checkout on the album "Order this album" opened it with', () => {
     await render(<OrderScreen />);
     await screen.findByTestId('order-own-album');
     fake.rpc.check_tester_code = { data: { ok: false, reason }, error: null };
-    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.press(screen.getByText('Have a code?'));
     await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
     await fireEvent.press(screen.getByTestId('tester-code-apply'));
     expect(await screen.findByText(words)).toBeOnTheScreen();
     expect(rec.rpcs).toContainEqual({ name: 'check_tester_code', args: { p_code: 'MEGYTEST' } });
     expect(screen.queryByTestId('tester-code-on')).toBeNull();
     expect(screen.queryByTestId('order-tester-line')).toBeNull();
+  });
+
+  // AFFILIATE CODES (0061): the same box; the database says which kind.
+  const ANNA = { data: { ok: true, kind: 'affiliate', code: 'ANNA', discount: 100, window_days: 30 }, error: null };
+  async function useCode(typed: string) {
+    await fireEvent.press(screen.getByText('Have a code?'));
+    await fireEvent.changeText(screen.getByTestId('tester-code-input'), typed);
+    await fireEvent.press(screen.getByTestId('tester-code-apply'));
+  }
+  const pesoNumber = (s: string) => Number(s.replace(/[₱,]/g, ''));
+
+  it('an affiliate code: ₱100 off on its own line, the total less, and the order names the code', async () => {
+    fake.rpc.check_order_code = ANNA;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    const full = pesoNumber(String(screen.getByTestId('order-total').props.children.filter(Boolean).join('')));
+    expect(full).toBeGreaterThan(100);
+    await useCode('anna');
+    expect(await screen.findByText('✓ Code ANNA: ₱100 off')).toBeOnTheScreen();
+    expect(rec.rpcs).toContainEqual({ name: 'check_order_code', args: { p_code: 'ANNA' } });
+    expect(screen.getByTestId('order-affiliate-line')).toHaveTextContent('Code ANNA: ₱100 off−₱100');
+    // The real price crossed out, then the price less ₱100.
+    expect(screen.getByTestId('order-total')).toHaveTextContent(`₱${full.toLocaleString('en-PH')}  ₱${(full - 100).toLocaleString('en-PH')}`);
+    // The button asks what the customer pays, not the price before the code (emulator walk, 2026-11-19).
+    expect(screen.getByTestId('order-place').props.accessibilityLabel).toBe(`Place order · pay ₱${(full - 100).toLocaleString('en-PH')} by bank transfer`);
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    await waitFor(() => expect(mockSend.calls).toHaveLength(1));
+    expect(mockSend.calls[0].plan.orderRow).toMatchObject({ album_id: 'album-7', affiliate_code: 'ANNA' });
+    expect(mockSend.calls[0].plan.orderRow).not.toHaveProperty('tester_code');
+  });
+
+  it('Remove takes the code off: the full price again, and no code on the order', async () => {
+    fake.rpc.check_order_code = ANNA;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await useCode('ANNA');
+    await fireEvent.press(await screen.findByTestId('affiliate-code-remove'));
+    expect(screen.queryByTestId('order-affiliate-line')).toBeNull();
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    await waitFor(() => expect(mockSend.calls).toHaveLength(1));
+    expect(mockSend.calls[0].plan.orderRow).not.toHaveProperty('affiliate_code');
+  });
+
+  it("your own code: the database's answer, in words; nothing taken off", async () => {
+    fake.rpc.check_order_code = { data: { ok: false, reason: 'own' }, error: null };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await useCode('ANNA');
+    expect(await screen.findByText("That's your own affiliate code. It can't take money off your own order.")).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-affiliate-line')).toBeNull();
+  });
+
+  it('with 0061 the same box still takes the tester code (check_order_code answers "tester")', async () => {
+    fake.rpc.check_order_code = { data: { ok: true, kind: 'tester', code: 'MEGYTEST' }, error: null };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await useCode('megytest');
+    expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
+    expect(rec.rpcs.map((r) => r.name)).not.toContain('check_tester_code');
+  });
+
+  it("a code that stopped working by the time the order is placed (MP009): the database's words, the code taken off", async () => {
+    fake.rpc.check_order_code = ANNA;
+    const { AffiliateCodeGoneError } = jest.requireActual('@web/lib/orderCodes') as typeof import('@web/lib/orderCodes');
+    mockSend.run = async () => { throw new AffiliateCodeGoneError("That code doesn't work any more, so nothing was ordered."); };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await useCode('ANNA');
+    await screen.findByTestId('order-affiliate-line');
+    await fillDetails();
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText("That code doesn't work any more, so nothing was ordered.")).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-affiliate-line')).toBeNull();
+    expect(screen.queryByTestId('affiliate-code-on')).toBeNull();
   });
 
   it('the bar follows the real steps, in the website\'s words', async () => {
@@ -445,7 +521,7 @@ describe("a second copy starts from the first (the website's RC-1: lastOrderForA
 describe('beta round 2 (Mother reproduced each one on the phone)', () => {
   async function useTesterCode() {
     fake.rpc.check_tester_code = { data: { ok: true, code: 'MEGYTEST' }, error: null };
-    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.press(screen.getByText('Have a code?'));
     await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
     await fireEvent.press(screen.getByTestId('tester-code-apply'));
     expect(await screen.findByText('✓ Tester code MEGYTEST: free')).toBeOnTheScreen();
@@ -581,7 +657,7 @@ describe('beta round 2 (Mother reproduced each one on the phone)', () => {
     mockAuth.session = null;
     const s = await render(<OrderScreen />);
     await screen.findByTestId('order-own-album');
-    await fireEvent.press(screen.getByText('Have a tester code?'));
+    await fireEvent.press(screen.getByText('Have a code?'));
     await fireEvent.changeText(screen.getByTestId('tester-code-input'), 'MEGYTEST');
     await fireEvent.press(screen.getByTestId('tester-code-apply'));
     expect(await screen.findByText('Sign in first, then type the code.')).toBeOnTheScreen();
@@ -691,7 +767,7 @@ describe('an event\'s album: its booking pays (the website\'s Order.tsx)', () =>
     expect(screen.getByTestId('order-event-line')).toHaveTextContent('Album — part of booking EV-2026-0007₱0');
     expect(screen.getByTestId('order-total')).toHaveTextContent('₱0');
     expect(screen.getByTestId('order-covered')).toHaveTextContent('Covered by your event booking');
-    expect(screen.queryByText('Have a tester code?')).toBeNull();
+    expect(screen.queryByText('Have a code?')).toBeNull();
     expect(mockLinks['album-7']).toEqual(expect.objectContaining({ bookingId: 'bk-1', atCheckout: true }));
     await fillDetails();
     expect(screen.getByTestId('order-place')).toHaveTextContent('Place my event album order');
