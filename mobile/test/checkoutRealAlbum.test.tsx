@@ -392,6 +392,56 @@ describe('checkout on the album "Order this album" opened it with', () => {
   });
 });
 
+describe("a second copy starts from the first (the website's RC-1: lastOrderForAlbum)", () => {
+  const NOTE = 'Same paper and cover as your last order of this album (MP-2026-DONE005). Change them below if you like.';
+  const DELIVERED = { id: 'o-5', order_number: 'MP-2026-DONE005', status: 'delivered', material: 'glossy', cover: 'hardboundLeather' };
+
+  it("the album's last order's paper and cover, said above the paper, read once for this album", async () => {
+    fake.orderRow = DELIVERED;
+    await render(<OrderScreen />);
+    expect((await screen.findByTestId('order-prefilled')).props.children).toBe(NOTE);
+    expect(screen.getByRole('radio', { name: /Glossy/ })).toHaveProp('accessibilityState', { checked: true });
+    expect(screen.getByRole('radio', { name: /Hardbound/ })).toHaveProp('accessibilityState', { checked: true });
+    const finishReads = rec.reads.filter((r) => r.table === 'orders' && r.columns === 'order_number, material, cover, status');
+    expect(finishReads).toHaveLength(1);
+    expect(finishReads[0].filters).toEqual({ user_id: 'user-1', album_id: 'album-7' });
+    // Not the album's order waiting for payment: there is none.
+    expect(screen.queryByTestId('order-open-existing')).toBeNull();
+  });
+
+  it('changed by the customer: the note goes (it would no longer be true)', async () => {
+    fake.orderRow = DELIVERED;
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-prefilled');
+    await fireEvent.press(screen.getByText('Matte'));
+    expect(screen.queryByTestId('order-prefilled')).toBeNull();
+  });
+
+  it('a form already typed for this album on this phone wins: nothing is copied over it', async () => {
+    const first = await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    await fireEvent.press(screen.getByText('Glossy'));
+    await first.unmount();
+    fake.orderRow = { ...DELIVERED, material: 'matte' };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByRole('radio', { name: /Glossy/ })).toHaveProp('accessibilityState', { checked: true });
+    expect(screen.queryByTestId('order-prefilled')).toBeNull();
+  });
+
+  it('no earlier order, or one in a paper or cover no longer sold: the usual Matte + Softcover, no note', async () => {
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.queryByTestId('order-prefilled')).toBeNull();
+    await screen.unmount();
+    fake.orderRow = { ...DELIVERED, cover: 'velvet' };
+    await render(<OrderScreen />);
+    await screen.findByTestId('order-own-album');
+    expect(screen.getByRole('radio', { name: /Matte/ })).toHaveProp('accessibilityState', { checked: true });
+    expect(screen.queryByTestId('order-prefilled')).toBeNull();
+  });
+});
+
 describe('beta round 2 (Mother reproduced each one on the phone)', () => {
   async function useTesterCode() {
     fake.rpc.check_tester_code = { data: { ok: true, code: 'MEGYTEST' }, error: null };

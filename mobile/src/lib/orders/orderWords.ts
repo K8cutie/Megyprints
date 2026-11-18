@@ -30,6 +30,21 @@ export const CANCEL_ASK = 'Cancel this order';
 export const KEEP_IT = 'Keep it';
 export const cancelYes = (orderNumber: string): string => `Yes, cancel order ${orderNumber}`;
 
+/** Another copy of the album an order printed (the website's link on each
+ *  order not waiting for payment): the album as it is now, through the
+ *  Preview's "Order this album" (its checks and save), then checkout. */
+export const ORDER_AGAIN = 'Order this album again';
+/** Above it on a delivered order: the print file is made again from the
+ *  phone's photos (the shop deletes its copy 90 days after delivery, 0064). */
+export const ORDER_AGAIN_NOTE = 'Want another copy? Your album is still saved, and we print it again from the photos on this phone.';
+/** The album couldn't be read from the account (My albums' words). */
+export const ORDER_AGAIN_FAILED = 'Could not open this album. Check that the phone is online, then try again.';
+/** "Order this album again" shows on every order with its album still saved
+ *  that isn't waiting for payment (MyOrders.tsx: order.album_id && !track.awaitingPayment). */
+export function canOrderAgain(o: Pick<AppOrder, 'album_id'>, awaitingPayment: boolean): boolean {
+  return !!o.album_id && !awaitingPayment;
+}
+
 /** A tester-code order: nothing is charged, printed or sent. */
 export const testOrderNote = (code: string): string => `You used the tester code ${code}, so nothing is charged. Thank you for testing Megy Prints!`;
 /** A tester-code order that stopped half-way. It counts as unpaid (3 stop new

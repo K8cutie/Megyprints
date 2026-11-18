@@ -1,8 +1,9 @@
 import { Redirect, router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { resumeRoute } from '../builder/albumFlow';
 import { useBuilder } from '../builder/BuilderProvider';
+import { useOpenAlbum } from '../builder/useOpenAlbum';
 import { Button } from '../components/Button';
 import { changedAgo, DELETE_ALBUM_TITLE, deleteAlbumMessage, type AlbumRow } from '../lib/albums';
 import { useAuth } from '../lib/auth';
@@ -22,10 +23,6 @@ export default function Albums() {
   // Read again when the builder saves (an album on the phone, saved as you signed in).
   const { albums, loading, failed, retrying, retry, remove } = useMyAlbums(userId, builder.lastSavedAt?.getTime() ?? 0);
   const { clear: clearDraft } = useDraft();
-  const [opening, setOpening] = useState<string | null>(null);
-  const openingRef = useRef<string | null>(null);
-  const [opened, setOpened] = useState<string | null>(null);
-  const [couldNot, setCouldNot] = useState<string | null>(null);
   const [notDeleted, setNotDeleted] = useState<string | null>(null);
 
   async function deleteIt(album: AlbumRow) {
@@ -42,29 +39,15 @@ export default function Albums() {
     ]);
   };
 
-  async function open(album: AlbumRow) {
-    if (openingRef.current) return;
-    openingRef.current = album.id;
-    setOpening(album.id);
-    setCouldNot(null);
-    try { await builder.loadAlbum(album.id); } catch { /* not opened: said on its card */ }
-    // A read that failed leaves the album on the phone as it was.
-    if (builder.getAlbumId() === album.id) { setOpened(album.id); return; }
-    openingRef.current = null;
-    setOpening(null);
-    setCouldNot(album.id);
-  }
-  // Once the album is on screen: its pages when it is made, else its next step.
-  useEffect(() => {
-    if (!opened || builder.isLoadingCloud || builder.getAlbumId() !== opened) return;
-    setOpened(null);
-    openingRef.current = null;
-    setOpening(null);
-    // At its cover: opening keeps the page the album before it was left on
-    // (Mother, round 4: another album opened at "Page 37 of 40").
+  // Tapped: the album is read in (useOpenAlbum), then, once it is on
+  // screen, its pages when it is made, else its next step. At its cover:
+  // opening keeps the page the album before it was left on (Mother, round 4:
+  // another album opened at "Page 37 of 40").
+  const { open: openAlbum, opening, couldNot } = useOpenAlbum(builder, () => {
     builder.goToPage(0);
     router.push(resumeRoute(builder, platform.deviceStore));
-  }, [opened, builder, platform.deviceStore]);
+  });
+  const open = (album: AlbumRow) => openAlbum(album.id);
 
   if (!authLoading && !session) return <Redirect href="/sign-in" />;
 
