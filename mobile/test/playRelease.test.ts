@@ -98,7 +98,7 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.3', () => {
+  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.4', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
     // 100 (2.0.0) was built 2026-11-03 but never uploaded; 101 (2.0.1) went to Alpha 2026-11-04;
@@ -121,8 +121,11 @@ describe('the Play build is the 1.x app, a newer version', () => {
     // 113 (2.1.3) the Megy Mini's own layouts: every page filled edge to edge, photos to the
     //             staple fold (owner: "im trying to avoid pages with lots of free spaces";
     //             "Yes, build it").
-    expect(play.android.versionCode).toBe(113);
-    expect(play.version).toBe('2.1.3');
+    // 114 (2.1.4) "Order this album again" from Your orders, each album size's starting price,
+    //             and affiliates: the Affiliate page and affiliate codes at checkout (owner:
+    //             "i want starts at and affiliates to be part of 2.1.4"; "Yes, merge and build").
+    expect(play.android.versionCode).toBe(114);
+    expect(play.version).toBe('2.1.4');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {
