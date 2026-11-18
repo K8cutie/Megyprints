@@ -41,6 +41,7 @@ import { ORDER_ID, type PlaceOrderPlan, type PlanStep } from './orderPayload';
 import type { SentFiles } from './sentFiles';
 import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
+import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from '@web/lib/orderCodes';
 import { MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
 import { bookingErrorMessage } from '../events/eventDeal';
 
@@ -171,6 +172,8 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
     const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status').single();
     if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
     if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(String(plan.orderRow.tester_code ?? ''));
+    // An affiliate code that stopped working, or this order can't take (0061): the database's words.
+    if (isAffiliateCodeGoneError(error)) throw new AffiliateCodeGoneError(error?.message ?? '');
     if (error) throw new Error(isNoConnection(error.message) ? ORDER_OFFLINE : `Could not place your order: ${error.message}`);
     order = data as PlacedOrder;
     deps.onOrder?.(order);

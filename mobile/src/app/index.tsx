@@ -125,6 +125,9 @@ export default function Start() {
       { label: HOME.profile, onPress: () => go('/profile'), testID: 'menu-profile' },
       { label: HOME.memories, onPress: () => go('/memories'), testID: 'menu-memories' },
     ] : [{ label: HOME.signIn, onPress: () => go('/sign-in'), testID: 'menu-sign-in' }]),
+    // Affiliates (0061): open to everyone, as the website's /affiliate: how it
+    // works, then sign in to apply; an affiliate's own code and earnings.
+    { label: 'Affiliate', onPress: () => go('/affiliate'), testID: 'menu-affiliate' },
     // Events only while it is on (lib/events.ts EVENTS_ON; off since 2026-11-16).
     ...(EVENTS_ON ? [{ label: EVENTS_LABEL, onPress: openEvents, testID: 'menu-events' }] : []),
     ...(session ? [{ label: HOME.signOut, onPress: () => { void signOut(); }, testID: 'menu-sign-out' }] : []),

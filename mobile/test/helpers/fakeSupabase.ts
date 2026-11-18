@@ -84,6 +84,10 @@ export const fakeClient = {
     rec.rpcs.push({ name, args });
     const held = fake.hold[name];
     if (held) await held;
+    // A database without affiliates (0061) has no check_order_code: the
+    // checkout's code box then checks the tester code on its own. A test
+    // that sets check_order_code answers as a database with 0061.
+    if (name === 'check_order_code' && !fake.rpc[name]) return { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.check_order_code' } };
     return fake.rpc[name] ?? { data: null, error: null };
   },
   auth: { async getUser() { return { data: { user: { id: fake.userId } } }; } },

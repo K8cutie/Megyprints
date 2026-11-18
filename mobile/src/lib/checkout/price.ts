@@ -25,7 +25,8 @@ import {
 } from '@web/lib/pricing';
 import type { AlbumSizePreset, CoverType } from '@web/pages/builder/types';
 import { isMiniSize, miniOfferOf } from '@web/lib/megyMini';
-import { amountToPay, type TesterCode } from './testerCode';
+import { checkoutPayTotal, type AffiliateCode } from '@web/lib/orderCodes';
+import type { TesterCode } from './testerCode';
 
 /** Cover choice → binding: anything but softcover (and the Megy Mini's soft,
  *  stapled cover) is hardbound. */
@@ -43,6 +44,8 @@ export interface PriceInput {
   hostingYears: number | null;
   hdMemories: boolean;
   tester: TesterCode | null;
+  /** An affiliate code the database said works (0061): its discount off. */
+  affiliate?: AffiliateCode | null;
   /** Manila date for the "was" price (tests); default today. */
   today?: string;
 }
@@ -89,7 +92,7 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
       ready: schedule !== null && offer !== null,
       breakdown,
       total: breakdown.total,
-      payTotal: amountToPay(breakdown.total, input.tester),
+      payTotal: checkoutPayTotal(breakdown.total, input.tester, input.affiliate ?? null),
       wasTotal: null,
       freeShippingValue: 0,
       includedYears,
@@ -116,7 +119,7 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
     ready: schedule !== null,
     breakdown,
     total,
-    payTotal: amountToPay(total, input.tester),
+    payTotal: checkoutPayTotal(total, input.tester, input.affiliate ?? null),
     wasTotal,
     freeShippingValue: schedule ? freeShippingValueOf(schedule) : 0,
     includedYears,

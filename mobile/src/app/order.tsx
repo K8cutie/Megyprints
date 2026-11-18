@@ -54,7 +54,9 @@ import { PaymentStep } from '../components/checkout/PaymentStep';
 import { PlaceProgressBar } from '../components/checkout/PlaceProgressBar';
 import { Sending } from '../components/checkout/Sending';
 import { TestPanel } from '../components/checkout/TestPanel';
-import { TesterCodeBox } from '../components/checkout/TesterCodeBox';
+import { CheckoutCodeBox } from '../components/checkout/CheckoutCodeBox';
+import { affiliateLine, AffiliateCodeGoneError, type AffiliateCode } from '@web/lib/orderCodes';
+import { checkCheckoutCode } from '../lib/affiliates';
 import { TermsAgreeLine } from '../components/LegalLinks';
 import { useAuth } from '../lib/auth';
 import { checkCheckout, phoneOnBlur, type AddressErrors } from '../lib/checkout/checkoutForm';
@@ -71,7 +73,7 @@ import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checko
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
 import { checkoutPrice, peso, placeOrderLabel } from '../lib/checkout/price';
 import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
-import { checkTesterCode, checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
+import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { albumClipTier } from '../lib/memories/albumTier';
@@ -150,6 +152,9 @@ export default function OrderScreen() {
   const [errors, setErrors] = useState<{ name?: string; phone?: string }>({});
   const [addressErrors, setAddressErrors] = useState<AddressErrors>({});
   const [tester, setTester] = useState<TesterCode | null>(null);
+  // An affiliate code the database said works (0061): its discount off the
+  // total. The database decides again when the order is placed.
+  const [affiliate, setAffiliate] = useState<AffiliateCode | null>(null);
   // How long the memories stay live (the website's hostingYears): null = the included term.
   const [hostingYears, setHostingYears] = useState<number | null>(kept?.hostingYears ?? null);
   // Kept as typed while the form is open (the website's saveCheckoutForm).
@@ -281,7 +286,7 @@ export default function OrderScreen() {
   const clipTierReady = !clipKey || clipTier?.key === clipKey;
   const hdMemories = !eventLink && qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
   // An event album: the included term, no tester code (its booking pays).
-  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, tester: eventLink ? null : tester });
+  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, tester: eventLink ? null : tester, affiliate: eventLink || tester ? null : affiliate });
   const price = clipTierReady ? priced : { ...priced, ready: false };
 
   // The bar's steps for this album (made once: a re-render must not restart the bar).
@@ -338,6 +343,7 @@ export default function OrderScreen() {
         hostingYears: price.effectiveYears,
         hdMemories,
         testerCode: eventLink ? null : tester?.code ?? null,
+        affiliateCode: eventLink || tester ? null : affiliate?.code ?? null,
         includedYears: price.includedYears,
         eventBookingId: eventLink && coveredByBooking ? eventLink.bookingId : null,
       });
@@ -416,6 +422,7 @@ export default function OrderScreen() {
         onFailed={(e) => {
           showFailure.current = true;
           if (e instanceof TesterCodeGoneError) setTester(null);
+          if (e instanceof AffiliateCodeGoneError) setAffiliate(null);
           // A memory video that's gone: the website's words, naming its pages.
           if (e instanceof MissingClipError) { setMessage(missingClipMessage(album.pages, e.codes)); setStep('form'); return; }
           setMessage(e instanceof Error ? e.message : 'Something went wrong placing your order.');
@@ -593,23 +600,25 @@ export default function OrderScreen() {
         {/* A Megy Mini's shipping is a line of its own bill (above), paid on top. */}
         {!price.mini && <Row label="Shipping" value="Free" good testID="order-shipping" />}
         {!eventLink && tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
+        {!eventLink && !tester && affiliate && price.ready && <Row label={affiliateLine(affiliate)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-affiliate-line" />}
         <View style={styles.totalRow}>
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
-            {!eventLink && price.ready && tester && <Text style={styles.was}>{peso(price.total)}  </Text>}
-            {!eventLink && price.ready && !tester && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
+            {!eventLink && price.ready && (tester || affiliate) && <Text style={styles.was}>{peso(price.total)}  </Text>}
+            {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
             {eventLink ? '₱0' : price.ready ? peso(price.payTotal) : '—'}
           </Text>
         </View>
         {coveredByBooking && <Text style={styles.savings} testID="order-covered">{EV.COVERED_LINE}</Text>}
         {!!eventLink && !coveredByBooking && <Text style={styles.small} testID="order-covered-later">{EV.COVERED_LATER}</Text>}
-        {!eventLink && price.ready && !tester && price.wasTotal !== null && (
+        {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && (
           <Text style={styles.savings} testID="order-savings">New lower price: you save {peso(price.wasTotal - price.total)}</Text>
         )}
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
             test album writes nothing, so it checks the code's shape only. */}
-        {!eventLink && price.ready && <TesterCodeBox tester={tester} onChange={setTester} check={(typed) => (live && userId ? checkTesterCode(supabase, typed, supabaseConfigured) : checkTesterCodeOffline(typed, !!userId))}
+        {!eventLink && price.ready && <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} onAffiliate={setAffiliate}
+          check={(typed) => (live && userId ? checkCheckoutCode(typed) : checkTesterCodeOffline(typed, !!userId))}
           signedIn={!!userId} onSignIn={signIn} />}
         <View style={styles.included} testID="order-included">
           <Text style={styles.strongSmall}>Included with your {mini ? MINI_NAME : 'album'}</Text>
