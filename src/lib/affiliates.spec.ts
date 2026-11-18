@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 /* ══════════════════════════════════════════════════════════════════════════
    AFFILIATES, APP SIDE (0061). The database decides; these keep the app
@@ -25,7 +27,7 @@ vi.mock('./supabase', () => ({
 }));
 
 import {
-  affiliateLine, affiliateLink, affiliateTerms, applicationProblem, applyAffiliate, captureAffiliateRef, checkCheckoutCode,
+  affiliateDiscountOn, affiliateLine, affiliateLink, affiliateTerms, applicationProblem, applyAffiliate, captureAffiliateRef, checkCheckoutCode,
   checkoutPayTotal, exampleCommission, flagLabel, parseMyAffiliate, parseOwnerAffiliates, refFromUrl, REF_KEY,
   saleStatusLabel, saveAffiliateSettings, settingsProblem, storedAffiliateRef, suggestAffiliateCode,
 } from './affiliates';
@@ -44,6 +46,16 @@ describe('what the customer pays', () => {
   it('says so in one line', () => {
     expect(affiliateLine({ code: 'ANNA', discount: 100 })).toBe('Code ANNA: ₱100 off');
     expect(affiliateLine({ code: 'ANNA', discount: 1500 })).toBe('Code ANNA: ₱1,500 off');
+  });
+  it('a Megy Mini takes no client discount (owner, 2026-11-19: "only mini"), as the database decides (0065)', () => {
+    const anna = { code: 'ANNA', discount: 100 };
+    expect(affiliateDiscountOn(anna, true)).toBe(0);
+    expect(affiliateDiscountOn(anna, false)).toBe(100);
+    expect(checkoutPayTotal(470, null, anna, true)).toBe(470);
+    expect(checkoutPayTotal(1288, null, anna, false)).toBe(1188);
+    expect(affiliateLine(anna, true)).toBe('Code ANNA: no discount on a Megy Mini');
+    const m = readFileSync(resolve(__dirname, '../../supabase/migrations/0065_affiliate_mini_full_price.sql'), 'utf8');
+    expect(m).toMatch(/if new\.album_size = '5\.8x8\.3' or new\.cover = 'staple' then\s+v_discount := 0;/);
   });
 });
 
@@ -184,6 +196,7 @@ describe("the affiliate's page", () => {
     expect(t).toContain('within 45 days');
     expect(t).toContain('at least ₱800');
     expect(t).toMatch(/coupon or deal sites/);
+    expect(t).toContain('A Megy Mini has no discount for your client, and you still earn 12% of its price.');
   });
 });
 
