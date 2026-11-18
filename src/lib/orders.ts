@@ -17,7 +17,7 @@ import { bindingInchesFor } from '../pages/builder/binding';
 import { selectOrderAlbum } from './orderAlbum';
 import { isUnpaidLimitError, UnpaidLimitError } from './orderExpiry';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
-import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from './affiliates';
+import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from './orderCodes';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
