@@ -9,6 +9,7 @@ import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
 } from '../../lib/adminOrders';
 import { peso } from '../../lib/eventBookings';
+import { DELIVERED_FILES_KEEP_DAYS } from '../../lib/orderExpiry';
 import { supabase } from '../../lib/supabase';
 import {
   downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
@@ -165,8 +166,16 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                 Event album · {o.event_booking_number}
               </span>
             )}
-            {!printReady && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1"
+            {!printReady && o.status === 'delivered' && (
+              // Delivered orders' print files are removed DELIVERED_FILES_KEEP_DAYS
+              // after delivery (0064, the nightly job): not a fault, nothing to do.
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#F1EFEC] text-light" data-testid="order-print-file-not-kept"
+                title={`Delivered orders keep their print file for ${DELIVERED_FILES_KEEP_DAYS} days. To print this album again, the customer orders it again from the phone or computer that has the photos.`}>
+                Delivered · print file not kept
+              </span>
+            )}
+            {!printReady && o.status !== 'delivered' && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-print-file-missing"
                 title="No print-ready PDF is in the fulfillment bucket for this order. Do not print until the customer re-orders from the device that holds the photos.">
                 <AlertTriangle size={12} /> Print file missing
               </span>

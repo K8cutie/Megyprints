@@ -5,6 +5,7 @@
 import { Link } from 'react-router-dom';
 import { LegalPage, LegalSection as Section } from '../components/LegalPage';
 import { LEGAL_CONTACT as CONTACT, MIN_AGE } from '../lib/legal';
+import { DELIVERED_FILES_KEEP_DAYS } from '../lib/orderExpiry';
 
 const UPDATED = 'November 2026';
 
@@ -45,6 +46,12 @@ export default function Privacy() {
           photos you placed — is generated on your device and uploaded to our secure, private
           storage so that we can print and ship it. Only our fulfillment team can access this file,
           and it is used solely to produce and deliver your album.
+        </p>
+        <p data-testid="privacy-print-file-kept">
+          <b>We delete this file {DELIVERED_FILES_KEEP_DAYS} days after your album is delivered</b>,
+          which leaves time to reprint an album that arrived damaged. To print the same album again
+          after that, order it again: your album stays in your account, and a new print file is made
+          from the photos on your device.
         </p>
       </Section>
 

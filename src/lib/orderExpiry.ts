@@ -13,6 +13,12 @@
 export const UNPAID_ORDER_DAYS = 7;
 export const UNPAID_ORDER_LIMIT = 3;
 
+/** How long a DELIVERED order keeps its print and cover files (0064,
+ *  public.delivered_files_keep_days()), so a damaged album can be reprinted.
+ *  After that the nightly job removes them; a reprint is a new order from the
+ *  customer's phone. The Privacy Policy and the admin say this number. */
+export const DELIVERED_FILES_KEEP_DAYS = 90;
+
 /** The SQLSTATE the orders insert trigger raises for the 4th unpaid order. */
 export const UNPAID_LIMIT_SQLSTATE = 'MP001';
 
