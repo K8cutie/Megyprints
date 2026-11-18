@@ -342,6 +342,8 @@ describe('checkout on the album "Order this album" opened it with', () => {
     expect(screen.getByTestId('order-affiliate-line')).toHaveTextContent('Code ANNA: ₱100 off−₱100');
     // The real price crossed out, then the price less ₱100.
     expect(screen.getByTestId('order-total')).toHaveTextContent(`₱${full.toLocaleString('en-PH')}  ₱${(full - 100).toLocaleString('en-PH')}`);
+    // The button asks what the customer pays, not the price before the code (emulator walk, 2026-11-19).
+    expect(screen.getByTestId('order-place').props.accessibilityLabel).toBe(`Place order · pay ₱${(full - 100).toLocaleString('en-PH')} by bank transfer`);
     await fillDetails();
     await fireEvent.press(screen.getByTestId('order-place'));
     await waitFor(() => expect(mockSend.calls).toHaveLength(1));

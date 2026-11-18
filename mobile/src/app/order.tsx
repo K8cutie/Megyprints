@@ -664,7 +664,7 @@ export default function OrderScreen() {
       ) : asking ? null : (
         <>
           <Button
-            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.total, miniOff: price.miniOff })}
+            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.payTotal, miniOff: price.miniOff })}
             busy={!price.ready && (prices.loading || prices.retrying)}
             onPress={onPlace}
             testID="order-place"

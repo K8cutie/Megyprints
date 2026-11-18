@@ -20,6 +20,7 @@ import type { PriceSchedule } from '@web/lib/pricing';
 import type { AlbumSizePreset, CoverType } from '@web/pages/builder/types';
 import { bindingOf, checkoutPrice, peso, placeOrderLabel } from '../src/lib/checkout/price';
 import { amountToPay, type TesterCode } from '../src/lib/checkout/testerCode';
+import { checkoutPayTotal, type AffiliateCode } from '@web/lib/orderCodes';
 
 const WEB_SRC = path.resolve(__dirname, '../../src');
 const ORDER_SRC = readFileSync(path.join(WEB_SRC, 'pages/Order.tsx'), 'utf8');
@@ -58,6 +59,8 @@ interface WebPrice {
 interface WebInput {
   schedule: PriceSchedule | null; albumSize: AlbumSizePreset; cover: CoverType; pageCount: number; qrCount: number;
   hostingYears: number | null; hdMemories: boolean; tester: TesterCode | null; today: string;
+  /** An affiliate code (0061): its discount off. */
+  affiliate?: AffiliateCode | null;
 }
 
 function cut(from: string, to: string): string {
@@ -79,9 +82,9 @@ function websitePrice(i: WebInput): WebPrice {
     ...pricing,
     compareAtPriceOf: (s: PriceSchedule, size: AlbumSizePreset, b: pricing.Binding, pages: number) => pricing.compareAtPriceOf(s, size, b, pages, i.today),
     getPriceSchedule: () => i.schedule,
-    amountToPay: (total: number, t: TesterCode | null) => (t ? 0 : total),
+    checkoutPayTotal,
     albumSize: i.albumSize, cover: i.cover, pageCount: i.pageCount, qrCount: i.qrCount,
-    hostingYears: i.hostingYears, hdMemories: i.hdMemories, tester: i.tester, eventLink: null,
+    hostingYears: i.hostingYears, hdMemories: i.hdMemories, tester: i.tester, affiliate: i.affiliate ?? null, eventLink: null,
   };
   const names = Object.keys(scope);
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
@@ -91,7 +94,7 @@ function websitePrice(i: WebInput): WebPrice {
 describe("the website's checkout arithmetic is still where this test reads it", () => {
   it('Order.tsx prices with the shared code and these lines', () => {
     expect(PRICE_BLOCK).toContain('priceBreakdown(schedule, albumSize, binding, pageCount, qrCount, effectiveYears, hdMemories)');
-    expect(PRICE_BLOCK).toContain('const payTotal = amountToPay(totalPrice, tester);');
+    expect(PRICE_BLOCK).toContain('const payTotal = checkoutPayTotal(totalPrice, tester, affiliate);');
     expect(PRICE_BLOCK).toContain('wasPrint + (totalPrice - priceOf(schedule, albumSize, binding, pageCount))');
     expect(BINDING_LINE).toContain("? 'soft' : 'hard'");
   });
@@ -102,16 +105,17 @@ describe("the phone's price is the website's, number for number", () => {
   const covers: CoverType[] = ['softcover', 'hardboundLeather'];
   const pageCounts = [40, 41, 44, 45, 60, 77, 100, 130];
   const memories: [number, number | null, boolean][] = [[0, null, false], [0, 15, true], [3, null, false], [7, 10, true], [9, 20, true], [12, 7, false]];
-  const tester = [null, { code: 'MEGYTEST' }];
+  // No code, the tester code, an affiliate code (0061), and both (the tester code wins).
+  const codes: [TesterCode | null, AffiliateCode | null][] = [[null, null], [{ code: 'MEGYTEST' }, null], [null, { code: 'ANNA', discount: 100 }], [{ code: 'MEGYTEST' }, { code: 'ANNA', discount: 100 }]];
   let compared = 0;
   let withWas = 0;
 
   it.each([['the live list', LIVE], ['a list with a "was" price', WITH_WAS]] as const)('%s', (_l, schedule) => {
     for (const albumSize of sizes) for (const cover of covers) for (const pageCount of pageCounts) {
-      for (const [qrCount, hostingYears, hdMemories] of memories) for (const t of tester) {
-        const input = { schedule, albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester: t, today: TODAY };
+      for (const [qrCount, hostingYears, hdMemories] of memories) for (const [t, affiliate] of codes) {
+        const input = { schedule, albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester: t, affiliate, today: TODAY };
         const w = websitePrice(input);
-        const a = checkoutPrice(schedule, { albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester: t, today: TODAY });
+        const a = checkoutPrice(schedule, { albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester: t, affiliate, today: TODAY });
         expect(bindingOf(cover)).toBe(w.binding);
         expect(a.breakdown).toEqual(w.breakdown);
         expect(a.total).toBe(w.totalPrice);
@@ -181,7 +185,8 @@ describe("the words with the price are the website's", () => {
 
   it("the Place order button says what the website's does", () => {
     expect(ORDER_SRC).toContain('Place order · free with tester code');
-    expect(ORDER_SRC).toContain('Place order · pay {`₱${totalPrice.toLocaleString(\'en-PH\')}`} by bank transfer');
+    // What the customer pays (an affiliate code's discount less, 0061).
+    expect(ORDER_SRC).toContain('Place order · pay {`₱${payTotal.toLocaleString(\'en-PH\')}`} by bank transfer');
     expect(ORDER_SRC).toContain('Loading price…');
     expect(ORDER_SRC).toContain("Prices didn't load — tap to try again");
     expect(placeOrderLabel({ ready: true, loading: false, retrying: false, tester: true, total: 1710 })).toBe('Place order · free with tester code');
