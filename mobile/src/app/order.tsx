@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
-import { countQrMemories, EXTRA_QR_RATE, FREE_QR_MEMORIES, includedHostingLine } from '@web/lib/pricing';
+import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, QR_PACK_SENTENCE } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
@@ -656,8 +656,8 @@ export default function OrderScreen() {
           <Text style={styles.strongSmall}>Included with your {mini ? MINI_NAME : 'album'}</Text>
           {!mini && <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>}
           {mini
-            ? <Text style={styles.small}>✓ {price.freeVideos} video memories ({peso(price.freeVideos * EXTRA_QR_RATE)} value)</Text>
-            : <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs ({peso(FREE_QR_MEMORIES * EXTRA_QR_RATE)} value)</Text>}
+            ? <Text style={styles.small}>✓ {price.freeVideos} video memories</Text>
+            : <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs</Text>}
           {price.includedYears !== null && <Text style={styles.small}>✓ {includedHostingLine(price.includedYears, price.effectiveYears)}</Text>}
         </View>
         {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
@@ -684,8 +684,8 @@ export default function OrderScreen() {
             {eventLink
               ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
               : mini
-                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. Extra videos are ₱{EXTRA_QR_RATE} each.</>
-                : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
+                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. {QR_PACK_SENTENCE}</>
+                : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. {QR_PACK_SENTENCE}</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
         </View>

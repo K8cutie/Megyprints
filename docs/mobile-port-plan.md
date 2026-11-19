@@ -4630,6 +4630,7 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
     • Order an album again from Your orders in one tap, on the same paper and cover
     • Become an affiliate: share your own code and earn from every album your clients order
     • Have an affiliate code? Type it at checkout for money off
+    • Video memories: 2 come with every album, and you can add more in packs of 3 for ₱100
     </en-US>
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.

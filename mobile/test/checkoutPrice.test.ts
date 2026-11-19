@@ -146,14 +146,15 @@ describe("the phone's price is the website's, number for number", () => {
   afterAll(() => { if (compared) console.log(`checkout prices compared with the website's: ${compared} (${withWas} with a "was" price)`); });
 });
 
-describe("the database's saved total (0055 order_quote) is the phone's total", () => {
+describe("the database's saved total (order_quote, 0066) is the phone's total", () => {
   /** order_quote(size, cover, pages, qr, years, hd, LIVE) as the database
    *  answered (src/lib/orderQuote.spec.ts). */
   const DB: [AlbumSizePreset, CoverType, number, number, number | null, boolean, number][] = [
     ['6x4', 'softcover', 100, 0, null, false, 1023],
-    ['6x6', 'softcover', 46, 9, 10, true, 1078],
-    ['6x6', 'hardboundLeather', 130, 6, 5, false, 1679],
-    ['8x8', 'softcover', 41, 8, 20, true, 1622],
+    // 2026-11-19 (0066): 2 videos free, then packs of 3 for ₱100.
+    ['6x6', 'softcover', 46, 9, 10, true, 1338],
+    ['6x6', 'hardboundLeather', 130, 6, 5, false, 1879],
+    ['8x8', 'softcover', 41, 8, 20, true, 1802],
     ['6x8', 'hardboundLeather', 77, 0, 15, true, 1788],
     ['8x6', 'softcover', 40, 1, 7, true, 1005],
   ];
@@ -200,6 +201,7 @@ describe("the words with the price are the website's", () => {
     expect(ORDER_SRC).toContain('New lower price: you save ₱');
     expect(ORDER_SRC).toContain('Included with your album');
     expect(ORDER_SRC).toContain('includedHostingLine(includedYears, effectiveYears)');
-    expect(ORDER_SRC).toContain('living-memory QRs (₱');
+    expect(ORDER_SRC).toContain('{FREE_QR_MEMORIES} living-memory QRs</li>');
+    expect(ORDER_SRC).toContain('{QR_PACK_SENTENCE}');
   });
 });

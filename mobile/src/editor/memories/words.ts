@@ -9,9 +9,9 @@ export const TITLE_ADD = 'Add a video memory';
 export const TITLE_CHANGE = 'Change this memory';
 export const INVITE = 'Pick a video of this moment 🎬';
 export const INVITE_BODY = `It plays the instant anyone scans the QR printed on this page — no app, no account. Up to ${Math.round(MAX_CLIP_SECONDS / 60)} minutes — we shrink it for you, so any phone video works.`;
-/** "7 memories included · ₱20 each after · live for 5 years, longer at checkout". */
-export const included = (free: number, rate: number, years: number | null) =>
-  `${free} memories included · ₱${rate} each after${years ? ` · live for ${years} years, longer at checkout` : ''}`;
+/** "2 memories included · 3 more for ₱100 · live for 5 years, longer at checkout" (the website's AddQrModal). */
+export const included = (free: number, packOffer: string, years: number | null) =>
+  `${free} memories included · ${packOffer}${years ? ` · live for ${years} years, longer at checkout` : ''}`;
 export const PLAYS_THIS = 'This is what plays when someone scans this page.';
 export const legacyLink = (host: string) =>
   `This memory currently points to a link on ${host}. Replace it with a video and it will play right on the page — same QR, no reprint.`;

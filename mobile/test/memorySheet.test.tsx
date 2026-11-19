@@ -121,8 +121,8 @@ describe('the words are the website\'s', () => {
     expect(MODAL).toContain('It plays the instant anyone scans the QR printed on this page — no app, no account.');
     expect(MODAL).toContain('Up to {Math.round(MAX_CLIP_SECONDS / 60)} minutes — we shrink it for you, so any phone video works.');
     expect(W.INVITE_BODY).toBe('It plays the instant anyone scans the QR printed on this page — no app, no account. Up to 2 minutes — we shrink it for you, so any phone video works.');
-    expect(MODAL).toContain("<>{FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>");
-    expect(W.included(7, 20, 5)).toBe('7 memories included · ₱20 each after · live for 5 years, longer at checkout');
+    expect(MODAL).toContain("<>{FREE_QR_MEMORIES} memories included · {QR_PACK_OFFER}{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>");
+    expect(W.included(2, '3 more for ₱100', 5)).toBe('2 memories included · 3 more for ₱100 · live for 5 years, longer at checkout');
     expect(MODAL).toContain("{file ? 'Choose a different video' : initial ? 'Replace with a new video' : 'Choose a video'}");
     expect(MODAL).toContain("(initial ? 'Use this video' : 'Place QR')");
     expect(MODAL).toContain("{q === 'hd' ? `+PHP ${hdPrice} once` : 'Included'}");
@@ -170,7 +170,7 @@ describe('a new memory', () => {
     const log = await show(platform, { mode: 'add' });
     expect(textOf()).toContain(W.TITLE_ADD);
     expect(textOf()).toContain(W.INVITE);
-    expect(textOf()).toContain('7 memories included · ₱20 each after · live for 5 years, longer at checkout');
+    expect(textOf()).toContain('2 memories included · 3 more for ₱100 · live for 5 years, longer at checkout');
     // Nothing picked yet: Place QR does nothing.
     await press('memory-save');
     expect(builder().albumPages[i].qrFills?.some(Boolean) ?? false).toBe(false);
