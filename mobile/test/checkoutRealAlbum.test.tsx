@@ -723,7 +723,8 @@ describe('an album with a video memory', () => {
     await fireEvent.press(screen.getByTestId('order-term-20'));
     expect(screen.getByTestId('order-included')).toHaveTextContent(/Memories stay live for 5 years \(you added 15 more years\)/);
     expect(screen.queryByText(/QR memories/)).toBeNull();
-    expect(screen.getAllByText(/7 living-memory QRs included/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2 living-memory QRs included/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Add more in packs of 3 for ₱100./).length).toBeGreaterThan(0);
     await fireEvent.press(screen.getByTestId('order-term-10'));
     await fillDetails();
     await fireEvent.press(screen.getByTestId('order-place'));

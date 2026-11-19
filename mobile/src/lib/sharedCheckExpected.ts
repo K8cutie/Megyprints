@@ -11,7 +11,8 @@ export const SHARED_CHECK_EXPECTED: Record<string, string> = {
   sizes: '6×4, 8×6, 6×8, 6×6, 8×8, 11.5×8, 8.5×11, A5',
   sheets: '13',
   price: '365',
-  breakdown: '3 lines, total 505',
+  // 9 QR memories: 2 included, 7 extra = 3 packs of 3 at ₱100 (2026-11-19; was 2 × ₱20).
+  breakdown: '3 lines, total 765',
   // + 12, the Megy Mini's own layouts (miniTemplates, 2026-11-17); its first ones stay, retired.
   templates: '726',
   'templates-by-size': '8x8: 28, 6x6: 22, 8x6: 38, 6x8: 38, 6x4: 11',

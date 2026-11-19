@@ -23,7 +23,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 import type { QrFill } from '@web/pages/builder/types';
 import { bindingEdge } from '@web/pages/builder/binding';
 import { qrBadgeCornerOf, type QrCorner } from '@web/pages/builder/pageTemplates';
-import { EXTRA_QR_RATE, FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears } from '@web/lib/pricing';
+import { FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears, QR_PACK_OFFER } from '@web/lib/pricing';
 import { Button } from '../../components/Button';
 import { loadPriceSchedule, usePriceSchedule } from '../../lib/checkout/priceSchedule';
 import { clipStore, currentClipQuality, setClipQuality } from '../../lib/memories/clipStore';
@@ -172,7 +172,7 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
         <View style={styles.invite}>
           <Text style={styles.inviteTitle}>{W.INVITE}</Text>
           <Text style={styles.small}>{W.INVITE_BODY}</Text>
-          <Text style={styles.tiny} testID="memory-included">{W.included(FREE_QR_MEMORIES, EXTRA_QR_RATE, includedYears)}</Text>
+          <Text style={styles.tiny} testID="memory-included">{W.included(FREE_QR_MEMORIES, QR_PACK_OFFER, includedYears)}</Text>
         </View>
       )}
 

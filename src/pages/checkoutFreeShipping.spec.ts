@@ -80,7 +80,8 @@ describe('free shipping and the real was price at checkout', () => {
     expect(host.querySelector('[data-testid="order-shipping"]')?.textContent).toBe('Free');
     const included = host.querySelector('[data-testid="order-included"]')?.textContent ?? '';
     expect(included).toContain('Free shipping (₱200 value)');
-    expect(included).toContain('7 living-memory QRs (₱140 value)');
+    expect(included).toContain('2 living-memory QRs');
+    expect(included).not.toMatch(/living-memory QRs \(₱/); // no made-up value since packs (2026-11-19)
     expect(included).toContain('Memories stay live for 5 years');
     expect(included).not.toContain('you added');
   });
@@ -92,7 +93,8 @@ describe('free shipping and the real was price at checkout', () => {
     job.pages[0] = { ...job.pages[0], qrFills: [qr] };
     await render(); await settle();
     const summary = host.textContent ?? '';
-    expect(summary).toContain('7 living-memory QRs included');
+    expect(summary).toContain('2 living-memory QRs included');
+    expect(summary).toContain('Add more in packs of 3 for ₱100.');
     expect(summary).not.toContain('QR memories');
     const ten = [...host.querySelectorAll('[role="radio"]')].find((b) => b.textContent?.startsWith('10 years')) as HTMLButtonElement;
     await act(async () => { ten.click(); });
