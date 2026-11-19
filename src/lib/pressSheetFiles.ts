@@ -49,13 +49,19 @@ const finishOf = (o: Pick<PrintOrder, 'material'>): MaterialType => (o.material 
 /** How thick this book's spine is: its leaves of C2S 140 in the picked
  *  finish, stacked (plus the boards on a hardcover). */
 export function orderSpine(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>): string {
+  // A Megy Mini (lib/megyMini): folded and stapled, no spine.
+  if (coverOf(o) === 'staple') return 'stapled, no spine';
   return `spine ${spineLabel(spineWidthInches(o.page_count, coverOf(o), finishOf(o)))}`;
 }
+
+/** A Megy Mini's sheets, start to finish (printSheet saddleLayout). */
+export const STAPLED_HOW_TO = 'flip on the long edge · cut across between the two spreads and round their trim · fold each down the middle · nest them, fold 1 outermost · 2 staples through the fold';
 
 /** What to tell the operator after the cover sheet: its spine, and when the
  *  cover file was drawn for another spine than this paper makes (files from
  *  before C2S 140 was set), the spine the pages will really stack to. */
 export function coverSheetNote(o: Pick<PrintOrder, 'cover' | 'material' | 'page_count'>, fileSpineIn: number): string {
+  if (coverOf(o) === 'staple') return 'Cover sheet: print one side only · no spine: fold it down the middle round the pages and staple them together';
   const note = `Cover sheet: print one side only · spine ${spineLabel(fileSpineIn)}`;
   const bookIn = spineWidthInches(o.page_count, coverOf(o), finishOf(o));
   return Math.abs(fileSpineIn - bookIn) * 25.4 < 0.2
@@ -110,8 +116,15 @@ export function stackHowTo(piles: number): string {
 }
 
 /** What to tell the operator about the album sheets (sheet count, blank
- *  sides, and a warning if the file and the order disagree). */
+ *  sides, and a warning if the file and the order disagree). A file with MORE
+ *  pages than the order was priced for never gets here: imposeAlbumSheets
+ *  refuses it (unpaidPagesMessage). */
 function sheetsNote(o: PrintOrder, plan: { sheets: number; pageCount: number; layout: { leavesPerSheet: number } }, pageOne: PageOneSide): string {
+  if (o.album_size === '5.8x8.3') {
+    // A Megy Mini (lib/megyMini): spreads, folded and stapled.
+    const mini = `Megy Mini: ${plan.sheets} sheets, both sides · ${STAPLED_HOW_TO}`;
+    return plan.pageCount === o.page_count ? mini : `${mini}. Check: the print file has ${plan.pageCount} pages, the order says ${o.page_count}.`;
+  }
   const note = `${plan.sheets} sheets, both sides · ${stackHowTo(plan.layout.leavesPerSheet)} · ${blankSidesNote(plan.pageCount, pageOne)}`;
   return plan.pageCount === o.page_count
     ? note
@@ -123,7 +136,7 @@ export async function downloadAlbumSheets(o: PrintOrder): Promise<string> {
   const size = sizeOf(o);
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { imposeAlbumSheets } = await pressTools();
-  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, canvasTextPainter());
+  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, canvasTextPainter(), o.page_count);
   saveFile(bytes, `megyprints-${o.order_number}-sheets.pdf`);
   return sheetsNote(o, plan, pageOne);
 }
@@ -188,7 +201,7 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { imposeAlbumSheets, imposeCoverSheet } = await pressTools();
   const { pdfToJpegs } = await jpegTools();
-  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, text);
+  const { bytes, plan, pageOne } = await imposeAlbumSheets(src, size, o.order_number, text, o.page_count);
   const total = plan.sides.length + 1;
   const say = (done: number) => progress(`Making the JPEG pictures: ${done} of ${total}…`);
   say(0);
@@ -218,7 +231,7 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
 export async function downloadPrintFile(o: PrintOrder): Promise<string> {
   const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
   const { cleanPrintFile } = await pressTools();
-  saveFile(await cleanPrintFile(src, 'print file'), `megyprints-${o.order_number}.pdf`);
+  saveFile(await cleanPrintFile(src, 'print file', { pages: o.page_count, order: o.order_number }), `megyprints-${o.order_number}.pdf`);
   return 'Print PDF: one page per album page';
 }
 

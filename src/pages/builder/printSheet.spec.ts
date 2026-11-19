@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { isMiniSize } from '../../lib/megyMini';
 import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { ALBUM_SIZES, type AlbumSizePreset, type CoverType } from './types';
@@ -9,7 +10,9 @@ import {
   pageSidesFromSheet, coverOnSheet, coverFitsSheet, coverChoiceNote, maxPagesForCover, type Turn,
 } from './printSheet';
 
-const SIZES = ALBUM_SIZES.map((s) => s.preset);
+// Albums: single leaves glued at the spine. The Megy Mini (A5) is folded and
+// stapled instead, and has its own layout (megyMini.spec).
+const SIZES = ALBUM_SIZES.map((s) => s.preset).filter((s) => !isMiniSize(s));
 const MIGRATION = readFileSync(resolve(__dirname, '../../../supabase/migrations/0046_press_sheet.sql'), 'utf8');
 const MIGRATION_6X6 = readFileSync(resolve(__dirname, '../../../supabase/migrations/0050_six_by_six_twelve_a_sheet.sql'), 'utf8');
 const MIGRATION_TOUCHING = readFileSync(resolve(__dirname, '../../../supabase/migrations/0052_pages_touching_every_size.sql'), 'utf8');

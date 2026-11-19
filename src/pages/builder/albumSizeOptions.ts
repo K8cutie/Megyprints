@@ -1,6 +1,7 @@
 import { ALBUM_SIZES, type AlbumSizeConfig, type AlbumSizePreset } from './types';
 import { getTemplatesForAlbum } from './pageTemplates';
 import { getDisabledSizes } from '../../lib/storeSettings';
+import { isMiniSize } from '../../lib/megyMini';
 
 /** ══════════════════════════════════════════════════════════════════════════
  *  Which album sizes may a customer actually choose?
@@ -20,9 +21,11 @@ export function sizeHasLayouts(size: AlbumSizePreset): boolean {
   return getTemplatesForAlbum(size).length > 0;
 }
 
-/** Can this size be offered to a customer right now? */
+/** Can this size be offered to a customer right now? A5 is the Megy Mini's
+ *  page (lib/megyMini), a product of its own made in the app, never an album
+ *  size here. */
 export function isSizeOfferable(size: AlbumSizePreset): boolean {
-  return !getDisabledSizes().includes(size) && sizeHasLayouts(size);
+  return !isMiniSize(size) && !getDisabledSizes().includes(size) && sizeHasLayouts(size);
 }
 
 /** The size cards/choices to show, in ALBUM_SIZES order. */

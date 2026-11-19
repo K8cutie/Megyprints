@@ -27,8 +27,9 @@ import {
 } from 'pdf-lib';
 import { DEFAULT_MATERIAL, type AlbumSizePreset, type CoverType, type MaterialType } from './types';
 import {
-  PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
+  PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, saddleSheetPlan, sheetLayout, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
+import { isMiniSize } from '../../lib/megyMini';
 import { LEGACY_LEAF_IN, coverWrapGeometry, isHardcover, leafInches, spineForLeaf, spineFromWrapWidth, spineLabel } from './coverGeometry';
 import { PAGE_ONE_RIGHT_MARK, type PageOneSide } from './binding';
 import type { TextPainter } from './textPainter';
@@ -46,6 +47,29 @@ const MARK_LEN = 0.25;
 const MARK_GAP = 1 / 16;
 /** No album gets near this; a file past it is refused. */
 export const MAX_PRINT_PAGES = 600;
+
+/** The pages an order was priced for, and its number for the message. */
+export type PaidPages = { pages: number | null | undefined; order: string };
+
+/**
+ * Why a print file can't be printed for its order: it has MORE pages than the
+ * order was priced for. The database prices the order from the album saved to
+ * the account (orders.page_count, 0055); the print file is made on the
+ * customer's phone. A phone that sent a longer file than the album it ordered
+ * would get pages nobody paid for. Fewer pages cost the shop nothing, so the
+ * console only notes them. Null when the file is fine, or the order has no
+ * page count to go by.
+ */
+export function unpaidPagesMessage(filePages: number, paid: PaidPages | null | undefined): string | null {
+  const n = paid?.pages;
+  if (!n || n < 1 || filePages <= n) return null;
+  return `Don't print ${paid.order} yet: its print file has ${filePages} pages, but the order was priced for ${n}. Ask the customer about the ${filePages - n} extra ${filePages - n === 1 ? 'page' : 'pages'} first.`;
+}
+
+function refuseUnpaidPages(filePages: number, paid: PaidPages | null | undefined): void {
+  const why = unpaidPagesMessage(filePages, paid);
+  if (why) throw new Error(why);
+}
 
 /** Sheet inches (origin top-left) → PDF points (origin bottom-left). */
 const px = (xIn: number) => xIn * PT;
@@ -170,10 +194,12 @@ async function loadCustomerPdf(src: ArrayBuffer | Uint8Array, what: string): Pro
 
 /** The customer's print file as the shop gets it from "Print PDF": the same
  *  pages, with no font lists and nothing but the pictures (a fresh file, so
- *  the old font objects aren't carried along unused). */
-export async function cleanPrintFile(src: ArrayBuffer | Uint8Array, what: 'print file' | 'cover file'): Promise<Uint8Array> {
+ *  the old font objects aren't carried along unused). `paid`: the print
+ *  file's order, refused when the file has more pages than it paid for. */
+export async function cleanPrintFile(src: ArrayBuffer | Uint8Array, what: 'print file' | 'cover file', paid?: PaidPages): Promise<Uint8Array> {
   const { doc, pages } = await loadCustomerPdf(src, what);
   if (what === 'print file' && pages.length > MAX_PRINT_PAGES) throw new Error(`This print file has ${pages.length} pages — more than any album. Ask the customer to order again.`);
+  if (what === 'print file') refuseUnpaidPages(pages.length, paid);
   const out = await PDFDocument.create();
   // The page-1 mark stays: the console's sheets read it (printFilePageOne).
   let keywords = '';
@@ -211,14 +237,18 @@ function sourceBleed(wPt: number, hPt: number, size: AlbumSizePreset): number {
 /**
  * Lay the order's page PDF out on press sheets. `label` goes on every sheet
  * (the order number); `text` draws it (no fonts). Throws with a plain message
- * if the file doesn't match the album size.
+ * if the file doesn't match the album size, or (`paidPages`, the order's
+ * page count) has more pages than the order was priced for.
  */
-export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string, text: TextPainter): Promise<ImposeResult> {
+export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string, text: TextPainter, paidPages?: number | null): Promise<ImposeResult> {
+  // A Megy Mini is folded and stapled, not cut into leaves (printSheet saddleLayout).
+  if (isMiniSize(size)) return imposeStapledSheets(src, size, orderLabel, text, paidPages);
   const { doc, pages } = await loadCustomerPdf(src, 'print file');
   const pageOne = printFilePageOne(doc);
   // A page count no album has is a bad file, not a job to lay out (and would
   // only lock up this tab).
   if (pages.length > MAX_PRINT_PAGES) throw new Error(`This print file has ${pages.length} pages — more than any album. Ask the customer to order again.`);
+  refuseUnpaidPages(pages.length, { pages: paidPages, order: orderLabel });
   const first = pages[0].getSize();
   const srcBleed = sourceBleed(first.width, first.height, size);
   const { trimW, trimH } = trimInches(size);
@@ -299,6 +329,102 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
     await drawSheetLabel(sheet, words, `${orderLabel} · sheet ${side.sheet} of ${plan.sheets} · ${side.side}`, side.placements.map((q) => q.slot), side.placements.map((q, s) => [`pile ${s + 1}`, leafName(q.leaf)].filter(Boolean).join(' · ')));
   }
   return { bytes: await saveNoFonts(out), plan, pageOne, sourceBleedIn: srcBleed };
+}
+
+/**
+ * A MEGY MINI's press sheets (lib/megyMini): A5 SPREADS, two to a side, each
+ * keeping its trim edge all round its outside and none at the fold (the two
+ * pages are one piece of paper there). Print both sides (flip on the long
+ * edge), cut across between the spreads and round their trim, fold each down
+ * the middle, nest them as numbered ("fold 1" outermost) and staple through
+ * the fold. Where each page goes is printSheet.ts's saddleSheetPlan.
+ */
+async function imposeStapledSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string, text: TextPainter, paidPages?: number | null): Promise<ImposeResult> {
+  const { pages } = await loadCustomerPdf(src, 'print file');
+  refuseUnpaidPages(pages.length, { pages: paidPages, order: orderLabel });
+  if (pages.length > MAX_PRINT_PAGES || pages.length < 4 || pages.length % 4 !== 0) {
+    throw new Error(`A stapled booklet needs a multiple of 4 pages; this print file has ${pages.length}. Ask the customer to order again.`);
+  }
+  const first = pages[0].getSize();
+  const srcBleed = sourceBleed(first.width, first.height, size);
+  pages.forEach((pg, i) => {
+    const s = pg.getSize();
+    if (Math.abs(s.width - first.width) > 1 || Math.abs(s.height - first.height) > 1) {
+      throw new Error(`Page ${i + 1} of the print file is a different size from page 1.`);
+    }
+  });
+  const { trimW, trimH } = trimInches(size);
+  const { layout, sheets } = saddleSheetPlan(size, pages.length);
+
+  const out = await PDFDocument.create();
+  out.setTitle(`${orderLabel} — Megy Mini press sheets`);
+  const words = writer(out, text);
+
+  // A left page keeps its trim edge top, bottom and left; a right page top,
+  // bottom and right. Nothing at the fold.
+  const keepOf = (onLeft: boolean): Sides => ({
+    top: srcBleed, bottom: srcBleed, left: onLeft ? srcBleed : 0, right: onLeft ? 0 : srcBleed,
+  });
+  // Every page once, embedded in ONE call (as imposeAlbumSheets does).
+  const spots = sheets.flatMap((sh) => [...sh.front, ...sh.back]).flatMap((sp) => [
+    { page: sp.left - 1, onLeft: true }, { page: sp.right - 1, onLeft: false },
+  ]);
+  const embeddedList = await out.embedPages(
+    spots.map((s) => pages[s.page]),
+    spots.map((s) => {
+      const keep = keepOf(s.onLeft);
+      return {
+        left: (srcBleed - keep.left) * PT,
+        right: (srcBleed + trimW + keep.right) * PT,
+        bottom: (srcBleed - keep.bottom) * PT,
+        top: (srcBleed + trimH + keep.top) * PT,
+      };
+    }),
+  );
+  const embeddedOf = new Map(spots.map((s, i) => [`${s.page}:${s.onLeft}`, embeddedList[i]]));
+
+  const sidesOut: SheetPlan['sides'] = [];
+  for (let i = 0; i < sheets.length; i++) {
+    for (const side of ['front', 'back'] as const) {
+      const sheet = out.addPage([SHEET_W, SHEET_H]);
+      const spreads = sheets[i][side];
+      spreads.forEach((sp, r) => {
+        const slot = layout.slots[r];
+        for (const onLeft of [true, false]) {
+          const page = (onLeft ? sp.left : sp.right) - 1;
+          const embedded = embeddedOf.get(`${page}:${onLeft}`);
+          if (!embedded) continue;
+          const keep = keepOf(onLeft);
+          const x = slot.x + (onLeft ? 0 : trimW);
+          const boxL = px(x - keep.left);
+          const boxB = py(slot.y + slot.h + keep.bottom);
+          const boxW = (trimW + keep.left + keep.right) * PT;
+          const boxH = (trimH + keep.top + keep.bottom) * PT;
+          sheet.pushOperators(pushGraphicsState(), rectangle(boxL, boxB, boxW, boxH), clip(), endPath());
+          sheet.drawPage(embedded, { x: boxL, y: boxB, width: boxW, height: boxH });
+          sheet.pushOperators(popGraphicsState());
+        }
+      });
+      drawCutMarks(sheet, layout.slots.slice(0, spreads.length));
+      // The fold: a short line above and below each spread, outside the trim.
+      for (const slot of layout.slots.slice(0, spreads.length)) {
+        const fx = px(layout.foldX);
+        sheet.drawLine({ start: { x: fx, y: py(slot.y - slot.bleed.top - 0.02) }, end: { x: fx, y: py(slot.y - slot.bleed.top - 0.14) }, thickness: 0.5, color: rgb(0.45, 0.45, 0.45), dashArray: [2, 2] });
+        sheet.drawLine({ start: { x: fx, y: py(slot.y + slot.h + slot.bleed.bottom + 0.02) }, end: { x: fx, y: py(slot.y + slot.h + slot.bleed.bottom + 0.14) }, thickness: 0.5, color: rgb(0.45, 0.45, 0.45), dashArray: [2, 2] });
+      }
+      const folds = spreads.map((sp, r) => `fold ${i * layout.spreadsPerSide + r + 1} · pages ${sp.left} | ${sp.right}`);
+      await drawSheetLabel(sheet, words, `${orderLabel} · Megy Mini · sheet ${i + 1} of ${sheets.length} · ${side}`, layout.slots.slice(0, spreads.length), folds);
+      sidesOut.push({ sheet: i + 1, side, placements: [] });
+    }
+  }
+  const plan: SheetPlan = {
+    layout: sheetLayout(size),
+    pageCount: pages.length,
+    leaves: pages.length / 4,
+    sheets: sheets.length,
+    sides: sidesOut,
+  };
+  return { bytes: await saveNoFonts(out), plan, pageOne: 'right', sourceBleedIn: srcBleed };
 }
 
 /** The piece number: small, grey, on the piece's FRONT. */

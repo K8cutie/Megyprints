@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { isMiniSize } from '../../lib/megyMini';
 import { generateAlbum, chosenAlbumPages, TIME_ORDER_REACH, OPENING_FULL_PAGES } from './generateAlbum';
 import { DENSITY_BY_SIZE, MIN_ALBUM_PAGES } from './densities';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from './types';
@@ -75,7 +76,8 @@ function expectForward(album: AlbumPage[], at: string) {
 }
 
 describe('photos go on the pages in the order they were taken', () => {
-  const sizes = Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[];
+  // Albums only: the Megy Mini (A5) is always 16 pages (megyMini.spec).
+const sizes = (Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[]).filter((s) => !isMiniSize(s));
 
   for (const size of sizes) {
     it(`${size}: Surprise/auto — pages read forward and no page reaches more than ${TIME_ORDER_REACH} photos ahead`, () => {

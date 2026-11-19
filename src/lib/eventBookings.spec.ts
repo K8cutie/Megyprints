@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { isMiniSize } from './megyMini';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -55,7 +56,7 @@ describe('the app and 0043 say the same thing', () => {
   it('the album sizes a deal can name are the builder\'s sizes (as 0053 set them: no 9x9)', () => {
     const SQL53 = readFileSync(resolve(__dirname, '../../supabase/migrations/0053_remove_9x9.sql'), 'utf8');
     const m = /deal_album_size in \(([^)]+)\)/.exec(SQL53)!;
-    expect(m[1].match(/'([^']+)'/g)!.map((s) => s.slice(1, -1))).toEqual(ALBUM_SIZES.map((s) => s.preset));
+    expect(m[1].match(/'([^']+)'/g)!.map((s) => s.slice(1, -1))).toEqual(ALBUM_SIZES.map((s) => s.preset).filter((s) => !isMiniSize(s)));
   });
 
   it('every column the app reads as the host is granted to hosts, and the cost to make is not', () => {
