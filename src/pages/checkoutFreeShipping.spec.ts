@@ -79,7 +79,7 @@ describe('free shipping and the real was price at checkout', () => {
     expect(host.querySelector('[data-testid="order-shipping"]')?.textContent).toBe('Free');
     const included = host.querySelector('[data-testid="order-included"]')?.textContent ?? '';
     expect(included).toContain('Free shipping (₱200 value)');
-    expect(included).toContain('7 living-memory QRs (₱140 value)');
+    expect(included).toContain('2 living-memory QRs');
     expect(included).toContain('5 years of memory hosting');
   });
 

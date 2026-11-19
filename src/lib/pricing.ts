@@ -254,19 +254,39 @@ export function extraPagesCharge(
 export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
-// ── Living-memory QR add-on (owner-set 2026-09-09) ──────────────────────────
-// Every album includes FREE_QR_MEMORIES QR memories; each one past that adds
-// EXTRA_QR_RATE to the order. Counted per QR code (hosted clip or pasted link
-// alike). Public by nature — the customer is told "7 included" — so these sit
-// in the bundle like MIN_PAGES; move them to the schedule if they ever need to
-// be owner-tunable without a deploy.
-export const FREE_QR_MEMORIES = 7;
-export const EXTRA_QR_RATE = 20;
+// ── Video memories (living-memory QRs) ──────────────────────────────────────
+// Owner, 2026-11-19: "2 free video memory, once they see that add they'd want
+// more … 3 videos per 100 php". Every album includes FREE_QR_MEMORIES (a Megy
+// Mini: its own offer's free_qr); past those, videos come in packs of
+// QR_PACK_SIZE for QR_PACK_PRICE: 1–3 extra = ₱100, 4–6 = ₱200, and so on.
+// Counted per QR code (hosted clip or pasted link alike). The database prices
+// the order the same way (0066 order_quote; orderQuote.spec holds them equal).
+export const FREE_QR_MEMORIES = 2;
+export const QR_PACK_SIZE = 3;
+export const QR_PACK_PRICE = 100;
 
-/** Pesos owed for `count` QR memories on one album. */
-export function qrMemoryCharge(count: number): number {
-  return Math.max(0, Math.floor(count) - FREE_QR_MEMORIES) * EXTRA_QR_RATE;
+/** Packs of QR_PACK_SIZE needed for `count` QR memories, `free` included. */
+export function qrPacksFor(count: number, free: number = FREE_QR_MEMORIES): number {
+  const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
+  return Math.ceil(extra / QR_PACK_SIZE);
 }
+
+/** Pesos owed for `count` QR memories on one album (or a Mini, with its own `free`). */
+export function qrMemoryCharge(count: number, free: number = FREE_QR_MEMORIES): number {
+  return qrPacksFor(count, free) * QR_PACK_PRICE;
+}
+
+/** The bill's line for extra videos: "2 included, 4 extra (2 packs of 3 × ₱100)". */
+export function qrPacksLine(count: number, free: number): string {
+  const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
+  const packs = qrPacksFor(count, free);
+  return `${free} included, ${extra} extra (${packs} ${packs === 1 ? 'pack' : 'packs'} of ${QR_PACK_SIZE} × ₱${QR_PACK_PRICE})`;
+}
+
+/** How extra videos are sold, in a few words: "3 more for ₱100". */
+export const QR_PACK_OFFER = `${QR_PACK_SIZE} more for ₱${QR_PACK_PRICE}`;
+/** The same as a sentence, after "2 … included": "Add more in packs of 3 for ₱100." */
+export const QR_PACK_SENTENCE = `Add more in packs of ${QR_PACK_SIZE} for ₱${QR_PACK_PRICE}.`;
 
 /** Structural view of a page for counting — both QR homes: a QR slot on a
  *  photo layout (`qrFills`) and a QR in a combo/caption box (`textSlotQr`). */
@@ -332,9 +352,8 @@ export function priceBreakdown(
   }
 
   if (qrCharge > 0) {
-    const extraQr = qrMemories - FREE_QR_MEMORIES;
     items.push({
-      label: `Living-memory QR · ${FREE_QR_MEMORIES} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`,
+      label: `Living-memory QR · ${qrPacksLine(qrMemories, FREE_QR_MEMORIES)}`,
       amount: qrCharge,
     });
   }
@@ -355,7 +374,7 @@ export function priceBreakdown(
 }
 
 /** CUSTOMER-FACING. A Megy Mini's bill (0062): its set price, the shipping
- *  fee on top (albums ship free, the Mini doesn't), ₱20 for each video past
+ *  fee on top (albums ship free, the Mini doesn't), packs of 3 videos past
  *  its free ones, and the same memory term and HD add-ons as an album. The
  *  checkout's mirror of order_quote()'s Mini branch: same total to the peso. */
 export function miniPriceBreakdown(
@@ -366,8 +385,7 @@ export function miniPriceBreakdown(
   hdMemories = false,
 ): PriceBreakdown & { shipping: number } {
   const free = Math.max(0, Math.floor(offer.free_qr));
-  const extraQr = Math.max(0, Math.floor(qrMemories) - free);
-  const qrCharge = extraQr * EXTRA_QR_RATE;
+  const qrCharge = qrMemoryCharge(qrMemories, free);
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
   const items: PriceLine[] = [
@@ -378,7 +396,7 @@ export function miniPriceBreakdown(
     { label: 'Shipping', amount: offer.shipping_fee },
   ];
   if (qrCharge > 0) {
-    items.push({ label: `Video memories · ${free} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`, amount: qrCharge });
+    items.push({ label: `Video memories · ${qrPacksLine(qrMemories, free)}`, amount: qrCharge });
   }
   if (termCharge > 0 && hostingYears != null) {
     const included = includedHostingYears(schedule);

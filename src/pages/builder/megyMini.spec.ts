@@ -111,9 +111,10 @@ describe('Megy Mini: the price (mirrors order_quote, 0062)', () => {
 
   it('adds ₱20 a video past the free ones, and the same term and HD as an album', () => {
     const offer = miniOfferOf(schedule)!;
-    expect(miniPriceBreakdown(schedule, offer, 4).total).toBe(510);
-    expect(miniPriceBreakdown(schedule, offer, 4, 10).total).toBe(609);
-    expect(miniPriceBreakdown(schedule, offer, 4, 10, true).total).toBe(658);
+    expect(miniPriceBreakdown(schedule, offer, 4).total).toBe(570);   // 2 extra = 1 pack (2026-11-19)
+    expect(miniPriceBreakdown(schedule, offer, 6).total).toBe(670);   // 4 extra = 2 packs
+    expect(miniPriceBreakdown(schedule, offer, 4, 10).total).toBe(669);
+    expect(miniPriceBreakdown(schedule, offer, 4, 10, true).total).toBe(718);
     // items always add up to the total
     const b = miniPriceBreakdown(schedule, offer, 5, 10, true);
     expect(b.items.reduce((s, i) => s + i.amount, 0)).toBe(b.total);
