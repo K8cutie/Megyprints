@@ -14,7 +14,7 @@ import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, Albu
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, EXTRA_QR_RATE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, QR_PACK_SENTENCE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -260,8 +260,8 @@ export default function Order() {
   }, [user, info?.albumId, step]);
   const albumSize: AlbumSizePreset = info?.albumSize ?? '8x8';
   const pageCount = info?.pages.length ?? MIN_PAGES;
-  // QR memories on the album — the first FREE_QR_MEMORIES are included, each
-  // one past that is an add-on line (counted per QR code, link or clip alike).
+  // QR memories on the album — the first FREE_QR_MEMORIES are included; past
+  // them, packs of QR_PACK_SIZE are an add-on line (per QR code, link or clip alike).
   const qrCount = countQrMemories(info?.pages ?? []);
   // Every QR on the album — both homes — for the checkout belt + clip uploads.
   const allQrFills = (info?.pages ?? []).flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])]);
@@ -1312,7 +1312,7 @@ export default function Order() {
                 <p className="text-xs font-semibold text-dark">Included with your album</p>
                 <ul className="mt-1 text-xs text-medium space-y-0.5">
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />Free shipping{freeShippingValue > 0 && <> (₱{freeShippingValue.toLocaleString('en-PH')} value)</>}</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs (₱{(FREE_QR_MEMORIES * EXTRA_QR_RATE).toLocaleString('en-PH')} value)</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs</li>
                   {includedYears !== null && (
                     <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedYears} years of memory hosting</li>
                   )}
@@ -1323,7 +1323,7 @@ export default function Order() {
                 <p className="text-xs text-cocoa leading-snug">
                   {eventLink
                     ? <><b className="text-dark">Video memories are part of your event deal</b> — a video plays when anyone scans your printed album.</>
-                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. Extra QRs are ₱{EXTRA_QR_RATE} each.</>}
+                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. {QR_PACK_SENTENCE}</>}
                   {qrCount > 0 && <> This album has <b className="text-dark">{qrCount}</b>.</>}
                   {qrCount > 0 && hdPrice > 0 && !eventLink && (
                     <> Quality: <b className="text-dark">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>
