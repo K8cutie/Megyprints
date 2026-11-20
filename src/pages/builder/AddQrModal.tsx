@@ -11,7 +11,7 @@ import {
 } from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
-import { FREE_QR_MEMORIES, EXTRA_QR_RATE, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
+import { FREE_QR_MEMORIES, QR_PACK_OFFER, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useBuilderContext } from './BuilderContext';
@@ -231,7 +231,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
                 <Clock size={11} className="shrink-0" />
                 {fromEvent
                   ? <span data-testid="qr-event-included">Part of your event deal{includedYears ? ` · live for ${includedYears} years` : ''}</span>
-                  : <>{FREE_QR_MEMORIES} memories included · ₱{EXTRA_QR_RATE} each after{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
+                  : <>{FREE_QR_MEMORIES} memories included · {QR_PACK_OFFER}{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
               </p>
             </div>
           )}

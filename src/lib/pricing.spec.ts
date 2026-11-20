@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, extraPagesCharge,
-  qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, EXTRA_QR_RATE,
+  qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, QR_PACK_SIZE, QR_PACK_PRICE, QR_PACK_OFFER, QR_PACK_SENTENCE, qrPacksLine,
   hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
   hdMemoriesPriceOf, hdMemoriesCharge, shippingAllowanceOf, freeShippingValueOf, compareAtPriceOf, manilaToday,
   MIN_PAGES, SIZE_LABELS,
@@ -34,7 +34,8 @@ const MODEL: PricingModel = {
     '8x8':    { pps: 4,  hb: 350, surcharge: 0 },
     '11.5x8': { pps: 4,  hb: 450, surcharge: 300 },
     '8.5x11': { pps: 4,  hb: 500, surcharge: 300 },
-  },
+    // No A5: the Megy Mini isn't priced from the album model (0062, miniPriceBreakdown).
+  } as PricingModel['sizes'],
 };
 
 const SIZE_KEYS = Object.keys(MODEL.sizes) as AlbumSizePreset[];
@@ -145,14 +146,19 @@ describe('priceBreakdown', () => {
   });
 });
 
-describe('living-memory QR add-on (7 included, ₱20 each after — owner, 2026-09-09)', () => {
-  it('the first 7 QR memories cost nothing; each one past 7 is ₱20', () => {
-    expect(FREE_QR_MEMORIES).toBe(7);
-    expect(EXTRA_QR_RATE).toBe(20);
-    for (let n = 0; n <= 7; n++) expect(qrMemoryCharge(n)).toBe(0);
-    expect(qrMemoryCharge(8)).toBe(20);
-    expect(qrMemoryCharge(12)).toBe(100);
+describe('video memories: 2 included, then packs of 3 for ₱100 (owner, 2026-11-19)', () => {
+  it('the first 2 cost nothing; then every 1–3 more is one ₱100 pack', () => {
+    expect(FREE_QR_MEMORIES).toBe(2);
+    expect([QR_PACK_SIZE, QR_PACK_PRICE]).toEqual([3, 100]);
+    for (let n = 0; n <= 2; n++) expect(qrMemoryCharge(n)).toBe(0);
+    expect([3, 4, 5].map((n) => qrMemoryCharge(n))).toEqual([100, 100, 100]);
+    expect([6, 8, 9, 17].map((n) => qrMemoryCharge(n))).toEqual([200, 200, 300, 500]);
     expect(qrMemoryCharge(-3)).toBe(0);
+    expect(qrMemoryCharge(5, 2)).toBe(100);
+    expect(qrPacksLine(8, 2)).toBe('2 included, 6 extra (2 packs of 3 × ₱100)');
+    expect(qrPacksLine(3, 2)).toBe('2 included, 1 extra (1 pack of 3 × ₱100)');
+    expect(QR_PACK_OFFER).toBe('3 more for ₱100');
+    expect(QR_PACK_SENTENCE).toBe('Add more in packs of 3 for ₱100.');
   });
 
   it('counts QR memories from BOTH homes (photo-slot qrFills and combo-box textSlotQr), ignoring nulls', () => {
@@ -171,7 +177,7 @@ describe('living-memory QR add-on (7 included, ₱20 each after — owner, 2026-
     for (const size of SIZE_KEYS)
       for (const binding of BINDINGS)
         for (const pages of PAGE_COUNTS)
-          for (const qr of [0, 1, 7, 8, 15]) {
+          for (const qr of [0, 1, 2, 3, 7, 8, 15]) {
             const b = priceBreakdown(schedule, size, binding, pages, qr);
             const print = priceOf(schedule, size, binding, pages);
             expect(b.total).toBe(print + qrMemoryCharge(qr));
@@ -181,7 +187,7 @@ describe('living-memory QR add-on (7 included, ₱20 each after — owner, 2026-
             if (qr > FREE_QR_MEMORIES) {
               expect(qrLines[0].label).toContain(`${FREE_QR_MEMORIES} included`);
               expect(qrLines[0].label).toContain(`${qr - FREE_QR_MEMORIES} extra`);
-              expect(qrLines[0].amount).toBe((qr - FREE_QR_MEMORIES) * EXTRA_QR_RATE);
+              expect(qrLines[0].amount).toBe(Math.ceil((qr - FREE_QR_MEMORIES) / QR_PACK_SIZE) * QR_PACK_PRICE);
             }
           }
   });
@@ -239,7 +245,7 @@ describe('hosting terms — 5 included, 10/15/20 paid (owner, 2026-09-09)', () =
   it('QR add-on and term add-on stack independently', () => {
     const schedule = scheduleFrom(MODEL, 3);
     const b = priceBreakdown(schedule, '8x8', 'hard', 80, 9, 20);
-    expect(b.total).toBe(priceOf(schedule, '8x8', 'hard', 80) + 2 * EXTRA_QR_RATE + 199);
+    expect(b.total).toBe(priceOf(schedule, '8x8', 'hard', 80) + 3 * QR_PACK_PRICE + 199); // 9 videos: 2 free, 7 extra = 3 packs
     expect(b.items).toHaveLength(4); // album, extra pages, QR add-on, term
   });
 });
@@ -278,7 +284,7 @@ describe('HD memories — one-time 1080p upgrade (owner, 2026-09-10)', () => {
   it('stacks with the QR add-on and the hosting term without double-counting', () => {
     const schedule = scheduleFrom(MODEL, 3);
     const b = priceBreakdown(schedule, '8x8', 'hard', 80, 9, 20, true);
-    expect(b.total).toBe(priceOf(schedule, '8x8', 'hard', 80) + 2 * EXTRA_QR_RATE + 199 + 49);
+    expect(b.total).toBe(priceOf(schedule, '8x8', 'hard', 80) + 3 * QR_PACK_PRICE + 199 + 49); // 9 videos: 3 packs
     expect(b.items).toHaveLength(5); // album, extra pages, QR add-on, term, HD
   });
 

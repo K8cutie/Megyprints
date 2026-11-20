@@ -30,6 +30,7 @@ import { ALBUM_SIZES, COVERS, type AlbumSizePreset, type CoverType } from './typ
 import { PRINTER_SPEC, coverWrapGeometry, isHardcover, type CoverPaper } from './coverGeometry';
 import { MIN_PAGES, SIZE_LABELS } from '../../lib/pricing';
 import type { PageOneSide } from './binding';
+import { isMiniSize } from '../../lib/megyMini';
 
 /** The shop's press (owner, 2026-10-11). Inches; the sheet is PORTRAIT. */
 export const PRESS_SHEET = {
@@ -98,7 +99,7 @@ export function trimInches(size: AlbumSizePreset): { trimW: number; trimH: numbe
  *  always keep theirs. The cut has to be exact: a hair off shows white at
  *  the outside edge, or a sliver of the next page. Take a size out of this
  *  list to give it its trim edges back. */
-export const BUTTED_SIZES: readonly AlbumSizePreset[] = ALBUM_SIZES.map((s) => s.preset);
+export const BUTTED_SIZES: readonly AlbumSizePreset[] = ALBUM_SIZES.map((s) => s.preset).filter((s) => !isMiniSize(s));
 
 /** How many pages of length `len` fit along one axis, and the trim edge they
  *  keep outside (`outer`) and where two pages face each other (`inner`).
@@ -175,9 +176,115 @@ export function sheetLayout(size: AlbumSizePreset): SheetLayout {
   };
 }
 
-/** Pages per sheet (both sides) for every size — pricing's `pps`. */
+/** Pages per sheet (both sides) for every ALBUM size — pricing's `pps`. The
+ *  Megy Mini is folded and stapled, not cut into leaves: see saddleLayout. */
 export function pagesPerSheetBySize(): Record<AlbumSizePreset, number> {
-  return Object.fromEntries(ALBUM_SIZES.map((s) => [s.preset, sheetLayout(s.preset).pagesPerSheet])) as Record<AlbumSizePreset, number>;
+  return Object.fromEntries(ALBUM_SIZES.filter((s) => !isMiniSize(s.preset))
+    .map((s) => [s.preset, sheetLayout(s.preset).pagesPerSheet])) as Record<AlbumSizePreset, number>;
+}
+
+/* ── STAPLED BOOKLETS (the Megy Mini, lib/megyMini) ───────────────────────────
+   A Mini isn't cut into single leaves glued at a spine. Each press sheet
+   carries SPREADS: two A5 pages side by side, one piece of paper. A spread
+   keeps the full trim edge all round its outside and none at the fold.
+   Printed both sides (the back flipped on the sheet's long edge, so a spread's
+   back sits right behind it), cut across between the spreads, each folded in
+   half, nested outermost first and stapled through the fold.
+
+   16 pages = 4 folded sheets = 2 press sheets with 2 spreads a side: the same
+   8 pages a sheet the price list counts. */
+
+/** Two facing pages of a stapled booklet, 1-based page numbers. */
+export interface SaddleSpread { left: number; right: number }
+
+/** The folded sheets of an n-page stapled booklet, OUTERMOST first. Folded
+ *  sheet k carries (n − 2k | 1 + 2k) on its outside and (2 + 2k | n − 1 − 2k)
+ *  inside: 16 pages → 16|1 · 2|15, 14|3 · 4|13, 12|5 · 6|11, 10|7 · 8|9. */
+export function saddleFolds(pageCount: number): { front: SaddleSpread; back: SaddleSpread }[] {
+  if (!Number.isInteger(pageCount) || pageCount < 4 || pageCount % 4 !== 0) {
+    throw new Error(`A stapled booklet needs a multiple of 4 pages, not ${pageCount}.`);
+  }
+  return Array.from({ length: pageCount / 4 }, (_, k) => ({
+    front: { left: pageCount - 2 * k, right: 1 + 2 * k },
+    back: { left: 2 + 2 * k, right: pageCount - 1 - 2 * k },
+  }));
+}
+
+export interface SaddleLayout {
+  size: AlbumSizePreset;
+  trimW: number;
+  trimH: number;
+  /** One spread = two pages across: 2 × trimW wide. */
+  spreadW: number;
+  /** Spreads on each side of a press sheet, stacked top to bottom. */
+  spreadsPerSide: number;
+  /** = 4 × spreadsPerSide (two pages a spread, two sides). */
+  pagesPerSheet: number;
+  /** Each spread's trim box, top to bottom, as seen on the FRONT. The back is
+   *  flipped on the long edge; the block is centred across, so the boxes sit
+   *  in the same place on both sides. */
+  slots: SheetSlot[];
+  /** Where the cutter goes, inches from the left / top edge. */
+  cutsX: number[];
+  cutsY: number[];
+  /** Where each spread folds, inches from the left edge. */
+  foldX: number;
+  spareX: number;
+  spareY: number;
+}
+
+/** The press sheet for a stapled booklet of this size: spreads one across,
+ *  as many down as fit with their full trim edges. */
+export function saddleLayout(size: AlbumSizePreset): SaddleLayout {
+  const { trimW, trimH } = trimInches(size);
+  const u = PRESS_SHEET.unprintableIn;
+  const b = PRESS_SHEET.bleedIn;
+  const availW = PRESS_SHEET.wIn - 2 * u;
+  const availH = PRESS_SHEET.hIn - 2 * u;
+  const spreadW = 2 * trimW;
+  if (spreadW + 2 * b > availW + EPS) {
+    throw new Error(`A ${size} spread does not fit across the ${PRESS_SHEET.wIn}×${PRESS_SHEET.hIn} sheet.`);
+  }
+  const rows = Math.floor((availH + EPS) / (trimH + 2 * b));
+  if (rows < 1) throw new Error(`A ${size} spread does not fit down the ${PRESS_SHEET.wIn}×${PRESS_SHEET.hIn} sheet.`);
+  const spareX = availW - (spreadW + 2 * b);
+  const spareY = availH - rows * (trimH + 2 * b);
+  const x = u + spareX / 2 + b;
+  const slots: SheetSlot[] = Array.from({ length: rows }, (_, r) => ({
+    x,
+    y: u + spareY / 2 + b + r * (trimH + 2 * b),
+    w: spreadW,
+    h: trimH,
+    bleed: { top: b, right: b, bottom: b, left: b },
+  }));
+  const uniq = (xs: number[]) => [...new Set(xs.map((v) => Math.round(v * 10000) / 10000))].sort((p, q) => p - q);
+  return {
+    size, trimW, trimH, spreadW,
+    spreadsPerSide: rows,
+    pagesPerSheet: 4 * rows,
+    slots,
+    cutsX: uniq([x, x + spreadW]),
+    cutsY: uniq(slots.flatMap((s) => [s.y, s.y + s.h])),
+    foldX: x + trimW,
+    spareX, spareY,
+  };
+}
+
+/** Which spreads go on each press sheet of a stapled booklet. Sheet i takes
+ *  the next `spreadsPerSide` folded sheets, outermost at the top; `front[r]`
+ *  and `back[r]` are slot r's spreads (the back as seen when printing it). */
+export function saddleSheetPlan(size: AlbumSizePreset, pageCount: number): {
+  layout: SaddleLayout;
+  sheets: { front: SaddleSpread[]; back: SaddleSpread[] }[];
+} {
+  const layout = saddleLayout(size);
+  const folds = saddleFolds(pageCount);
+  const sheets: { front: SaddleSpread[]; back: SaddleSpread[] }[] = [];
+  for (let i = 0; i < folds.length; i += layout.spreadsPerSide) {
+    const group = folds.slice(i, i + layout.spreadsPerSide);
+    sheets.push({ front: group.map((f) => f.front), back: group.map((f) => f.back) });
+  }
+  return { layout, sheets };
 }
 
 /** The album's printed sides, in book order. `null` = blank side.

@@ -31,16 +31,23 @@ const EventCards = lazy(() => import('./pages/EventCards'));
 const EventGuest = lazy(() => import('./pages/EventGuest'));
 const EventScreen = lazy(() => import('./pages/EventScreen'));
 const EventCopy = lazy(() => import('./pages/EventCopy'));
+// Become an affiliate / the affiliate's own page (0061).
+const Affiliate = lazy(() => import('./pages/Affiliate'));
 import InstallPrompt from './components/InstallPrompt';
 import ResumePrompt from './components/ResumePrompt';
 import PaidClipSweep from './components/PaidClipSweep';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
 import { EVENTS_ON } from './lib/eventsSwitch';
+import { captureAffiliateRef } from './lib/affiliates';
 
 export default function App() {
   // Load operator template overrides + the store price multiple once on start.
   useEffect(() => { void loadTemplateSettings(); void loadStoreSettings(); }, []);
+
+  // Opened from an affiliate's link (?ref=CODE, 0061): keep the code on this
+  // device, so checkout can apply it, and tidy it out of the address bar.
+  useEffect(() => { captureAffiliateRef(); }, []);
 
   // Return to where the user was after an OAuth round-trip. redirectTo can't
   // carry a #hash, so Google sends us back to a bare path (→ Home on this
@@ -93,6 +100,8 @@ export default function App() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
+          {/* Open to visitors: it explains the program and asks them to sign in to apply. */}
+          <Route path="/affiliate" element={<Affiliate />} />
         </Route>
         {/* Builder — a full-screen app with its own chrome. Kept OUTSIDE Layout so the
             marketing Lenis smooth-scroll (which hijacks the mouse wheel and scrolls the

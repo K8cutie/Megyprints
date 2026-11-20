@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { isMiniSize } from '../../lib/megyMini';
 import { generateAlbum, chosenAlbumPages } from './generateAlbum';
 import { DENSITY_BY_SIZE, MIN_ALBUM_PAGES } from './densities';
 import type { AlbumPage, AlbumSizePreset, UploadedPhoto } from './types';
@@ -38,7 +39,8 @@ const gen = (seed: number, photos: UploadedPhoto[], size: AlbumSizePreset, ppp: 
 };
 
 describe('a chosen photos-per-page: the estimate is the album, on every size', () => {
-  const sizes = Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[];
+  // Albums only: the Megy Mini (A5) is always 16 pages (megyMini.spec).
+const sizes = (Object.keys(DENSITY_BY_SIZE) as AlbumSizePreset[]).filter((s) => !isMiniSize(s));
   for (const size of sizes) {
     it(`${size}: every density, 40 to 263 photos — pages = the estimate, none blank, every photo placed, none over the chosen count`, () => {
       for (const n of [40, 61, 97, 140, 199, 263]) {

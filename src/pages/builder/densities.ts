@@ -33,6 +33,8 @@ export const DENSITY_BY_SIZE: Record<AlbumSizePreset, number[]> = {
   '6x8': [1, 2, 3, 4],
   '11.5x8': [1, 2, 3, 4, 5, 6],
   '8.5x11': [1, 2, 3, 4, 5, 6],
+  // The Megy Mini (A5) deals the 6x8 deck rebuilt for A5 (rectTemplates): same cap.
+  '5.8x8.3': [1, 2, 3, 4],
 };
 
 /** Friendly name for each density count. */
@@ -85,6 +87,8 @@ const NATURAL_BY_SIZE: Record<AlbumSizePreset, number> = {
   // threshold to 160 photos — spreading today's 120-159-photo albums to 1/page.
   '6x4': 2,
   '8x6': 3, '6x8': 3, '6x6': 3, '8x8': 3, '11.5x8': 3, '8.5x11': 3,
+  // The Megy Mini: 16 pages, so its natural is set by its photo range (16-40), not a fill threshold.
+  '5.8x8.3': 3,
 };
 export function naturalPerPage(albumSize: string): number {
   // Loose-string read on purpose (see densityRangeLabel) — table stays strict.

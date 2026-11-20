@@ -23,6 +23,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset } from '../pages/builder/types';
+import type { MiniOffer } from './megyMini';
 
 export type Binding = 'soft' | 'hard';
 
@@ -36,6 +37,8 @@ export const MIN_PAGES = 40;
 export const SIZE_LABELS: Record<AlbumSizePreset, string> = {
   '6x4': '6×4', '8x6': '8×6', '6x8': '6×8', '6x6': '6×6',
   '8x8': '8×8', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
+  // The Megy Mini's page (lib/megyMini): never an album size.
+  '5.8x8.3': 'A5',
 };
 
 /** Owner-only view of the cost model — the shape of owner_pricing_model(). */
@@ -66,6 +69,16 @@ export interface PricingModel {
   compare_multiple?: number | null;
   /** Last day (Asia/Manila, YYYY-MM-DD) the was price shows. */
   compare_until?: string | null;
+  /** MEGY MINI (0062; absent before it). On sale only with a shipping fee. */
+  mini_on?: boolean;
+  mini_price?: number;
+  mini_package_price?: number;
+  mini_shipping_fee?: number | null;
+  mini_free_qr?: number;
+  /** Owner's view only: what one Mini costs to make, and the hosting kept
+   *  for its videos (inside its price, not added to it). */
+  mini_cost?: number;
+  mini_hosting_reserve?: number;
 }
 
 export interface HostingTier { years: number; price: number }
@@ -106,6 +119,9 @@ export interface PriceSchedule {
   compare_at?: CompareAt | null;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
+  /** Megy Mini while it is on sale (0062); null or absent otherwise. Read it
+   *  through miniOfferOf(), never directly. */
+  mini?: MiniOffer | null;
 }
 
 /** Printed sheets for a page count. Pages are laid up `pps` to a sheet and the
@@ -238,19 +254,39 @@ export function extraPagesCharge(
 export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
-// ── Living-memory QR add-on (owner-set 2026-09-09) ──────────────────────────
-// Every album includes FREE_QR_MEMORIES QR memories; each one past that adds
-// EXTRA_QR_RATE to the order. Counted per QR code (hosted clip or pasted link
-// alike). Public by nature — the customer is told "7 included" — so these sit
-// in the bundle like MIN_PAGES; move them to the schedule if they ever need to
-// be owner-tunable without a deploy.
-export const FREE_QR_MEMORIES = 7;
-export const EXTRA_QR_RATE = 20;
+// ── Video memories (living-memory QRs) ──────────────────────────────────────
+// Owner, 2026-11-19: "2 free video memory, once they see that add they'd want
+// more … 3 videos per 100 php". Every album includes FREE_QR_MEMORIES (a Megy
+// Mini: its own offer's free_qr); past those, videos come in packs of
+// QR_PACK_SIZE for QR_PACK_PRICE: 1–3 extra = ₱100, 4–6 = ₱200, and so on.
+// Counted per QR code (hosted clip or pasted link alike). The database prices
+// the order the same way (0066 order_quote; orderQuote.spec holds them equal).
+export const FREE_QR_MEMORIES = 2;
+export const QR_PACK_SIZE = 3;
+export const QR_PACK_PRICE = 100;
 
-/** Pesos owed for `count` QR memories on one album. */
-export function qrMemoryCharge(count: number): number {
-  return Math.max(0, Math.floor(count) - FREE_QR_MEMORIES) * EXTRA_QR_RATE;
+/** Packs of QR_PACK_SIZE needed for `count` QR memories, `free` included. */
+export function qrPacksFor(count: number, free: number = FREE_QR_MEMORIES): number {
+  const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
+  return Math.ceil(extra / QR_PACK_SIZE);
 }
+
+/** Pesos owed for `count` QR memories on one album (or a Mini, with its own `free`). */
+export function qrMemoryCharge(count: number, free: number = FREE_QR_MEMORIES): number {
+  return qrPacksFor(count, free) * QR_PACK_PRICE;
+}
+
+/** The bill's line for extra videos: "2 included, 4 extra (2 packs of 3 × ₱100)". */
+export function qrPacksLine(count: number, free: number): string {
+  const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
+  const packs = qrPacksFor(count, free);
+  return `${free} included, ${extra} extra (${packs} ${packs === 1 ? 'pack' : 'packs'} of ${QR_PACK_SIZE} × ₱${QR_PACK_PRICE})`;
+}
+
+/** How extra videos are sold, in a few words: "3 more for ₱100". */
+export const QR_PACK_OFFER = `${QR_PACK_SIZE} more for ₱${QR_PACK_PRICE}`;
+/** The same as a sentence, after "2 … included": "Add more in packs of 3 for ₱100." */
+export const QR_PACK_SENTENCE = `Add more in packs of ${QR_PACK_SIZE} for ₱${QR_PACK_PRICE}.`;
 
 /** Structural view of a page for counting — both QR homes: a QR slot on a
  *  photo layout (`qrFills`) and a QR in a combo/caption box (`textSlotQr`). */
@@ -316,9 +352,8 @@ export function priceBreakdown(
   }
 
   if (qrCharge > 0) {
-    const extraQr = qrMemories - FREE_QR_MEMORIES;
     items.push({
-      label: `Living-memory QR · ${FREE_QR_MEMORIES} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`,
+      label: `Living-memory QR · ${qrPacksLine(qrMemories, FREE_QR_MEMORIES)}`,
       amount: qrCharge,
     });
   }
@@ -336,6 +371,44 @@ export function priceBreakdown(
   }
 
   return { items, total };
+}
+
+/** CUSTOMER-FACING. A Megy Mini's bill (0062): its set price, the shipping
+ *  fee on top (albums ship free, the Mini doesn't), packs of 3 videos past
+ *  its free ones, and the same memory term and HD add-ons as an album. The
+ *  checkout's mirror of order_quote()'s Mini branch: same total to the peso. */
+export function miniPriceBreakdown(
+  schedule: PriceSchedule,
+  offer: MiniOffer,
+  qrMemories = 0,
+  hostingYears: number | null = null,
+  hdMemories = false,
+): PriceBreakdown & { shipping: number } {
+  const free = Math.max(0, Math.floor(offer.free_qr));
+  const qrCharge = qrMemoryCharge(qrMemories, free);
+  const termCharge = hostingTermCharge(schedule, hostingYears);
+  const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
+  const items: PriceLine[] = [
+    {
+      label: `Megy Mini — A5 · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
+      amount: offer.price,
+    },
+    { label: 'Shipping', amount: offer.shipping_fee },
+  ];
+  if (qrCharge > 0) {
+    items.push({ label: `Video memories · ${qrPacksLine(qrMemories, free)}`, amount: qrCharge });
+  }
+  if (termCharge > 0 && hostingYears != null) {
+    const included = includedHostingYears(schedule);
+    items.push({
+      label: `Memories stay live · ${hostingYears} years${included ? ` (${included} included)` : ''}`,
+      amount: termCharge,
+    });
+  }
+  if (hdCharge > 0) {
+    items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
+  }
+  return { items, total: offer.price + offer.shipping_fee + qrCharge + termCharge + hdCharge, shipping: offer.shipping_fee };
 }
 
 // ── Owner side (model supplied by owner_pricing_model()) ────────────────────
