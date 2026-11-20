@@ -4635,6 +4635,15 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.
 
+### Release notes 2.1.5 (code 115: 2.1.4 + longer videos + the upright screen not required; check against the app on upload day)
+
+    <en-US>
+    New:
+    • Longer video memories: up to 3 minutes for ₱199, or up to 5 minutes for ₱399, once per album
+    </en-US>
+
+The line is true only once 0067 is on the live database: before that the app keeps videos at 2 minutes and says nothing about longer ones. If the owner changes the prices (Pricing panel), change the line to match. The upright-screen fix (Play's 2.1.4 warning) changes nothing a customer sees, so it has no line.
+
 ## Events switched off in the app (2026-11-16, `feat/port-remove-events`)
 
 The owner decided on 2026-11-16, in three steps:
