@@ -75,7 +75,7 @@ jest.mock('../src/lib/events/albumEventLink', () => ({
 }));
 // The quality the album's memory videos were made for (read from the phone's store).
 const mockTier = { value: 'standard' as 'standard' | 'hd', asked: [] as string[][] };
-jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; } }));
+jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; }, albumVideoMinutesOnPhone: async () => 2 }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: async () => ({ canceled: true, assets: null }) }));
 // The page renderer (Skia on the phone): the picture it would draw, by what was asked.
 const mockPictures: { page: { id?: string; background?: unknown }; coverMode?: boolean; width: number }[] = [];
