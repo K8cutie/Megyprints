@@ -41,6 +41,15 @@ it('HEVC fails on this phone: H.264 at today\'s bitrate', async () => {
   ]);
 });
 
+it('HEVC came out smaller than asked (a software-only encoder): made again in H.264 at full size', async () => {
+  // The emulator on 2026-11-21: Android's software HEVC encoder stops at
+  // 512×512, so a 720p video came out 512×288. The phone side refuses it.
+  mockNative.fail = ['ERR_HEVC_SMALL'];
+  const r = await shrinkVideo('in.mp4', 'file:///out.mp4', { ...QUALITY_TARGETS.standard, hevcBitrate: HEVC_BITRATES.standard });
+  expect(r.codec).toBe('h264');
+  expect(mockCalls[1]).toEqual({ shortEdge: 720, videoBitrate: 2_200_000, frameRate: 30 });
+});
+
 it('stopped on purpose: no second try', async () => {
   mockNative.fail = ['ERR_CANCELLED'];
   await expect(shrinkVideo('in.mp4', 'file:///out.mp4', { ...QUALITY_TARGETS.standard, hevcBitrate: HEVC_BITRATES.standard })).rejects.toThrow('ERR_CANCELLED');

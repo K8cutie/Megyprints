@@ -31,7 +31,7 @@ it('over 100 MB: shrunk to HD first, sent as MP4', async () => {
   const { d, log } = deps();
   const r = await replaceMemoryVideo('abcd2345', v(250_000_000), d);
   expect(r).toEqual(expect.objectContaining({ ok: true, destination: `${BASE}/storage/v1/object/public/memory-clips/abcd2345.mp4?v=1700` }));
-  expect(log[0]).toEqual(['shrink', 'file:///picked.mov', { longEdge: 1920, shortEdge: 1080, bitrate: 4_500_000, label: '1080p' }]);
+  expect(log[0]).toEqual(['shrink', 'file:///picked.mov', { longEdge: 1920, shortEdge: 1080, bitrate: 4_500_000, label: '1080p', hevcBitrate: 3_000_000 }]);
   expect(log[1]).toEqual(['upload', expect.objectContaining({ ext: 'mp4', uri: 'file:///small.mp4', size: 60_000_000 })]);
 });
 

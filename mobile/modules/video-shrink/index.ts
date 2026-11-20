@@ -1,6 +1,7 @@
 /* The app's own native module that shrinks a memory video on the phone
    (android/src/main/java/expo/modules/megyvideoshrink/VideoShrinkModule.kt):
-   one H.264 + AAC MP4 with its short side at most 720 (Standard) or 1080
+   one MP4 (HEVC when the phone has a hardware HEVC encoder that can make the
+   full size, else H.264, with AAC sound) with its short side at most 720 (Standard) or 1080
    (HD) pixels, at most 30 frames a second, at the tier's bitrate, as the
    website's videoTranscode.ts does in the browser. Google's Media3
    Transformer does the work.
@@ -39,7 +40,8 @@ export async function probeVideo(uri: string): Promise<VideoProbe | null> {
 /** Shrink `input` into `output` (a file:// uri or path) for a quality
  *  target; progress 0–1. Rejects when it can't (the caller keeps the original).
  *  With `hevcBitrate`, HEVC when the phone can make it (owner, 2026-11-21);
- *  if HEVC fails on this phone, H.264 at `bitrate` as before. */
+ *  if HEVC fails on this phone, or comes out smaller than asked
+ *  (ERR_HEVC_SMALL), H.264 at `bitrate` as before. */
 export async function shrinkVideo(
   input: string,
   output: string,

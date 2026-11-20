@@ -9,7 +9,7 @@
    on the phone first (HD, so nothing the album paid for is lost); the
    website uploads what was picked and the bucket refuses one that big.
    ══════════════════════════════════════════════════════════════════════════ */
-import { MAX_CLIP_BYTES, QUALITY_TARGETS, versionedClipUrl, type ClipExt, type StagedClip } from './clips';
+import { HEVC_BITRATES, MAX_CLIP_BYTES, QUALITY_TARGETS, versionedClipUrl, type ClipExt, type StagedClip } from './clips';
 import { checkPicked, type PickedVideo } from '../../editor/memories/memoryFlow';
 
 export const REPLACED = 'Video replaced ✓ — same QR, new memory';
@@ -20,7 +20,7 @@ export interface ReplaceDeps {
   /** clips.ts uploadClip (upsert when `replace`). */
   upload(clip: Pick<StagedClip, 'code' | 'ext' | 'uri' | 'size' | 'replace'>): Promise<void>;
   /** The phone's shrinker; null when this APK has none. */
-  shrink: ((input: string, target: { shortEdge: number; bitrate: number }) => Promise<{ uri: string; size: number }>) | null;
+  shrink: ((input: string, target: { shortEdge: number; bitrate: number; hevcBitrate?: number }) => Promise<{ uri: string; size: number }>) | null;
   relink(code: string, destination: string): Promise<boolean>;
   supabaseUrl: string;
   now(): number;
@@ -33,7 +33,7 @@ export async function replaceMemoryVideo(code: string, v: PickedVideo, d: Replac
   try {
     let file: { uri: string; size: number; ext: ClipExt } = { uri: v.uri, size: v.size, ext: checked.ext };
     if (file.size > MAX_CLIP_BYTES && d.shrink) {
-      const out = await d.shrink(file.uri, QUALITY_TARGETS.hd).catch(() => null);
+      const out = await d.shrink(file.uri, { ...QUALITY_TARGETS.hd, hevcBitrate: HEVC_BITRATES.hd }).catch(() => null);
       if (out && out.size > 0 && out.size < file.size) file = { uri: out.uri, size: out.size, ext: 'mp4' };
     }
     await d.upload({ code, ext: file.ext, uri: file.uri, size: file.size, replace: true });
