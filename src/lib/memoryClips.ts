@@ -41,8 +41,9 @@ export const MAX_CLIP_SECONDS = 120;
 /** Largest file we will accept from the picker (before compression). */
 export const MAX_INPUT_BYTES = 400 * 1024 * 1024;
 /** Largest object the bucket accepts — the ceiling on what we upload
- *  (mirrors `file_size_limit` in migration 0030). */
-export const MAX_CLIP_BYTES = 100 * 1024 * 1024;
+ *  (mirrors `file_size_limit`: 100 MB in 0030, 200 MB from 0067 so a
+ *  5-minute HD video fits). */
+export const MAX_CLIP_BYTES = 200 * 1024 * 1024;
 export const CLIP_BUCKET = 'memory-clips';
 
 /** Accepted container/mime → the extension the object is stored under. Kept
@@ -108,14 +109,18 @@ export function isHostedClipUrl(url: string, base: string = SUPABASE_URL): boole
 
 /** Pure part of validation — testable without a DOM. The size test is against
  *  the SOURCE cap: anything under it is compressed down before upload. */
-export function checkClipMeta(meta: { size: number; durationSec: number | null; ext: ClipExt | null }):
-  { ok: true } | { ok: false; error: string } {
+export function checkClipMeta(
+  meta: { size: number; durationSec: number | null; ext: ClipExt | null },
+  /** The longest allowed: 2 minutes, or 5 when the price list sells longer
+   *  videos (pricing.ts maxVideoSecondsOf, 0067). */
+  maxSeconds: number = MAX_CLIP_SECONDS,
+): { ok: true } | { ok: false; error: string } {
   if (!meta.ext) return { ok: false, error: 'Please choose a video file (MP4, MOV, WebM or M4V).' };
   if (meta.size > MAX_INPUT_BYTES) {
     return { ok: false, error: `That video is ${Math.round(meta.size / 1024 / 1024)} MB — too large to process on a phone. Trim it, or record at a lower quality.` };
   }
-  if (meta.durationSec != null && meta.durationSec > MAX_CLIP_SECONDS + 0.5) {
-    const mins = Math.floor(MAX_CLIP_SECONDS / 60);
+  if (meta.durationSec != null && meta.durationSec > maxSeconds + 0.5) {
+    const mins = Math.floor(maxSeconds / 60);
     return { ok: false, error: `That video is ${Math.round(meta.durationSec)} seconds — memories are up to ${mins} minute${mins === 1 ? '' : 's'}. Trim it to the best moment.` };
   }
   return { ok: true };
