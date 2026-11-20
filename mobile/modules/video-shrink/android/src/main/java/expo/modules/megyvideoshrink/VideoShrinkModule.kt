@@ -1,5 +1,6 @@
 package expo.modules.megyvideoshrink
 
+import android.media.MediaCodecList
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Handler
@@ -32,6 +33,19 @@ class ShrinkOptions : Record {
   @Field val shortEdge: Int = 720
   @Field val videoBitrate: Int = 2_200_000
   @Field val frameRate: Double = 30.0
+  /** HEVC (H.265) at this bitrate when the phone can make it; 0 = H.264 only.
+   *  The same look in about a third less space (owner, 2026-11-21:
+   *  "HEVC is low risk so lets do it"). */
+  @Field val hevcBitrate: Int = 0
+}
+
+/** The phone has an HEVC encoder (most since 2016; the emulator has a software one). */
+private fun hasHevcEncoder(): Boolean = try {
+  MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+    info.isEncoder && info.supportedTypes.any { it.equals(MimeTypes.VIDEO_H265, ignoreCase = true) }
+  }
+} catch (_: Exception) {
+  false
 }
 
 /**
@@ -100,14 +114,17 @@ class VideoShrinkModule : Module() {
       val item = EditedMediaItem.Builder(MediaItem.fromUri(Uri.parse(input)))
         .setEffects(Effects(listOf(), videoEffects))
         .build()
+      // HEVC when asked and the phone can make it, else H.264 as before.
+      val hevc = options.hevcBitrate > 0 && hasHevcEncoder()
       val encoders = DefaultEncoderFactory.Builder(context)
-        .setRequestedVideoEncoderSettings(VideoEncoderSettings.Builder().setBitrate(options.videoBitrate).build())
+        .setRequestedVideoEncoderSettings(
+          VideoEncoderSettings.Builder().setBitrate(if (hevc) options.hevcBitrate else options.videoBitrate).build())
         .build()
 
       val progress = ProgressHolder()
       lateinit var poll: Runnable
       val transformer = Transformer.Builder(context)
-        .setVideoMimeType(MimeTypes.VIDEO_H264)
+        .setVideoMimeType(if (hevc) MimeTypes.VIDEO_H265 else MimeTypes.VIDEO_H264)
         .setAudioMimeType(MimeTypes.AUDIO_AAC)
         .setEncoderFactory(encoders)
         .addListener(object : Transformer.Listener {
@@ -115,7 +132,11 @@ class VideoShrinkModule : Module() {
             main.removeCallbacks(poll)
             running = null
             pending = null
-            promise.resolve(mapOf("uri" to Uri.fromFile(out).toString(), "size" to out.length().toDouble()))
+            promise.resolve(mapOf(
+              "uri" to Uri.fromFile(out).toString(),
+              "size" to out.length().toDouble(),
+              "codec" to (if (hevc) "hevc" else "h264"),
+            ))
           }
 
           override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {

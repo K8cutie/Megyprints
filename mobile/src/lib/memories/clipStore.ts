@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 import { shrinkVideo, videoShrinkAvailable } from '../../../modules/video-shrink';
 import { supabase } from '../supabase';
-import { makeClipStore, QUALITY_TARGETS, type ClipQuality, type StagedClip } from './clips';
+import { HEVC_BITRATES, makeClipStore, QUALITY_TARGETS, type ClipQuality, type StagedClip } from './clips';
 
 /** The index's key (the website's IndexedDB is named megy-memory-clips). */
 export const CLIP_INDEX_KEY = 'megy-memory-clips';
@@ -50,7 +50,8 @@ export const clipStore = makeClipStore({
     shrunkPath: (code, stagedAt) => new File(folder(), `${code}-${stagedAt}-small.mp4`).uri,
   },
   shrink: videoShrinkAvailable
-    ? (input, output, quality, onProgress) => shrinkVideo(input, output, QUALITY_TARGETS[quality], onProgress)
+    ? (input, output, quality, onProgress) =>
+      shrinkVideo(input, output, { ...QUALITY_TARGETS[quality], hevcBitrate: HEVC_BITRATES[quality] }, onProgress)
     : null,
   storage: supabase.storage as never,
   rpc: (name, args) => supabase.rpc(name, args) as never,

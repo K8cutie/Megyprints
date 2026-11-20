@@ -21,7 +21,7 @@ export interface VideoProbe {
 
 interface NativeVideoShrink {
   probe(uri: string): Promise<VideoProbe>;
-  shrink(input: string, output: string, options: { shortEdge: number; videoBitrate: number; frameRate: number }): Promise<{ uri: string; size: number }>;
+  shrink(input: string, output: string, options: { shortEdge: number; videoBitrate: number; frameRate: number; hevcBitrate?: number }): Promise<{ uri: string; size: number; codec?: 'hevc' | 'h264' }>;
   cancel(): Promise<boolean>;
   addListener(event: 'onShrinkProgress', listener: (e: { output: string; progress: number }) => void): { remove(): void };
 }
@@ -37,18 +37,29 @@ export async function probeVideo(uri: string): Promise<VideoProbe | null> {
 }
 
 /** Shrink `input` into `output` (a file:// uri or path) for a quality
- *  target; progress 0–1. Rejects when it can't (the caller keeps the original). */
+ *  target; progress 0–1. Rejects when it can't (the caller keeps the original).
+ *  With `hevcBitrate`, HEVC when the phone can make it (owner, 2026-11-21);
+ *  if HEVC fails on this phone, H.264 at `bitrate` as before. */
 export async function shrinkVideo(
   input: string,
   output: string,
-  target: { shortEdge: number; bitrate: number },
+  target: { shortEdge: number; bitrate: number; hevcBitrate?: number },
   onProgress: (fraction: number) => void = () => {},
-): Promise<{ uri: string; size: number }> {
+): Promise<{ uri: string; size: number; codec?: 'hevc' | 'h264' }> {
   if (!native) throw new Error('This app version cannot shrink videos.');
   const outPath = output.replace(/^file:\/\//, '');
   const sub = native.addListener('onShrinkProgress', (e) => { if (e.output === outPath) onProgress(Math.max(0, Math.min(1, e.progress))); });
+  const base = { shortEdge: target.shortEdge, videoBitrate: target.bitrate, frameRate: 30 };
   try {
-    return await native.shrink(input, outPath, { shortEdge: target.shortEdge, videoBitrate: target.bitrate, frameRate: 30 });
+    if (target.hevcBitrate) {
+      try {
+        return await native.shrink(input, outPath, { ...base, hevcBitrate: target.hevcBitrate });
+      } catch (e) {
+        // Stopped on purpose: stay stopped. Anything else: today's H.264.
+        if ((e as { code?: string })?.code === 'ERR_CANCELLED') throw e;
+      }
+    }
+    return await native.shrink(input, outPath, base);
   } finally {
     sub.remove();
   }

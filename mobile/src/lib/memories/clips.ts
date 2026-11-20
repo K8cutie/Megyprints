@@ -48,6 +48,18 @@ export const QUALITY_TARGETS: Record<ClipQuality, { longEdge: number; shortEdge:
   hd: { longEdge: 1920, shortEdge: 1080, bitrate: 4_500_000, label: '1080p' },
 };
 
+/** THE APP'S OWN (owner, 2026-11-21: "HEVC is low risk so lets do it"): the
+ *  phone makes HEVC (H.265) when it can, at these bitrates, for the same look
+ *  in about a third less space; a phone that can't makes H.264 at
+ *  QUALITY_TARGETS as before. Measured (VMAF, a real "Moving Up" clip and a
+ *  fast-camera version, 720p): H.264 2.2 Mbps 90.7 / 89.0, HEVC 1.5 Mbps
+ *  92.0 / 96.3. Phone encoders are less efficient than the PC's, so not the
+ *  1.2 Mbps the PC needed. HD keeps the same third off (4.5 → 3.0). */
+export const HEVC_BITRATES: Record<ClipQuality, number> = {
+  standard: 1_500_000,
+  hd: 3_000_000,
+};
+
 export function clipExtFor(file: { type?: string; name?: string }): ClipExt | null {
   const byMime = CLIP_EXT_BY_MIME[(file.type || '').toLowerCase()];
   if (byMime) return byMime as ClipExt;
