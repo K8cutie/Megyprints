@@ -60,9 +60,19 @@ beforeEach(() => {
 
 describe('the rules are the website\'s', () => {
   it('the numbers, the kinds of video, the quality targets', () => {
-    for (const k of ['MAX_CLIP_SECONDS', 'MAX_INPUT_BYTES', 'MAX_CLIP_BYTES', 'CLIP_BUCKET', 'CLIP_EXT_BY_MIME', 'CLIP_EXTS', 'QUALITY_TARGETS'] as const) {
+    for (const k of ['MAX_CLIP_SECONDS', 'MAX_CLIP_BYTES', 'CLIP_BUCKET', 'CLIP_EXT_BY_MIME', 'CLIP_EXTS', 'QUALITY_TARGETS'] as const) {
       expect(app[k]).toEqual(web[k]);
     }
+  });
+
+  it("the app's own input limit: the phone shrinks as it reads, so a 5-minute phone video fits", () => {
+    // The website reads a video into memory (400 MB); the app's shrinker
+    // (Media3) streams it. 5 minutes at 1080p from a phone is about 640 MB.
+    expect(web.MAX_INPUT_BYTES).toBe(400 * 1024 * 1024);
+    expect(app.MAX_INPUT_BYTES).toBe(1024 * 1024 * 1024);
+    // A 5-minute HD video after shrinking still fits the bucket (0067: 200 MB).
+    const hd5 = ((app.QUALITY_TARGETS.hd.bitrate + 128_000) / 8) * 300;
+    expect(hd5).toBeLessThan(app.MAX_CLIP_BYTES);
   });
 
   it('which files are videos: the same answer on many inputs', () => {
@@ -83,11 +93,18 @@ describe('the rules are the website\'s', () => {
   it('the checks and their words: the same on many inputs', () => {
     const metas = [
       { size: 10, durationSec: 30, ext: 'mp4' }, { size: 10, durationSec: null, ext: 'mov' }, { size: 10, durationSec: 5, ext: null },
-      { size: 401 * 1024 * 1024, durationSec: 10, ext: 'mp4' }, { size: 10, durationSec: 120.4, ext: 'mp4' }, { size: 10, durationSec: 121, ext: 'webm' },
+      { size: 10, durationSec: 120.4, ext: 'mp4' }, { size: 10, durationSec: 121, ext: 'webm' },
       { size: 400 * 1024 * 1024, durationSec: 600, ext: 'mp4' },
     ] as const;
-    for (const m of metas) expect(app.checkClipMeta(m as never)).toEqual(web.checkClipMeta(m));
+    for (const m of metas) {
+      expect(app.checkClipMeta(m as never)).toEqual(web.checkClipMeta(m));
+      // With longer videos on sale (0067): up to 5 minutes, the same words.
+      expect(app.checkClipMeta(m as never, 300)).toEqual(web.checkClipMeta(m, 300));
+    }
     expect(app.checkClipMeta({ size: 10, durationSec: 121, ext: 'mp4' })).toEqual({ ok: false, error: 'That video is 121 seconds — memories are up to 2 minutes. Trim it to the best moment.' });
+    expect(app.checkClipMeta({ size: 10, durationSec: 600, ext: 'mp4' }, 300)).toEqual({ ok: false, error: 'That video is 600 seconds — memories are up to 5 minutes. Trim it to the best moment.' });
+    // Too big: the same words past each one's own limit.
+    expect(app.checkClipMeta({ size: 1100 * 1024 * 1024, durationSec: 10, ext: 'mp4' })).toEqual(web.checkClipMeta({ size: 1100 * 1024 * 1024, durationSec: 10, ext: 'mp4' }));
   });
 
   it('a video that is gone: the website\'s words, and the checkout\'s with the pages named', () => {
@@ -138,10 +155,10 @@ describe('the rules are the website\'s', () => {
 
   it('a video still too big after shrinking: the website\'s words, nothing sent', async () => {
     const files = memFiles();
-    files.sizes.set('file:///kept/big.mp4', 101 * 1024 * 1024);
+    files.sizes.set('file:///kept/big.mp4', 201 * 1024 * 1024);
     const store = makeClipStore(deps(files));
     const big = new Blob([]);
-    Object.defineProperty(big, 'size', { value: 101 * 1024 * 1024 });
+    Object.defineProperty(big, 'size', { value: 201 * 1024 * 1024 });
     const webErr = await web.uploadClip('abcd2345', 'mp4', big).catch((e: Error) => e.message);
     await expect(store.uploadClip({ code: 'abcd2345', ext: 'mp4', uri: 'file:///kept/big.mp4', size: 1, durationSec: 1, name: 'b', stagedAt: 1 })).rejects.toThrow(webErr);
     expect(mockStorage.calls).toHaveLength(0);

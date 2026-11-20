@@ -93,6 +93,9 @@ export interface OrderInsertInput {
   shipping: ShippingDetails;
   hostingYears?: number | null;
   hdMemories?: boolean;
+  /** The album's longest-video tier (0067). Sent only when it is 3 or 5, so
+   *  a database before 0067 never sees the column. */
+  videoMinutes?: number | null;
   testerCode?: string | null;
   /** An affiliate code the database said works (0061): it decides again on
    *  the insert, then asks the discount less, or refuses (MP009). */
@@ -130,6 +133,7 @@ export function buildOrderInsert(opts: OrderInsertInput): Record<string, unknown
     ship_zip: addr.zip.trim(),
     hosting_years: opts.hostingYears ?? null,
     hd_memories: !!opts.hdMemories,
+    ...(opts.videoMinutes === 3 || opts.videoMinutes === 5 ? { video_minutes: opts.videoMinutes } : {}),
     ...(opts.testerCode ? { tester_code: opts.testerCode } : {}),
     // The same for an affiliate code: only named with one (0061, the website's lib/orders.ts).
     ...(opts.affiliateCode ? { affiliate_code: opts.affiliateCode } : {}),

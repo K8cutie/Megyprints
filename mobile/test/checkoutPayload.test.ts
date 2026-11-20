@@ -175,6 +175,16 @@ describe("the order row is the website's, key by key", () => {
     if (compared.length) console.log(`order rows compared: ${compared.length} cases, ${compared.map((c) => `${c.keys} keys / ${c.bytes} bytes`).join('; ')}`);
   });
 
+  it('longer videos (0067): the order names its tier only when it is 3 or 5 minutes', async () => {
+    const address = await addressIn('Metro Manila', 'Quezon City', 0, '12 Mabini Street', '1100');
+    const base = { userId: 'u', album: fixture.row, specs: { material: 'matte', cover: 'softcover', size: '8x8' } as const, shipping: { name: 'Juan Dela Cruz', phone: '09171234567', address }, now: NOW };
+    expect(buildOrderInsert({ ...base, videoMinutes: 5 }).video_minutes).toBe(5);
+    expect(buildOrderInsert({ ...base, videoMinutes: 3 }).video_minutes).toBe(3);
+    // 2 minutes or none: no key at all, so a database before 0067 never sees it.
+    expect('video_minutes' in buildOrderInsert({ ...base, videoMinutes: 2 })).toBe(false);
+    expect('video_minutes' in buildOrderInsert(base)).toBe(false);
+  });
+
   it('an empty address is refused before anything is sent', () => {
     const base = { userId: 'u', album: fixture.row, specs: { material: 'matte', cover: 'softcover', size: '8x8' }, shipping: { name: 'Juan Dela Cruz', phone: '09171234567', address: { ...EMPTY_ADDRESS } }, now: NOW };
     expect(() => buildOrderInsert(base)).toThrow(SHIPPING_INVALID);

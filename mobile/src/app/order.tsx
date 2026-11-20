@@ -78,7 +78,8 @@ import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedu
 import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
-import { albumClipTier } from '../lib/memories/albumTier';
+import { albumClipTier, albumVideoMinutesOnPhone } from '../lib/memories/albumTier';
+import type { VideoMinutes } from '@web/lib/pricing';
 import { dropEventLink, readEventLink, saveEventLink } from '../lib/events/albumEventLink';
 import * as EV from '../lib/events/eventDeal';
 import { MissingClipError, missingClipMessage, type ClipQuality } from '../lib/memories/clips';
@@ -306,17 +307,21 @@ export default function OrderScreen() {
   // HD memories: the quality the album's videos were made for (the website's
   // albumTier), read before the price is shown.
   const clipKey = albumQrFills(album.pages).filter((f) => f?.kind === 'clip').map((f) => f!.code).join(',');
-  const [clipTier, setClipTier] = useState<{ key: string; tier: ClipQuality } | null>(null);
+  // Longer videos (0067): the album's longest video kept on this phone.
+  const [clipTier, setClipTier] = useState<{ key: string; tier: ClipQuality; minutes: VideoMinutes } | null>(null);
   useEffect(() => {
     if (!clipKey) return;
     let alive = true;
-    void albumClipTier(clipKey.split(',')).then((tier) => { if (alive) setClipTier({ key: clipKey, tier }); });
+    const codes = clipKey.split(',');
+    void Promise.all([albumClipTier(codes), albumVideoMinutesOnPhone(codes)])
+      .then(([tier, minutes]) => { if (alive) setClipTier({ key: clipKey, tier, minutes }); });
     return () => { alive = false; };
   }, [clipKey]);
   const clipTierReady = !clipKey || clipTier?.key === clipKey;
   const hdMemories = !eventLink && qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
+  const videoMinutes = !eventLink && qrCount > 0 && !!clipKey && clipTier?.key === clipKey ? clipTier.minutes : 2;
   // An event album: the included term, no tester code (its booking pays).
-  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, tester: eventLink ? null : tester, affiliate: eventLink || tester ? null : affiliate });
+  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, videoMinutes, tester: eventLink ? null : tester, affiliate: eventLink || tester ? null : affiliate });
   const price = clipTierReady ? priced : { ...priced, ready: false };
 
   // The bar's steps for this album (made once: a re-render must not restart the bar).
@@ -372,6 +377,7 @@ export default function OrderScreen() {
         shipping: { name: cleanName, phone: cleanPhone, address },
         hostingYears: price.effectiveYears,
         hdMemories,
+        videoMinutes,
         testerCode: eventLink ? null : tester?.code ?? null,
         affiliateCode: eventLink || tester ? null : affiliate?.code ?? null,
         includedYears: price.includedYears,

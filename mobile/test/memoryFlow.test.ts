@@ -13,7 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { AlbumPage, QrFill } from '@web/pages/builder/types';
-import { albumQuality, changeMemory, checkPicked, CODE_ALPHABET, mintCode, newMemory, removeMemory, safeHost, type FlowDeps, type PickedVideo } from '../src/editor/memories/memoryFlow';
+import { albumQuality, albumVideoTier, changeMemory, checkPicked, CODE_ALPHABET, mintCode, newMemory, removeMemory, safeHost, type FlowDeps, type PickedVideo } from '../src/editor/memories/memoryFlow';
 import type { StagedClip } from '../src/lib/memories/clips';
 
 const REPO = path.resolve(__dirname, '..', '..');
@@ -63,8 +63,34 @@ describe('a picked video', () => {
     expect(checkPicked({ ...video, type: '', name: 'VID.MOV' })).toEqual({ ok: true, ext: 'mov', durationSec: 42 });
     expect(checkPicked({ ...video, durationSec: 150 })).toEqual({ ok: false, error: 'That video is 150 seconds — memories are up to 2 minutes. Trim it to the best moment.' });
     expect(checkPicked({ ...video, type: 'image/jpeg', name: 'a.jpg' })).toEqual({ ok: false, error: 'Please choose a video file (MP4, MOV, WebM or M4V).' });
-    expect(checkPicked({ ...video, size: 500 * 1024 * 1024 })).toEqual({ ok: false, error: 'That video is 500 MB — too large to process on a phone. Trim it, or record at a lower quality.' });
+    // The phone shrinks as it reads (clips.ts MAX_INPUT_BYTES, 1 GB): a 5-minute
+    // phone video of about 640 MB goes in; past 1 GB, the website's words.
+    expect(checkPicked({ ...video, size: 640 * 1024 * 1024 })).toEqual({ ok: true, ext: 'mp4', durationSec: 42 });
+    expect(checkPicked({ ...video, size: 1100 * 1024 * 1024 })).toEqual({ ok: false, error: 'That video is 1100 MB — too large to process on a phone. Trim it, or record at a lower quality.' });
     expect(checkPicked({ ...video, durationSec: null })).toEqual({ ok: true, ext: 'mp4', durationSec: null });
+  });
+
+  it('with longer videos on sale (0067): up to 5 minutes, then the same words', () => {
+    expect(checkPicked({ ...video, durationSec: 150 }, 300)).toEqual({ ok: true, ext: 'mp4', durationSec: 150 });
+    expect(checkPicked({ ...video, durationSec: 300 }, 300)).toEqual({ ok: true, ext: 'mp4', durationSec: 300 });
+    expect(checkPicked({ ...video, durationSec: 301 }, 300)).toEqual({ ok: false, error: 'That video is 301 seconds — memories are up to 5 minutes. Trim it to the best moment.' });
+  });
+});
+
+describe("the album's video tier: its longest video kept on the phone (0067)", () => {
+  const clip = (code: string): QrFill => ({ code, destination: '', qrPngDataUrl: '', memoryUrl: '', createdAt: 0, kind: 'clip', clipExt: 'mp4' });
+  const pages = [{ qrFills: [clip('aaaa2222')] }, { qrFills: [clip('bbbb3333')], textSlotQr: [clip('cccc4444')] }] as unknown as AlbumPage[];
+  const lengths: Record<string, number | null> = { aaaa2222: 40, bbbb3333: 170, cccc4444: 250 };
+  const store = { getStagedClip: async (c: string) => (c in lengths ? { durationSec: lengths[c] } : null) } as never;
+
+  it('the longest decides: 4 min 10 s → 5', async () => {
+    expect(await albumVideoTier(pages, store)).toBe(5);
+  });
+  it('replacing the long one: the next longest, 2 min 50 s → 3', async () => {
+    expect(await albumVideoTier(pages, store, 'cccc4444')).toBe(3);
+  });
+  it('videos not on this phone count as included', async () => {
+    expect(await albumVideoTier([{ qrFills: [clip('zzzz9999')] }] as unknown as AlbumPage[], store)).toBe(2);
   });
 });
 

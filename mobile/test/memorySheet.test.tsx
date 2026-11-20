@@ -43,12 +43,12 @@ jest.mock('../src/editor/memories/pickVideo', () => ({ pickVideoFromPhone: async
 jest.mock('../src/editor/memories/VideoPreview', () => ({ VideoPreview: ({ uri, testID }: { uri: string; testID?: string }) => jest.requireActual('react').createElement('VideoPreview', { uri, testID }) }));
 jest.mock('../src/lib/memories/qrPicture', () => ({ qrPngDataUrlOnPhone: (url: string) => `data:image/png;base64,QR(${url})` }));
 jest.mock('expo-crypto', () => ({ getRandomBytes: (n: number) => Uint8Array.from({ length: n }, (_, i) => i) }));
-const mockKept: Record<string, { code: string; quality?: string; uploaded?: boolean; uri: string; replace?: boolean }> = {};
+const mockKept: Record<string, { code: string; quality?: string; uploaded?: boolean; uri: string; replace?: boolean; durationSec?: number | null }> = {};
 const mockQuality = { value: 'standard' };
 jest.mock('../src/lib/memories/clipStore', () => ({
   clipStore: {
     getStagedClip: async (code: string) => mockKept[code] ?? null,
-    stageClip: async (c: { code: string; from: string; quality?: string; replace?: boolean }) => { mockKept[c.code] = { code: c.code, quality: c.quality, uri: `file:///kept/${c.code}`, replace: c.replace }; return mockKept[c.code]; },
+    stageClip: async (c: { code: string; from: string; quality?: string; replace?: boolean; durationSec?: number | null }) => { mockKept[c.code] = { code: c.code, quality: c.quality, uri: `file:///kept/${c.code}`, replace: c.replace, durationSec: c.durationSec ?? null }; return mockKept[c.code]; },
     removeStagedClip: async (code: string) => { delete mockKept[code]; },
     listStagedCodes: async () => Object.keys(mockKept),
     stagedClipQuality: async (codes: string[]) => (codes.some((c) => mockKept[c]?.quality === 'hd') ? 'hd' : codes.length ? 'standard' : null),
@@ -305,5 +305,70 @@ describe('a memory already on the page', () => {
     expect(log.closed).toBe(1);
     expect(builder().albumPages[i].qrFills?.some(Boolean) ?? false).toBe(false);
     expect(mockKept.abcdefgh).toBeUndefined();
+  });
+});
+
+describe('longer videos (owner, 2026-11-20; 0067)', () => {
+  beforeEach(() => {
+    mockSchedule.value = { ...mockSchedule.value, long_video_prices: { '3': 199, '5': 399 } };
+  });
+
+  it('the offer, then a 4-minute video: its price said, and on the button; "Place QR" keeps it', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    const i = await singlePhotoPage();
+    const log = await show(platform, { mode: 'add' });
+    expect(textOf()).toContain('Longer videos: up to 3 minutes ₱199, up to 5 minutes ₱399, once for this album.');
+    mockPicks.push(video({ durationSec: 250 }));
+    await press('memory-pick');
+    expect(has('memory-error')).toBe(false);
+    expect(textOf()).toContain('This video is 4 min 10 s. Videos up to 5 minutes for this album: ₱399, one time, added at checkout.');
+    expect(textOf()).toContain(W.SHORTER_OPTION);
+    expect(textOf()).toContain('Place QR · +₱399');
+    await press('memory-save');
+    expect(log.closed).toBe(1);
+    expect(builder().albumPages[i].qrFills?.some(Boolean)).toBe(true);
+    expect(Object.values(mockKept).map((k) => k.durationSec)).toEqual([250]);
+  });
+
+  it('a 2 min 50 s video: the 3-minute price', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    mockPicks.push(video({ durationSec: 170 }));
+    await press('memory-pick');
+    expect(textOf()).toContain('This video is 2 min 50 s. Videos up to 3 minutes for this album: ₱199, one time, added at checkout.');
+    expect(textOf()).toContain('Place QR · +₱199');
+  });
+
+  it('up to 2 minutes: no notice, no price', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    mockPicks.push(video({ durationSec: 100 }));
+    await press('memory-pick');
+    expect(has('memory-longer')).toBe(false);
+    expect(textOf()).toContain('Place QR');
+    expect(textOf()).not.toContain('+₱');
+  });
+
+  it('over 5 minutes: the website\'s words, nothing picked', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    mockPicks.push(video({ durationSec: 320 }));
+    await press('memory-pick');
+    expect(textOf()).toContain('That video is 320 seconds — memories are up to 5 minutes. Trim it to the best moment.');
+    expect(has('memory-preview')).toBe(false);
+  });
+
+  it('a price list without them (before 0067): still up to 2 minutes, no offer', async () => {
+    mockSchedule.value = { hosting_tiers: [{ years: 5, price: 0 }], hd_memories_price: 150 };
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    expect(has('memory-longer-offer')).toBe(false);
+    mockPicks.push(video({ durationSec: 170 }));
+    await press('memory-pick');
+    expect(textOf()).toContain('That video is 170 seconds — memories are up to 2 minutes. Trim it to the best moment.');
   });
 });
