@@ -31,6 +31,7 @@
       "expo-router",
       "expo-status-bar",
       "./plugins/withShortCmakeObjectPaths",
+      "./plugins/withPortraitOptional",
       [
         "expo-media-library",
         {
