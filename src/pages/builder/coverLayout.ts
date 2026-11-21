@@ -262,9 +262,10 @@ export function fitSpineLine(
 }
 
 /** The smallest the spine title gets before it is shortened: 18 px (≈4.3 pt
- *  at 300 dpi), the size a thin softcover spine already prints at. One floor
- *  for every cover, so whether a title is shortened doesn't hang on the cover
- *  type chosen at checkout — the editor (which can't know it yet) tells the truth. */
+ *  at 300 dpi). One floor for every cover, so whether a title is shortened
+ *  doesn't hang on the cover type or finish chosen at checkout — the editor
+ *  (which can't know them yet) tells the truth. A spine too thin for 18 px
+ *  prints that same line at its own size. */
 export const SPINE_MIN_FONT_PX = 18;
 
 /** Dark and light spine inks, for a title colour that would not show. */
@@ -355,13 +356,17 @@ export function deriveSpine(front: AlbumPage, g: CoverWrapGeometry, measure: Spi
   // The line runs up the spine inside the same safe inset the print canvas
   // draws in (insetRect(spine, safeInsetPx)).
   const length = g.panels.spine.height - 2 * g.safeInsetPx;
-  const fit = fitSpineLine(title, text, spineFontSize, Math.min(spineFontSize, SPINE_MIN_FONT_PX), length, measure);
+  // Whether it is shortened is decided at the ONE floor, whatever the cover,
+  // finish or page count: a thin softcover spine (14 px on 40 pages of C2S
+  // 120) then prints the same line, only smaller.
+  const fit = fitSpineLine(title, text, Math.max(spineFontSize, SPINE_MIN_FONT_PX), SPINE_MIN_FONT_PX, length, measure);
+  const fontSize = Math.min(fit.fontSize, spineFontSize);
   const ink = spineInk(text, bg);
   return {
-    text: { ...text, text: fit.text, fontSize: fit.fontSize, color: ink },
+    text: { ...text, text: fit.text, fontSize, color: ink },
     bg,
     title,
-    shrunk: fit.fontSize < spineFontSize,
+    shrunk: fontSize < spineFontSize,
     shortened: fit.shortened,
     inkChanged: ink !== text.color,
   };
