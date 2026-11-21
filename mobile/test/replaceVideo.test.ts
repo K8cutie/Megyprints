@@ -6,7 +6,7 @@
    recorded and the free plan's 50 MB cap refused it. Then it is uploaded over
    the old one and the memory points at a new address (the website's steps).
    ══════════════════════════════════════════════════════════════════════════ */
-import { replaceMemoryVideo, replaceQuality, NOT_REPOINTED, UPLOADING_VIDEO, type ReplaceDeps } from '../src/lib/memories/replaceVideo';
+import { replaceLimits, replaceMemoryVideo, NO_ORDER_LIMITS, NOT_REPOINTED, UPLOADING_VIDEO, type ReplaceDeps } from '../src/lib/memories/replaceVideo';
 
 const BASE = 'https://example.supabase.co';
 const HD_HEVC = { longEdge: 1920, shortEdge: 1080, bitrate: 4_500_000, label: '1080p', hevcBitrate: 3_000_000 };
@@ -53,24 +53,45 @@ it('a small video is shrunk too (every replacement, like a new video)', async ()
 it('made at the quality the album\'s videos were paid for: a Standard album\'s video at Standard', async () => {
   // On the emulator (no HEVC chip) an always-HD 110 s video came out 64 MB,
   // over the free plan's 50 MB; at Standard it is about 35 MB on any phone.
-  const { d, log } = deps({ quality: async () => 'standard' });
+  const { d, log } = deps({ limits: async () => ({ quality: 'standard', maxSeconds: 120 }) });
   await replaceMemoryVideo('abcd2345', v(116_000_000), d);
   expect(log[0]).toEqual(['shrink', 'file:///picked.mov', { longEdge: 1280, shortEdge: 720, bitrate: 2_200_000, label: '720p', hevcBitrate: 1_500_000 }]);
   // The quality can't be read: HD, never less than was paid for.
-  const failing = deps({ quality: async () => { throw new Error('offline'); } });
+  const failing = deps({ limits: async () => { throw new Error('offline'); } });
   await replaceMemoryVideo('abcd2345', v(116_000_000), failing.d);
   expect(failing.log[0]).toEqual(['shrink', 'file:///picked.mov', HD_HEVC]);
 });
 
-it('replaceQuality: HD when an order printing this QR paid for HD; Standard when none did; HD when no order prints it', () => {
+it('replaceLimits: the quality and length the orders printing this QR paid for', () => {
   const snap = (code: string) => ({ pages: [{ qrFills: [{ code, kind: 'clip', destination: 'x' }] }] });
   const std = { hd_memories: false, status: 'delivered', album_snapshot: snap('abcd2345') };
   const hd = { hd_memories: true, status: 'paid', album_snapshot: snap('abcd2345') };
-  expect(replaceQuality([std], 'abcd2345')).toBe('standard');
-  expect(replaceQuality([std, hd], 'abcd2345')).toBe('hd');
-  expect(replaceQuality([std, { ...hd, status: 'cancelled' }], 'abcd2345')).toBe('standard');
-  expect(replaceQuality([{ ...hd, album_snapshot: snap('zzzz9999') }, { ...std, album_snapshot: snap('zzzz9999') }], 'abcd2345')).toBe('hd');
-  expect(replaceQuality(null, 'abcd2345')).toBe('hd');
+  // Quality: HD when one paid for HD; Standard when none did.
+  expect(replaceLimits([std], 'abcd2345')).toEqual({ quality: 'standard', maxSeconds: 120 });
+  expect(replaceLimits([std, hd], 'abcd2345').quality).toBe('hd');
+  expect(replaceLimits([std, { ...hd, status: 'cancelled' }], 'abcd2345').quality).toBe('standard');
+  // Length: the longest any paid for (0067's orders.video_minutes); absent (before 0067) or 2 = 2 minutes.
+  expect(replaceLimits([{ ...std, video_minutes: 3 }], 'abcd2345').maxSeconds).toBe(180);
+  expect(replaceLimits([{ ...std, video_minutes: 3 }, { ...hd, video_minutes: 5 }], 'abcd2345').maxSeconds).toBe(300);
+  expect(replaceLimits([{ ...std, video_minutes: null }, { ...hd, video_minutes: 2 }], 'abcd2345').maxSeconds).toBe(120);
+  expect(replaceLimits([std, { ...hd, video_minutes: 5, status: 'cancelled' }], 'abcd2345').maxSeconds).toBe(120);
+  // No order prints this QR, or none read: HD, and 2 minutes (never more than was paid for).
+  expect(replaceLimits([{ ...hd, video_minutes: 5, album_snapshot: snap('zzzz9999') }, { ...std, album_snapshot: snap('zzzz9999') }], 'abcd2345')).toEqual(NO_ORDER_LIMITS);
+  expect(replaceLimits(null, 'abcd2345')).toEqual({ quality: 'hd', maxSeconds: 120 });
+});
+
+it('as long as the album paid for: a 4-minute video on a 5-minute album goes in; on a 2-minute album it is refused', async () => {
+  const long = { ...v(200_000_000), durationSec: 240 };
+  const five = deps({ limits: async () => ({ quality: 'standard', maxSeconds: 300 }) });
+  expect(await replaceMemoryVideo('abcd2345', long, five.d)).toEqual(expect.objectContaining({ ok: true }));
+  const three = deps({ limits: async () => ({ quality: 'standard', maxSeconds: 180 }) });
+  expect(await replaceMemoryVideo('abcd2345', long, three.d)).toEqual({ ok: false, text: 'That video is 240 seconds — memories are up to 3 minutes. Trim it to the best moment.' });
+  const two = deps({ limits: async () => ({ quality: 'hd', maxSeconds: 120 }) });
+  expect(await replaceMemoryVideo('abcd2345', long, two.d)).toEqual({ ok: false, text: 'That video is 240 seconds — memories are up to 2 minutes. Trim it to the best moment.' });
+  expect(two.log).toEqual([]);
+  // The orders can't be read: up to 2 minutes.
+  const offline = deps({ limits: async () => { throw new Error('offline'); } });
+  expect(await replaceMemoryVideo('abcd2345', long, offline.d)).toEqual(expect.objectContaining({ ok: false }));
 });
 
 it('the shrunk copy is no smaller, the shrink fails, or this app has no shrinker: sent as picked', async () => {

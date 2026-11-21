@@ -25,7 +25,7 @@ import {
 } from '../lib/memories/memories';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { deletedNotice, deleteMemoryEverywhere, memoryDeleteWarning, memoryPlaces } from '../lib/memories/removal';
-import { replaceMemoryVideo, replaceQuality, type OrderVideoQuality, type ReplaceDeps } from '../lib/memories/replaceVideo';
+import { replaceLimits, replaceMemoryVideo, type OrderVideoQuality, type ReplaceDeps } from '../lib/memories/replaceVideo';
 import { pickVideoFromPhone } from '../editor/memories/pickVideo';
 import { VideoPreview } from '../editor/memories/VideoPreview';
 import { colors, space } from '../lib/theme';
@@ -50,12 +50,17 @@ const replaceDeps: ReplaceDeps = {
   now: () => Date.now(),
 };
 
-/** Replace video's quality for this account's memory: the one its album's
- *  videos were paid for (replaceQuality). */
-async function replaceQualityOf(userId: string, code: string) {
-  const { data, error } = await (supabase as unknown as SupabaseClient)
-    .from('orders').select('hd_memories, status, album_snapshot').eq('user_id', userId);
-  return replaceQuality(error ? null : (data as OrderVideoQuality[] | null), code);
+/** Replace video's quality and length for this account's memory: the ones
+ *  its album's videos were paid for (replaceLimits). Before 0067 is on the
+ *  server there is no orders.video_minutes, so that read fails and it asks
+ *  again without it (every video up to 2 minutes then). */
+async function replaceLimitsOf(userId: string, code: string) {
+  const orders = (supabase as unknown as SupabaseClient).from('orders');
+  const withMinutes = await orders.select('hd_memories, status, album_snapshot, video_minutes').eq('user_id', userId);
+  const read = withMinutes.error
+    ? await orders.select('hd_memories, status, album_snapshot').eq('user_id', userId)
+    : withMinutes;
+  return replaceLimits(read.error ? null : (read.data as OrderVideoQuality[] | null), code);
 }
 
 export default function Memories() {
@@ -126,7 +131,7 @@ function MemoryRow({ row, pending, userId, onRemoved }: {
     if (!v) return;
     setSaving(true);
     setMsg(null);
-    const r = await replaceMemoryVideo(row.code, v, { ...replaceDeps, quality: (code) => replaceQualityOf(userId, code) }, setStep);
+    const r = await replaceMemoryVideo(row.code, v, { ...replaceDeps, limits: (code) => replaceLimitsOf(userId, code) }, setStep);
     setSaving(false);
     setStep(null);
     if (r.ok) { setSaved(r.destination); setDest(r.destination); }
