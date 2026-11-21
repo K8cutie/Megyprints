@@ -7,8 +7,9 @@
    Every memory, newest first: the address its printed QR opens ("Share
    link"), its scans, how long a video is kept, a longer term waiting on
    payment. A link memory is re-pointed here (the printed QR stays the same).
-   A video memory plays here, and "Replace video" puts a new video behind
-   the same printed QR (lib/memories/replaceVideo.ts). "Delete" asks first,
+   A video memory plays here. "Replace video" puts a new video behind the
+   same printed QR (lib/memories/replaceVideo.ts); it is switched off for now
+   (REPLACE_VIDEO_ON, owner 2026-11-21), so it isn't shown. "Delete" asks first,
    saying where the QR is, then takes it off the account's albums too
    (lib/memories/removal.ts), as the website does.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -25,7 +26,7 @@ import {
 } from '../lib/memories/memories';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { deletedNotice, deleteMemoryEverywhere, memoryDeleteWarning, memoryPlaces } from '../lib/memories/removal';
-import { replaceLimits, replaceMemoryVideo, type OrderVideoQuality, type ReplaceDeps } from '../lib/memories/replaceVideo';
+import { REPLACE_VIDEO_ON, replaceLimits, replaceMemoryVideo, type OrderVideoQuality, type ReplaceDeps } from '../lib/memories/replaceVideo';
 import { pickVideoFromPhone } from '../editor/memories/pickVideo';
 import { VideoPreview } from '../editor/memories/VideoPreview';
 import { colors, space } from '../lib/theme';
@@ -183,8 +184,12 @@ function MemoryRow({ row, pending, userId, onRemoved }: {
       {isClip ? (
         <View style={styles.gap}>
           <VideoPreview uri={saved} testID={`memory-video-${row.code}`} />
-          <Button label="Replace video" busy={saving} onPress={() => { if (!saving) void replace(); }} testID={`memory-replace-${row.code}`} />
-          {saving && !!step && <Text style={styles.small} testID={`memory-replace-step-${row.code}`}>{step}</Text>}
+          {REPLACE_VIDEO_ON && (
+            <>
+              <Button label="Replace video" busy={saving} onPress={() => { if (!saving) void replace(); }} testID={`memory-replace-${row.code}`} />
+              {saving && !!step && <Text style={styles.small} testID={`memory-replace-step-${row.code}`}>{step}</Text>}
+            </>
+          )}
         </View>
       ) : (
         <View style={styles.gap}>

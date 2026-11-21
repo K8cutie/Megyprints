@@ -8,7 +8,9 @@
        a new place to go), the website's words when the link isn't allowed;
      • a video memory: it plays here; "Replace video" puts a new video
        behind the same QR (a new address, so phones that played the old one
-       don't keep showing it); the website's words when it can't;
+       don't keep showing it); the website's words when it can't. It is
+       switched off for now (owner, 2026-11-21: "add that feature in .5 but
+       disable it for now"), so there is no Replace button;
      • "Delete" asks first, saying where the QR is, then takes it off the
        account's albums; "Keep it" keeps it;
      • "Share link" shares the QR's address;
@@ -28,6 +30,14 @@ jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockRoute
 const mockPicks: unknown[] = [];
 jest.mock('../src/editor/memories/pickVideo', () => ({ pickVideoFromPhone: async () => mockPicks.shift() ?? null }));
 jest.mock('../src/editor/memories/VideoPreview', () => ({ VideoPreview: ({ uri, testID }: { uri: string; testID?: string }) => jest.requireActual('react').createElement('VideoPreview', { uri, testID }) }));
+// Replace video on (as built) or off (owner, 2026-11-21: replaceVideo.ts REPLACE_VIDEO_ON), per test.
+// A getter (defined, not spread: a spread would read it once, too early).
+const mockReplace = { on: true };
+jest.mock('../src/lib/memories/replaceVideo', () => {
+  const m = { ...jest.requireActual('../src/lib/memories/replaceVideo') };
+  Object.defineProperty(m, 'REPLACE_VIDEO_ON', { get: () => mockReplace.on, enumerable: true });
+  return m;
+});
 const mockUploads: unknown[] = [];
 const mockUploadError = { value: null as string | null };
 jest.mock('../src/lib/memories/clipStore', () => ({
@@ -48,6 +58,7 @@ beforeEach(() => {
   mem.memories = ROWS.map((r) => ({ ...r }));
   mockAuth.session = { user: { id: 'user-1' } };
   mockRouter.push.mockClear();
+  mockReplace.on = true;
   mockPicks.length = 0;
   mockUploads.length = 0;
   mockUploadError.value = null;
@@ -95,6 +106,18 @@ describe('My Memories', () => {
     await fireEvent.press(screen.getByTestId('memory-save-abcd2345'));
     expect(await screen.findByText('Supported: YouTube, Vimeo, Spotify, Instagram, Facebook, TikTok, Google Drive/Photos.')).toBeOnTheScreen();
     expect(mem.calls.some((c) => c.op === 'update')).toBe(false);
+  });
+
+  it('Replace video is switched off for now: the video plays, and there is no Replace button', async () => {
+    expect((jest.requireActual('../src/lib/memories/replaceVideo') as { REPLACE_VIDEO_ON: boolean }).REPLACE_VIDEO_ON).toBe(false);
+    mockReplace.on = false;
+    await open();
+    expect(screen.getByTestId('memory-video-wxyz6789').props.uri).toBe(CLIP);
+    expect(screen.queryByTestId('memory-replace-wxyz6789')).toBeNull();
+    expect(screen.queryByText('Replace video')).toBeNull();
+    // Everything else on the card is still there.
+    expect(screen.getByTestId('memory-share-wxyz6789')).toBeOnTheScreen();
+    expect(screen.getByTestId('memory-delete-wxyz6789')).toBeOnTheScreen();
   });
 
   it('a video memory plays here; "Replace video": the same QR, the new video at a new address', async () => {
