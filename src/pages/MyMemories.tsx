@@ -5,6 +5,7 @@ import { useAuth } from '../lib/authContext';
 import { memoryUrl, generateQrPngDataUrl, validateDestination } from '../lib/qrMemory';
 import { validateClipFile, uploadClip, versionedClipUrl, isHostedClipUrl } from '../lib/memoryClips';
 import { memoryPlaces, memoryDeleteWarning, deleteMemoryEverywhere } from '../lib/memoryRemoval';
+import { REPLACE_VIDEO_ON } from '../lib/replaceVideoSwitch';
 
 const fmtMonth = (iso: string) => {
   const d = new Date(iso);
@@ -209,11 +210,14 @@ function MemoryRow({ row, thumb, highlight, pending, userId, onRemoved }: {
         {isClip ? (
           <div>
             <video src={saved} controls muted playsInline preload="metadata" className="w-full max-h-48 rounded-lg bg-black mb-2" />
+            {/* Replace video: switched off for now (lib/replaceVideoSwitch.ts). */}
+            {REPLACE_VIDEO_ON && (<>
             <input ref={fileRef} type="file" accept="video/*,.mp4,.mov,.webm,.m4v" className="hidden" onChange={(e) => void replaceClip(e.target.files?.[0] ?? null)} />
-            <button onClick={() => fileRef.current?.click()} disabled={saving}
+            <button onClick={() => fileRef.current?.click()} disabled={saving} data-testid="memory-replace"
               className="px-3 py-2 rounded-lg bg-peach text-white text-sm font-semibold disabled:opacity-40 flex items-center gap-1.5">
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />} Replace video
             </button>
+            </>)}
           </div>
         ) : (<>
         <label className="text-[11px] text-medium block mb-1">Points to</label>

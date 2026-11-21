@@ -15,6 +15,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { supabase } from './supabase';
+import { REPLACE_VIDEO_ON } from './replaceVideoSwitch';
 import { saveAlbumRow, serializeAlbum, deserializeAlbum, type AlbumData } from './useAlbumSync';
 import { DRAFT_STORAGE_KEY } from './localDraft';
 import type { StoredDraft } from './draftAlbum';
@@ -95,13 +96,14 @@ export async function memoryPlaces(userId: string, code: string): Promise<Memory
   return places;
 }
 
-/** "This QR is printed in order MP-… . It comes off page 40 of "HK Trip" …" */
-export function memoryDeleteWarning(places: MemoryPlaces): string {
+/** "This QR is printed in order MP-… . It comes off page 40 of "HK Trip" …"
+ *  Points to Replace video only while it is on (replaceVideoSwitch.ts). */
+export function memoryDeleteWarning(places: MemoryPlaces, replaceOn: boolean = REPLACE_VIDEO_ON): string {
   const quote = (s: string) => `“${s}”`;
   const pageList = (n: number[]) => (n.length === 1 ? `page ${n[0]}` : `pages ${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
   const parts: string[] = [];
   if (places.orders.length) {
-    parts.push(`This QR is printed in your order ${places.orders.join(', ')}. Deleting the video makes that printed QR show “Memory not found”. To change the video, use Replace video instead.`);
+    parts.push(`This QR is printed in your order ${places.orders.join(', ')}. Deleting the video makes that printed QR show “Memory not found”.${replaceOn ? ' To change the video, use Replace video instead.' : ''}`);
   }
   if (places.albums.length) {
     parts.push(`It comes off ${places.albums.map((a) => `${pageList(a.pages)} of ${quote(a.title)}`).join(' and ')} too, so the next order doesn't print or charge it.`);

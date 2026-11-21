@@ -9,7 +9,8 @@
    payment. A link memory is re-pointed here (the printed QR stays the same).
    A video memory plays here. "Replace video" puts a new video behind the
    same printed QR (lib/memories/replaceVideo.ts); it is switched off for now
-   (REPLACE_VIDEO_ON, owner 2026-11-21), so it isn't shown. "Delete" asks first,
+   (replaceSwitch.ts, owner 2026-11-21), so it isn't shown, and Delete's
+   question doesn't point to it. "Delete" asks first,
    saying where the QR is, then takes it off the account's albums too
    (lib/memories/removal.ts), as the website does.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -26,7 +27,8 @@ import {
 } from '../lib/memories/memories';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { deletedNotice, deleteMemoryEverywhere, memoryDeleteWarning, memoryPlaces } from '../lib/memories/removal';
-import { REPLACE_VIDEO_ON, replaceLimits, replaceMemoryVideo, type OrderVideoQuality, type ReplaceDeps } from '../lib/memories/replaceVideo';
+import { replaceLimits, replaceMemoryVideo, type OrderVideoQuality, type ReplaceDeps } from '../lib/memories/replaceVideo';
+import { REPLACE_VIDEO_ON } from '../lib/memories/replaceSwitch';
 import { pickVideoFromPhone } from '../editor/memories/pickVideo';
 import { VideoPreview } from '../editor/memories/VideoPreview';
 import { colors, space } from '../lib/theme';

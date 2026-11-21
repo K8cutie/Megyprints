@@ -70,7 +70,11 @@ describe('where the QR is, and the question: the website\'s', () => {
     expect(a).toEqual(w);
     expect(strip(mem.calls)).toEqual(webCalls);
     expect(memoryDeleteWarning(a)).toBe(web.memoryDeleteWarning(w));
-    expect(memoryDeleteWarning(a)).toBe('This QR is printed in your order MP-2026-AAA. Deleting the video makes that printed QR show “Memory not found”. To change the video, use Replace video instead. It comes off pages 3 and 40 of “HK Trip” and page 1 of “Untitled album” too, so the next order doesn\'t print or charge it. Delete it?');
+    // Replace video is switched off for now (replaceSwitch.ts): nothing points to it.
+    expect(memoryDeleteWarning(a)).toBe('This QR is printed in your order MP-2026-AAA. Deleting the video makes that printed QR show “Memory not found”. It comes off pages 3 and 40 of “HK Trip” and page 1 of “Untitled album” too, so the next order doesn\'t print or charge it. Delete it?');
+    // With it on: the website's words again, saying to use it instead.
+    expect(memoryDeleteWarning(a, true)).toBe(web.memoryDeleteWarning(w, true));
+    expect(memoryDeleteWarning(a, true)).toContain('“Memory not found”. To change the video, use Replace video instead. It comes off');
     const none = { albums: [], orders: [] };
     expect(memoryDeleteWarning(none)).toBe(web.memoryDeleteWarning(none));
   });

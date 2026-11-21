@@ -30,11 +30,11 @@ jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockRoute
 const mockPicks: unknown[] = [];
 jest.mock('../src/editor/memories/pickVideo', () => ({ pickVideoFromPhone: async () => mockPicks.shift() ?? null }));
 jest.mock('../src/editor/memories/VideoPreview', () => ({ VideoPreview: ({ uri, testID }: { uri: string; testID?: string }) => jest.requireActual('react').createElement('VideoPreview', { uri, testID }) }));
-// Replace video on (as built) or off (owner, 2026-11-21: replaceVideo.ts REPLACE_VIDEO_ON), per test.
+// Replace video on (as built) or off (owner, 2026-11-21: replaceSwitch.ts REPLACE_VIDEO_ON), per test.
 // A getter (defined, not spread: a spread would read it once, too early).
 const mockReplace = { on: true };
-jest.mock('../src/lib/memories/replaceVideo', () => {
-  const m = { ...jest.requireActual('../src/lib/memories/replaceVideo') };
+jest.mock('../src/lib/memories/replaceSwitch', () => {
+  const m = { ...jest.requireActual('../src/lib/memories/replaceSwitch') };
   Object.defineProperty(m, 'REPLACE_VIDEO_ON', { get: () => mockReplace.on, enumerable: true });
   return m;
 });
@@ -109,7 +109,7 @@ describe('My Memories', () => {
   });
 
   it('Replace video is switched off for now: the video plays, and there is no Replace button', async () => {
-    expect((jest.requireActual('../src/lib/memories/replaceVideo') as { REPLACE_VIDEO_ON: boolean }).REPLACE_VIDEO_ON).toBe(false);
+    expect((jest.requireActual('../src/lib/memories/replaceSwitch') as { REPLACE_VIDEO_ON: boolean }).REPLACE_VIDEO_ON).toBe(false);
     mockReplace.on = false;
     await open();
     expect(screen.getByTestId('memory-video-wxyz6789').props.uri).toBe(CLIP);

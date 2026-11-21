@@ -25,14 +25,6 @@ import { memoryCodesInSnapshot } from './memories';
 import { checkPicked, type PickedVideo } from '../../editor/memories/memoryFlow';
 import { BASE_VIDEO_SECONDS, LONGEST_VIDEO_SECONDS } from '@web/lib/pricing';
 
-/** Replace video on or off. Owner, 2026-11-21: "add that feature in .5 but
- *  disable it for now". It is a fix for a complaint ("my video is blurry",
- *  "it's the wrong video"), not something to show off, so 2.1.5 carries it
- *  switched off: My memories has no Replace button. Nothing else changes
- *  (the shrink, the album's quality and length are kept and tested).
- *  Turning it on is this line. */
-export const REPLACE_VIDEO_ON = false;
-
 export const REPLACED = 'Video replaced ✓ — same QR, new memory';
 export const NOT_REPOINTED = 'Uploaded, but could not re-point the QR. Try again.';
 export const REPLACE_FAILED = 'Could not replace the video.';
