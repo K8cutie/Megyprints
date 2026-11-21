@@ -18,6 +18,7 @@ import { selectOrderAlbum } from './orderAlbum';
 import { isUnpaidLimitError, UnpaidLimitError } from './orderExpiry';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
 import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from './orderCodes';
+import { storedOrderSource, isMissingSourceColumn } from './orderSource';
 import { normalizeFullName, isValidFullName, normalizePHPhone, normalizeStreet, isValidStructuredAddress, composeAddress, type AddressValue } from './contact';
 
 export interface ShippingDetails {
@@ -116,7 +117,10 @@ export async function createOrderFromAlbum(opts: {
   //    and the RLS insert policy now rejects any client-supplied price/status —
   //    so a customer can't place a $1 or pre-"paid" order. (opts.amount is kept
   //    for the UI's running total only; it is never trusted as the real price.)
-  const { data, error } = await supabase
+  // Which post this visit came from, if any (0063): a note for the owner that
+  // never changes the price.
+  const source = storedOrderSource();
+  const insertOrder = (tag: string | null) => supabase
     .from('orders')
     .insert({
       user_id: opts.userId,
@@ -146,10 +150,16 @@ export async function createOrderFromAlbum(opts: {
       ...(opts.testerCode ? { tester_code: opts.testerCode } : {}),
       // The same for an affiliate code: only named with one (0061).
       ...(opts.affiliateCode ? { affiliate_code: opts.affiliateCode } : {}),
+      // The same for the post's tag: only named with one (0063).
+      ...(tag ? { source: tag } : {}),
       status_history: [{ status: 'pending_payment', at: new Date().toISOString() }],
     })
     .select('id, order_number, status')
     .single();
+  let { data, error } = await insertOrder(source);
+  // A database without 0063 refuses the whole order over that one column. The
+  // tag must never cost a sale: the order goes again without it.
+  if (source && isMissingSourceColumn(error)) ({ data, error } = await insertOrder(null));
 
   // The 4th unpaid order on this account (0042): a plain sentence, not a
   // database message.
