@@ -1,10 +1,13 @@
-// Nightly cleanup of orders that were never paid (0042).
+// Nightly cleanup of orders that were never paid (0042), and of the print
+// files of orders delivered long ago (0064).
 //
 // ── WHY THIS ENDPOINT EXISTS ────────────────────────────────────────────────
 // Place order uploads the print PDF, the cover PDF and the memory videos before
 // the payment QR shows, because the photos live only on the customer's phone
 // and a paid order must never be missing its print file. Without this, an order
 // nobody paid for kept those files forever, and nothing stopped it piling up.
+// A delivered order kept its print files forever too: about 30 MB of the
+// customer's photos each, opened by nobody once the album arrived.
 //
 // Vercel's cron calls this once a day (vercel.json, 03:00 Manila). It:
 //   1. cancels every order still unpaid after unpaid_order_days() where the
@@ -16,14 +19,22 @@
 //      paid), removes <id>.pdf and <id>-cover.pdf, then the memory videos the
 //      database says may go (order_clip_files_to_purge), then records it
 //      (finish_order_file_purge);
-//   3. removes videos no order needs — uploaded early (when /order opened) for
+//   3. for each order delivered delivered_files_keep_days() (90) ago that
+//      still holds files (orders_due_for_delivered_file_purge): claims it
+//      (claim_delivered_order_file_purge — from then on it can't go back to
+//      printing), removes <id>.pdf and <id>-cover.pdf, then records it
+//      (finish_delivered_order_file_purge). Its memory videos stay: a printed
+//      QR keeps playing for its whole term. Event albums and orders that
+//      copies print from are never touched (the database decides);
+//   4. removes videos no order needs — uploaded early (when /order opened) for
 //      a checkout that never finished, or by an account that never orders
 //      (orphan_clip_files) — then their memory rows (finish_orphan_clip_purge,
 //      0059).
 //
 // Receipts (payment-proofs) are kept on purpose: they're the evidence if a
 // customer says they paid. Nothing on the customer's phone is touched, so a
-// customer who comes back can order the same album again.
+// customer who comes back can order the same album again (a reprint after
+// the 90 days is a new order from their phone).
 //
 // ── WHAT THIS ENDPOINT DOES NOT DECIDE ─────────────────────────────────────
 // Which orders expire and which files may go are decided in SQL, read fresh
@@ -93,6 +104,23 @@ async function purgeOrder(admin, orderId) {
   return { skipped: false, videos: names.length };
 }
 
+/** Remove one long-delivered order's print and cover files, then record it.
+ *  Its memory videos are never touched. Throws on any failure, and then the
+ *  order is NOT recorded, so tomorrow's run tries it again. */
+async function purgeDeliveredOrder(admin, orderId) {
+  // Claim first: an order the owner moved off Delivered since the list was
+  // read is skipped, and once claimed it can't go back to printing.
+  const { data: claimed, error: claimErr } = await admin.rpc('claim_delivered_order_file_purge', { p_order_id: orderId });
+  if (claimErr) throw new Error(`claim: ${claimErr.message}`);
+  if (claimed !== true) return { skipped: true };
+
+  await removeAll(admin, PDF_BUCKET, pdfNames(orderId));
+
+  const { error: finishErr } = await admin.rpc('finish_delivered_order_file_purge', { p_order_id: orderId });
+  if (finishErr) throw new Error(`record: ${finishErr.message}`);
+  return { skipped: false };
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'POST') { res.status(405).json({ error: 'GET or POST only' }); return; }
 
@@ -160,7 +188,40 @@ export default async function handler(req, res) {
     if (more || due.length < PURGE_BATCH) break;
   }
 
-  // ── 3. Videos from checkouts that never finished ──
+  // ── 3. Remove the print files of orders delivered long enough ago ──
+  // Same shape as step 2: batch after batch inside the time budget, each
+  // order tried once per run. A failed list here is an error in the summary,
+  // never a stop: the unpaid cleanup above has already done its work.
+  let delivered = 0;
+  let deliveredSkipped = 0;
+  const triedDelivered = new Set();
+  for (;;) {
+    if (Date.now() - started > TIME_BUDGET_MS) { more = true; break; }
+    const { data: due, error: dueErr } = await admin.rpc('orders_due_for_delivered_file_purge', { p_limit: PURGE_BATCH });
+    if (dueErr || !Array.isArray(due)) {
+      const message = `delivered list: ${dueErr?.message ?? 'no list'}`;
+      console.error(`[expire-orders] ${message}`);
+      errors.push({ order_id: null, error: message });
+      break;
+    }
+    const fresh = due.map((row) => row?.order_id).filter((id) => typeof id === 'string' && id && !triedDelivered.has(id));
+    if (!fresh.length) break;
+    for (const orderId of fresh) {
+      if (Date.now() - started > TIME_BUDGET_MS) { more = true; break; }
+      triedDelivered.add(orderId);
+      try {
+        const r = await purgeDeliveredOrder(admin, orderId);
+        if (r.skipped) deliveredSkipped += 1; else delivered += 1;
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`[expire-orders] delivered order ${orderId}: ${message}`);
+        errors.push({ order_id: orderId, error: message });
+      }
+    }
+    if (more || due.length < PURGE_BATCH) break;
+  }
+
+  // ── 4. Videos from checkouts that never finished ──
   let orphans = 0;
   const removed = new Set();
   for (;;) {
@@ -194,7 +255,7 @@ export default async function handler(req, res) {
     if (stray.length < ORPHAN_BATCH) break;
   }
 
-  const summary = { expired: expiredNumbers, purged, skipped, videos, orphans, errors, more };
+  const summary = { expired: expiredNumbers, purged, skipped, videos, delivered, delivered_skipped: deliveredSkipped, orphans, errors, more };
   console.log('[expire-orders]', JSON.stringify(summary));
   res.status(errors.length ? 500 : 200).json(summary);
 }
