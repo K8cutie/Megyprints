@@ -86,6 +86,20 @@ describe('what the Terms say', () => {
     expect(sectionText('You must be 18 or older')).not.toBe('');
   });
 
+  /* Owner, 2026-11-22: "at 300 printouts a day we are no longer capable of
+     checking each page". The customer confirms the rights, we say we don't
+     check every page, and a claim over the album's content is theirs. */
+  it('the customer answers for what is in the album', async () => {
+    await act(async () => { root.render(createElement(MemoryRouter, null, createElement(Terms))); });
+    expect(text(q('terms-rights'))).toBe('When you place an order, you confirm that everything in your album is yours, or its owner lets you print it.');
+    const rights = sectionText('You answer for what is in your album');
+    expect(rights).toContain('we do not check every page');
+    expect(rights).toContain('Printing your album does not mean we checked it');
+    expect(rights).toContain("you agree to answer for it and to pay back what it costs us, including lawyers' fees.");
+    expect(rights).toContain('Is your photo or artwork in an album without your permission?');
+    expect(sectionText('Your photos')).toContain('pictures, artwork, logos and words');
+  });
+
   it('what is not printed, how ordering really works, and where each link goes', async () => {
     await act(async () => { root.render(createElement(MemoryRouter, null, createElement(Terms))); });
     expect(sectionText("What we won't print")).toContain('sexual images of anyone under 18. We report these to the police.');
