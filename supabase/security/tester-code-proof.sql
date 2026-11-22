@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — TESTER CODE PROOF (0057; live, always rolled back)
+--  MEGY PRINTS — TESTER CODE PROOF (0057 + 0069; live, always rolled back)
 --
 --  As real customers (RLS on, the way checkout inserts): the code is checked,
 --  a checked code makes the order free, the order pays itself,
@@ -14,6 +14,9 @@
 --
 --  Fixture: two customers with no unpaid order, picked at run time (no ids in
 --  this public repo). The owner's settings are set inside the transaction.
+--  0069: the code is the shop's own accounts' only, so A is made an owner
+--  inside the transaction; B stays a customer, for whom the right word must
+--  answer like a wrong one and never make an order free.
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
 
@@ -40,6 +43,8 @@ begin
    order by u.created_at limit 1;
   if v_a is null or v_b is null then raise exception 'Need two fixture customers without unpaid orders.'; end if;
   delete from public.tester_code_tries where user_id in (v_a, v_b);
+  -- 0069: A is the shop's own account (rolled back with the rest).
+  insert into public.owner_accounts (user_id, note) values (v_a, 'zz tester-code proof') on conflict do nothing;
   update public.store_settings set tester_code = 'ZZPROOF7', tester_code_on = true where id = 1;
   perform set_config('proof.a', v_a::text, true);
   perform set_config('proof.b', v_b::text, true);
@@ -133,9 +138,12 @@ begin
     insert into proof_log(line) values ('PASS an order with a wrong code is refused (MP007): ' || sqlerrm);
   end;
 
-  -- Customers read neither the code nor the tries.
+  -- Customers read neither the code nor the tries (asked as B: A is the
+  -- shop's account since 0069, and owners read the settings).
+  perform pg_temp.as_user(current_setting('proof.b')::uuid);
   select count(*) into n from public.store_settings where tester_code is not null;
   insert into proof_log(line) values (case when n = 0 then 'PASS a customer can''t read the code' else 'FAIL a customer reads store_settings' end);
+  perform pg_temp.as_user(current_setting('proof.a')::uuid);
   begin
     select count(*) into n from public.tester_code_tries;
     insert into proof_log(line) values ('FAIL a customer reads the tries (' || n || ')');
@@ -159,6 +167,11 @@ begin
   exception when sqlstate 'MP007' then
     insert into proof_log(line) values ('PASS the right code without checking it first is refused (no guessing through orders)');
   end;
+  -- 0069: a customer (not the shop's account) gets nothing from the right word.
+  r := public.check_tester_code('ZZPROOF7');
+  insert into proof_log(line) values (case when r ->> 'reason' = 'wrong' then 'PASS a customer typing the right code: "wrong", like any wrong code (0069)' else 'FAIL a customer''s right code answered ' || r::text end);
+  r := public.check_order_code('ZZPROOF7');
+  insert into proof_log(line) values (case when r ->> 'reason' = 'wrong' then 'PASS the checkout''s code box says "wrong" to a customer too (0069)' else 'FAIL check_order_code answered a customer ' || r::text end);
   begin
     perform public.claim_tester_order(current_setting('proof.a_order')::uuid);
     insert into proof_log(line) values ('FAIL B claimed A''s order');
@@ -168,6 +181,23 @@ begin
   for i in 1..10 loop r := public.check_tester_code('GUESS' || i); end loop;
   r := public.check_tester_code('ZZPROOF7');
   insert into proof_log(line) values (case when r ->> 'reason' = 'too_many' then 'PASS after 10 wrong tries even the right code gets "too_many"' else 'FAIL 11th try answered ' || r::text end);
+end $$;
+
+-- ── 0069: a customer with a good try in the table (an affiliate code's) still can't use it ──
+reset role;
+insert into public.tester_code_tries (user_id, ok) values (current_setting('proof.b')::uuid, true);
+set local role authenticated;
+do $$
+declare
+  o public.orders;
+begin
+  perform pg_temp.as_user(current_setting('proof.b')::uuid);
+  begin
+    o := pg_temp.place('ZZPROOF7');
+    insert into proof_log(line) values ('FAIL a customer with a good try made a free order');
+  exception when sqlstate 'MP007' then
+    insert into proof_log(line) values ('PASS a customer with an affiliate code''s good try still can''t place a free order (MP007, 0069)');
+  end;
 end $$;
 
 -- ── The owner switches it off ──
