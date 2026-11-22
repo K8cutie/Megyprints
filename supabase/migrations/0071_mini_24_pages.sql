@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0070_mini_24_pages.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0071_mini_24_pages.sql  (idempotent; safe to re-run)
 --
 --  WHY (owner, 2026-11-23): a second stapled booklet, "an additional a second
 --  staple offering": the Megy Mini at 24 pages, ₱449 (₱399 in a package), next
@@ -21,10 +21,14 @@
 --       sets them (owner only).
 --
 --  ADDITIVE for the live clients: none of them sends a 24-page Mini, and every
---  16-page price and rule is unchanged. Run AFTER 0069.
+--  16-page price and rule is unchanged. Run AFTER 0070 (the longer-videos
+--  switch): its price list and owner view are carried here unchanged.
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. The 24-page numbers ══════
+-- (0070's switch, in case this runs on a database without it: off)
+alter table public.store_settings add column if not exists long_videos_on boolean not null default false;
+
 alter table public.pricing_model add column if not exists mini24_price         integer not null default 449;
 alter table public.pricing_model add column if not exists mini24_package_price integer not null default 399;
 alter table public.pricing_model add column if not exists mini24_cost          integer not null default 83;
@@ -35,7 +39,7 @@ alter table public.pricing_model add constraint pricing_model_mini24_chk check (
   and mini24_package_price between 1 and 100000
   and mini24_cost between 0 and 100000);
 
--- ══════ 2. The price list (0067's, plus mini.options) ══════
+-- ══════ 2. The price list (0070's, plus mini.options) ══════
 create or replace function public.public_price_schedule()
 returns jsonb
 language plpgsql
@@ -104,7 +108,7 @@ begin
       'package_price', m.mini_package_price,
       'shipping_fee',  m.mini_shipping_fee,
       'free_qr',       m.mini_free_qr,
-      -- 0070: every page count on sale. The top-level pages/price above stay
+      -- 0071: every page count on sale. The top-level pages/price above stay
       -- the 16-page Mini, for app versions that read only those.
       'options',       jsonb_build_array(
         jsonb_build_object('pages', 16, 'price', m.mini_price,    'package_price', m.mini_package_price),
@@ -118,7 +122,9 @@ begin
     'hosting_reserve',     m.hosting_reserve,
     'hosting_tiers',       m.hosting_tiers,
     'hd_memories_price',   m.hd_memories_price,
-    'long_video_prices',   jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price),
+    -- 0070: only while the owner has them on; null = videos up to 2 minutes
+    'long_video_prices',   case when coalesce((srow ->> 'long_videos_on')::boolean, false)
+                                then jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price) end,
     'free_shipping_value', ship,
     'compare_at',          compare,
     'disabled_sizes',      disabled,
@@ -159,6 +165,7 @@ begin
     'hd_memories_price',    m.hd_memories_price,
     'video_3min_price',     m.video_3min_price,
     'video_5min_price',     m.video_5min_price,
+    'long_videos_on',       coalesce((srow ->> 'long_videos_on')::boolean, false),
     'shipping_allowance',   m.shipping_allowance,
     'compare_multiple',     m.compare_multiple,
     'compare_until',        to_char(m.compare_until, 'YYYY-MM-DD'),
@@ -254,7 +261,7 @@ begin
     if z is null or jsonb_typeof(z) <> 'object' or p_cover is distinct from 'staple' then
       return null;
     end if;
-    -- 0070: the price for the order's page count (16 or 24); a list
+    -- 0071: the price for the order's page count (16 or 24); a list
     -- without options (before 0070) sells 16 pages only.
     if jsonb_typeof(z -> 'options') = 'array' then
       select (o ->> 'price')::integer into price

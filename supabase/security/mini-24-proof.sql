@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 24-PAGE MEGY MINI PROOF (0070; always rolled back)
+--  MEGY PRINTS — 24-PAGE MEGY MINI PROOF (0071; always rolled back)
 --
 --  The price list offers the Mini at 16 pages (₱350) and 24 pages (₱449); a
 --  Mini order is priced by its page count; a 24-page Mini with videos pays
@@ -8,9 +8,9 @@
 --  was before 0070. The script ends by raising, so NOTHING is written; the
 --  report is the error message.
 --
---  HOW TO RUN (after 0070):
+--  HOW TO RUN (after 0071):
 --    npx supabase db query --linked --file supabase/security/mini-24-proof.sql
---  Before applying 0070: one file = "begin;" + 0070 + this file without "begin;".
+--  Before applying 0071: one file = "begin;" + 0071 + this file without "begin;".
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
 
