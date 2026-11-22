@@ -63,6 +63,8 @@ export interface PricingModel {
    *  Absent before 0067. */
   video_3min_price?: number;
   video_5min_price?: number;
+  /** Longer videos on sale (0070; absent before it = on, as 0067 sold them). */
+  long_videos_on?: boolean;
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
   /** Shipping built into every album price (owner, 2026-10-08; migration
    *  0041), so checkout can say "Free shipping". Flat, added after the markup

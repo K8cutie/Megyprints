@@ -13,7 +13,7 @@ import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
 import MegyMiniPricing from './MegyMiniPricing';
 import { isMiniSize } from '../../lib/megyMini';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setLongVideosOn, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '11.5x8', '8.5x11'];
 /** Sizes the picker offers. disabled_sizes can also name a size the app no
@@ -62,6 +62,8 @@ export default function PricingPanel() {
   const [savingLong, setSavingLong] = useState(false);
   const [savedLong, setSavedLong] = useState(false);
   const [longErr, setLongErr] = useState('');
+  const [switchingLong, setSwitchingLong] = useState(false);
+  const [longOnSaid, setLongOnSaid] = useState('');
 
   // ── Persisted shipping built into the price ("Free shipping", 0041) ──
   const [ship, setShip] = useState(0);
@@ -144,6 +146,18 @@ export default function PricingPanel() {
     if (clear) { setCmpMult(''); setCmpUntil(''); }
     setSavedCmp(clear ? 'Cleared — checkout no longer shows a was price.' : `Saved — checkout shows the ${mult}× price crossed out until ${until}.`);
     setTimeout(() => setSavedCmp(''), 3000);
+  };
+
+  // The on/off switch (0070): off while the free plan's storage can't hold them.
+  const switchLong = async (on: boolean) => {
+    setSwitchingLong(true); setLongOnSaid(''); setLongErr('');
+    const err = await setLongVideosOn(on);
+    setSwitchingLong(false);
+    if (err) { setLongErr(err); return; }
+    setModel((m) => (m ? { ...m, long_videos_on: on } : m));
+    setLongOnSaid(on
+      ? 'Saved. Longer videos are on: customers can add videos up to 5 minutes.'
+      : 'Saved. Longer videos are off: videos are up to 2 minutes again.');
   };
 
   const saveLong = async () => {
@@ -324,6 +338,11 @@ export default function PricingPanel() {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-[220px]">
               <h4 className="font-semibold text-dark">Longer videos</h4>
+              {model.long_videos_on != null && (
+                <p className="text-xs font-semibold mt-1" data-testid="long-videos-status">
+                  {model.long_videos_on ? 'On now' : 'Off now'}
+                </p>
+              )}
               <p className="text-xs text-medium mt-1 leading-snug">
                 Videos are up to <b>2 minutes</b>. An album can have longer ones once: its longest video sets the price.
                 In 720p; HD is the HD price on top. Set a price to 0 to make it free.
@@ -348,6 +367,22 @@ export default function PricingPanel() {
               </button>
             </div>
           </div>
+          {model.long_videos_on != null && (
+            <div className="mt-3 flex items-center gap-2" role="radiogroup" aria-label="Longer videos on or off">
+              <button role="radio" aria-checked={model.long_videos_on} data-testid="long-videos-on"
+                disabled={switchingLong || model.long_videos_on} onClick={() => switchLong(true)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${model.long_videos_on ? 'bg-dark text-white border-dark' : 'border-line text-dark'}`}>
+                On
+              </button>
+              <button role="radio" aria-checked={!model.long_videos_on} data-testid="long-videos-off"
+                disabled={switchingLong || !model.long_videos_on} onClick={() => switchLong(false)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${!model.long_videos_on ? 'bg-dark text-white border-dark' : 'border-line text-dark'}`}>
+                Off
+              </button>
+              <span className="text-xs text-medium">Off: every video is up to 2 minutes. The prices above are kept.</span>
+            </div>
+          )}
+          {longOnSaid && <p className="text-xs text-success mt-2 font-semibold" data-testid="long-videos-saved">{longOnSaid}</p>}
           {savedLong && <p className="text-xs text-success mt-2 font-semibold">Saved - longer videos now cost {peso(model.video_3min_price ?? 0)} (3 min) and {peso(model.video_5min_price ?? 0)} (5 min).</p>}
           {longErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {longErr}</p>}
         </div>
