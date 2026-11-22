@@ -5,8 +5,18 @@
 // (the client allowlist is UX-only), and serves a branded memory page. Trusted
 // hosts get a brief branded page then auto-forward; anything else gets a
 // manual-click interstitial — never an auto-redirect off the allowlist.
+import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 import { guard } from './_guard.mjs';
+
+// A hosted clip the browser can't play (the app makes HEVC from 2.1.5, owner
+// 2026-11-21; a few old phones can't play it): say so in plain words instead
+// of a black box. The page allows this one fixed script by its hash, nothing else.
+export const CLIP_SCRIPT = "var v=document.getElementById('mv'),m=document.getElementById('nop');"
+  + "function n(){m.hidden=false}if(v.error)n();v.addEventListener('error',n);"
+  + "v.addEventListener('loadedmetadata',function(){if(!v.videoWidth)n()});";
+export const CLIP_SCRIPT_SRC = `'sha256-${createHash('sha256').update(CLIP_SCRIPT).digest('base64')}'`;
+export const CANT_PLAY = "This video can't play in this browser. Try opening this page in Chrome or Safari, or watch it on another phone.";
 
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = process.env.VITE_SUPABASE_ANON_KEY;
@@ -103,7 +113,7 @@ a.btn{display:inline-block;margin-top:16px;background:#F4C2A1;color:#fff;text-de
 <p class="spin">Opens an external site — tap only if you trust it.</p>`);
 };
 
-const send = (res, status, html, frameSrc, mediaSrc) => {
+const send = (res, status, html, frameSrc, mediaSrc, scriptSrc) => {
   res.statusCode = status;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -115,6 +125,7 @@ const send = (res, status, html, frameSrc, mediaSrc) => {
     "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; "
     + (frameSrc ? `frame-src ${frameSrc}; ` : '')
     + (mediaSrc ? `media-src ${mediaSrc}; ` : '')
+    + (scriptSrc ? `script-src ${scriptSrc}; ` : '')
     + "frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
   res.end(html);
 };
@@ -206,10 +217,13 @@ const clipPage = (src, title, expiresAt) => {
   .hint{font-size:13px;color:#E0CDBE;opacity:.9}
   .term{font-size:12px;color:#B4A79F}
   .foot{font-size:12px;color:#8a7d74;margin-top:2px}
+  .nop{font-size:14px;color:#FFFBF7;background:#B85C38;border-radius:12px;padding:12px 16px;max-width:760px;text-align:center;line-height:1.4}
 </style></head><body>
   <div class="brand">Megy<span>Prints</span><span class="dot"></span></div>
   <div class="ttl">${heading}</div>
-  <video src="${esc(src)}" controls autoplay muted playsinline preload="metadata"></video>
+  <video id="mv" src="${esc(src)}" controls autoplay muted playsinline preload="metadata"></video>
+  <div class="nop" id="nop" hidden>${esc(CANT_PLAY)}</div>
+  <script>${CLIP_SCRIPT}</script>
   <div class="hint">🔇 Playing on mute — tap the video for sound</div>
   ${until ? `<div class="term">This memory stays live until ${esc(until)}</div>` : ''}
   <div class="foot">✨ An enhanced memory, made with Megyprints</div>
@@ -273,7 +287,7 @@ export default async function handler(req, res) {
   // Our own hosted clip → plays here; the ONLY thing on the Supabase origin we
   // ever render (media-src scoped to that origin, nothing framed).
   if (u.protocol === 'https:' && isHostedClip(u)) {
-    return send(res, 200, clipPage(u.href, row.title, row.expires_at), undefined, new URL(CLIP_PREFIX).origin);
+    return send(res, 200, clipPage(u.href, row.title, row.expires_at), undefined, new URL(CLIP_PREFIX).origin, CLIP_SCRIPT_SRC);
   }
   const trusted = u.protocol === 'https:' && allowed(u.hostname.toLowerCase().replace(/^www\./, ''));
   // Video platforms (YouTube/Vimeo) PLAY on the branded page; other trusted

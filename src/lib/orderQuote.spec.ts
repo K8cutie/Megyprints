@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { priceBreakdown, FREE_QR_MEMORIES, QR_PACK_PRICE, QR_PACK_SIZE, type PriceSchedule, type Binding } from './pricing';
+import { priceBreakdown, miniPriceBreakdown, FREE_QR_MEMORIES, QR_PACK_PRICE, QR_PACK_SIZE, type PriceSchedule, type Binding } from './pricing';
 import { quoteParts, type OrderQuote } from './adminOrders';
 import type { AlbumSizePreset } from '../pages/builder/types';
 
@@ -91,6 +91,49 @@ describe('0055 follows the checkout', () => {
   it('only the owner reads it', () => {
     expect(sql).toContain("case when r = 'owner' then o.quoted_amount else null end");
     expect(sql).toContain("case when r = 'owner' then o.quote else null end");
+  });
+});
+
+/* LONGER VIDEOS (owner, 2026-11-20; 0067): up to 3 minutes ₱199, up to 5
+   minutes ₱399, once per album, only with video memories. The database's
+   answers (local test database, 0067, this price list) pinned. */
+const longSql = readFileSync(resolve(__dirname, '../../supabase/migrations/0067_longer_videos.sql'), 'utf8');
+const WITH_LONG = { ...LIVE, long_video_prices: { '3': 199, '5': 399 },
+  mini: { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 } } as unknown as PriceSchedule;
+const LONG: [AlbumSizePreset, string, number, number, number | null, boolean, number, OrderQuote][] = [
+  ['8x8', 'softcover', 41, 8, 20, true, 5, { qr: 8, album: 1288, total: 2201, years: 20, hd_fee: 49, qr_fee: 200, extra_qr: 6, term_fee: 199, extra_pages: 1, extra_pages_fee: 66, video_minutes: 5, long_fee: 399 }],
+  ['6x6', 'hardboundLeather', 40, 3, null, false, 3, { qr: 3, album: 1215, total: 1514, years: null, hd_fee: 0, qr_fee: 100, extra_qr: 1, term_fee: 0, extra_pages: 0, extra_pages_fee: 0, video_minutes: 3, long_fee: 199 }],
+  // no videos: no fee, whatever the order says
+  ['6x4', 'softcover', 40, 0, null, false, 5, { qr: 0, album: 824, total: 824, years: null, hd_fee: 0, qr_fee: 0, extra_qr: 0, term_fee: 0, extra_pages: 0, extra_pages_fee: 0, video_minutes: 2, long_fee: 0 }],
+  ['8x8', 'hardboundLeather', 40, 2, null, true, 2, { qr: 2, album: 1788, total: 1837, years: null, hd_fee: 49, qr_fee: 0, extra_qr: 0, term_fee: 0, extra_pages: 0, extra_pages_fee: 0, video_minutes: 2, long_fee: 0 }],
+];
+
+describe('longer videos: the database charges what the checkout says (0067)', () => {
+  it.each(LONG)('%s %s, %i pages, %i QR, %s years, HD %s, %i minutes', (size, cover, pages, qr, years, hd, minutes, q) => {
+    const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
+    const b = priceBreakdown(WITH_LONG, size, binding, pages, qr, qr > 0 ? years : null, hd, minutes);
+    expect(b.total).toBe(q.total);
+    expect(q.album + q.extra_pages_fee + q.qr_fee + q.term_fee + q.hd_fee + (q.long_fee ?? 0)).toBe(q.total);
+    expect(b.items.find((i) => /^Longer videos/.test(i.label))?.amount ?? 0).toBe(q.long_fee);
+  });
+
+  it('a Megy Mini with 5 videos, 10 years, HD and 5 minutes: ₱1,117 as the database said', () => {
+    const offer = (WITH_LONG as unknown as { mini: Parameters<typeof miniPriceBreakdown>[1] }).mini;
+    const b = miniPriceBreakdown(WITH_LONG, offer, 5, 10, true, 5);
+    expect(b.total).toBe(1117);
+    expect(b.items.find((i) => /^Longer videos/.test(i.label))?.amount).toBe(399);
+  });
+
+  it("the price list's prices, and the trigger passes the order's tier", () => {
+    expect(longSql).toContain("'long_video_prices',   jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price)");
+    expect(longSql).toMatch(/default 199[\s\S]*default 399/);
+    expect(longSql).toMatch(/coalesce\(new\.hd_memories, false\),\s+null, new\.video_minutes\);/);
+    expect(longSql).toContain('drop function if exists public.order_quote(text, text, integer, integer, integer, boolean, jsonb);');
+  });
+
+  it('the bill names it, and the admin line does', () => {
+    expect(priceBreakdown(WITH_LONG, '6x6', 'hard', 40, 3, null, false, 3).items.map((i) => i.label)).toContain('Longer videos · up to 3 minutes, one time');
+    expect(quoteParts(LONG[0][7])).toBe('album ₱1,288 + 1 extra page ₱66 + 6 extra QR ₱200 + 20 years ₱199 + HD ₱49 + videos up to 5 min ₱399');
   });
 });
 

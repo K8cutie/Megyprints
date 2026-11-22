@@ -75,6 +75,10 @@ export interface OrderQuote {
   years: number | null;
   term_fee: number;
   hd_fee: number;
+  /** Longer videos (0067): the album's tier and its one-time fee. Absent on
+   *  orders placed before it. */
+  video_minutes?: number;
+  long_fee?: number;
   /** A tester code made it free (0057); total stays the real price. */
   tester?: { code: string; real_total: number | null } | null;
   /** An affiliate code took `discount` off (0061); total stays the real price,
@@ -90,6 +94,7 @@ export function quoteParts(q: OrderQuote): string {
   if (q.qr_fee > 0) parts.push(`${q.extra_qr} extra QR ${peso(q.qr_fee)}`);
   if (q.term_fee > 0) parts.push(`${q.years} years ${peso(q.term_fee)}`);
   if (q.hd_fee > 0) parts.push(`HD ${peso(q.hd_fee)}`);
+  if ((q.long_fee ?? 0) > 0) parts.push(`videos up to ${q.video_minutes} min ${peso(q.long_fee ?? 0)}`);
   const joined = parts.join(' + ');
   // An affiliate code's discount comes off the sum (0061).
   return q.affiliate && q.affiliate.discount > 0 ? `${joined} − code ${q.affiliate.code} ${peso(q.affiliate.discount)}` : joined;
