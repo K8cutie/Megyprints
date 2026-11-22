@@ -158,6 +158,16 @@ export async function setHdMemoriesPrice(next: number): Promise<string | null> {
   return null;
 }
 
+/** Owner-only (definer RPC, 0067). Sets the longer-video prices: up to 3
+ *  minutes and up to 5 minutes, once per album. */
+export async function setLongVideoPrices(threeMin: number, fiveMin: number): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_long_video_prices', { p_3min: Math.round(threeMin), p_5min: Math.round(fiveMin) });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only (definer RPC, 0041). Sets the shipping built into every album
  *  price ("Free shipping" at checkout) and reloads the schedule. */
 export async function setShippingAllowance(next: number): Promise<string | null> {

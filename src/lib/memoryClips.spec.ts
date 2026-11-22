@@ -71,13 +71,14 @@ describe('public clip URL ↔ resolver recognition', () => {
 });
 
 describe('caps', () => {
-  it('owner caps (2026-09-10): 2 minutes, a generous 400 MB source, 100 MB uploaded', () => {
+  it('owner caps (2026-09-10): 2 minutes, a generous 400 MB source, 200 MB uploaded (0067)', () => {
     // Real memory clips run 30s-2min, so 60s cut off the top half of the range.
+    // Longer ones (up to 5 minutes) are a paid upgrade: checkClipMeta's maxSeconds.
     expect(MAX_CLIP_SECONDS).toBe(120);
     // The source cap is generous because we re-encode; the OUTPUT is what has
-    // to fit the bucket's object limit.
+    // to fit the bucket's object limit: 200 MB from 0067, for a 5-minute HD video.
     expect(MAX_INPUT_BYTES).toBe(400 * 1024 * 1024);
-    expect(MAX_CLIP_BYTES).toBe(100 * 1024 * 1024);
+    expect(MAX_CLIP_BYTES).toBe(200 * 1024 * 1024);
     expect(MAX_INPUT_BYTES).toBeGreaterThan(MAX_CLIP_BYTES);
   });
 

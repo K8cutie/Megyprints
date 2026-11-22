@@ -13,7 +13,7 @@ import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
 import MegyMiniPricing from './MegyMiniPricing';
 import { isMiniSize } from '../../lib/megyMini';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '11.5x8', '8.5x11'];
 /** Sizes the picker offers. disabled_sizes can also name a size the app no
@@ -56,6 +56,13 @@ export default function PricingPanel() {
   const [savedHd, setSavedHd] = useState(false);
   const [hdErr, setHdErr] = useState('');
 
+  // ── Longer videos (0067): up to 3 / 5 minutes, one time per album ──
+  const [long3, setLong3] = useState(199);
+  const [long5, setLong5] = useState(399);
+  const [savingLong, setSavingLong] = useState(false);
+  const [savedLong, setSavedLong] = useState(false);
+  const [longErr, setLongErr] = useState('');
+
   // ── Persisted shipping built into the price ("Free shipping", 0041) ──
   const [ship, setShip] = useState(0);
   const [savingShip, setSavingShip] = useState(false);
@@ -87,7 +94,7 @@ export default function PricingPanel() {
     setDisabledSizesState(getDisabledSizes());
     void loadOwnerPricingModel().then((m) => {
       if (!alive) return;
-      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); setShip(shippingAllowanceOf(m)); setCmpMult(m.compare_multiple != null ? String(m.compare_multiple) : ''); setCmpUntil(m.compare_until ?? ''); }
+      if (m) { setModel(m); setStoreMult(Number(m.price_multiple)); setReserve(Number(m.hosting_reserve ?? 0)); setTiers(hostingTiersOf(m)); setHdPrice(Number(m.hd_memories_price ?? 0)); setLong3(Number(m.video_3min_price ?? 199)); setLong5(Number(m.video_5min_price ?? 399));setShip(shippingAllowanceOf(m)); setCmpMult(m.compare_multiple != null ? String(m.compare_multiple) : ''); setCmpUntil(m.compare_until ?? ''); }
       else setModelErr('Could not load the cost model. Owner sign-in is required to view pricing.');
     });
     return () => { alive = false; };
@@ -137,6 +144,17 @@ export default function PricingPanel() {
     if (clear) { setCmpMult(''); setCmpUntil(''); }
     setSavedCmp(clear ? 'Cleared — checkout no longer shows a was price.' : `Saved — checkout shows the ${mult}× price crossed out until ${until}.`);
     setTimeout(() => setSavedCmp(''), 3000);
+  };
+
+  const saveLong = async () => {
+    setSavingLong(true); setSavedLong(false); setLongErr('');
+    const err = await setLongVideoPrices(long3, long5);
+    setSavingLong(false);
+    if (err) setLongErr(err);
+    else {
+      setModel((m) => (m ? { ...m, video_3min_price: Math.round(long3), video_5min_price: Math.round(long5) } : m));
+      setSavedLong(true); setTimeout(() => setSavedLong(false), 2500);
+    }
   };
 
   const saveHd = async () => {
@@ -299,6 +317,41 @@ export default function PricingPanel() {
           {savedHd && <p className="text-xs text-success mt-2 font-semibold">Saved - HD memories now cost {peso(model.hd_memories_price)}.</p>}
           {hdErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {hdErr}</p>}
         </div>
+
+        {/* Longer videos (0067) - memory videos past the included 2 minutes */}
+        {model.video_3min_price != null && (
+        <div className="mt-5 pt-5 border-t border-sand-deep" data-testid="pricing-long-videos">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div className="min-w-[220px]">
+              <h4 className="font-semibold text-dark">Longer videos</h4>
+              <p className="text-xs text-medium mt-1 leading-snug">
+                Videos are up to <b>2 minutes</b>. An album can have longer ones once: its longest video sets the price.
+                In 720p; HD is the HD price on top. Set a price to 0 to make it free.
+              </p>
+            </div>
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-light block mb-1">Up to 3 min</label>
+                <input type="number" min={0} max={100000} step={1} value={long3}
+                  onChange={(e) => { setLong3(+e.target.value); setSavedLong(false); }}
+                  className="w-24 border border-line rounded-lg px-3 py-2 font-mono text-sm tabular-nums" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-light block mb-1">Up to 5 min</label>
+                <input type="number" min={0} max={100000} step={1} value={long5}
+                  onChange={(e) => { setLong5(+e.target.value); setSavedLong(false); }}
+                  className="w-24 border border-line rounded-lg px-3 py-2 font-mono text-sm tabular-nums" />
+              </div>
+              <button onClick={saveLong} disabled={savingLong || (long3 === model.video_3min_price && long5 === model.video_5min_price)}
+                className="px-4 py-2 rounded-lg bg-dark text-white text-sm font-semibold disabled:opacity-40">
+                {savingLong ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+          {savedLong && <p className="text-xs text-success mt-2 font-semibold">Saved - longer videos now cost {peso(model.video_3min_price ?? 0)} (3 min) and {peso(model.video_5min_price ?? 0)} (5 min).</p>}
+          {longErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {longErr}</p>}
+        </div>
+        )}
 
         {/* Shipping built into every price — checkout says "Free shipping" */}
         <div className="mt-5 pt-5 border-t border-sand-deep">
