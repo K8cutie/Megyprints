@@ -77,7 +77,13 @@ describe('where a memory\'s QR is', () => {
     expect(places).toEqual({ albums: [{ id: 'album-1', title: 'HK Trip', pages: [40] }], orders: ['MP-2026-MUGCCF5'] });
   });
   it('the question before the delete says it', async () => {
-    expect(memoryDeleteWarning(await memoryPlaces(USER, 'vvb6inkz'))).toBe(
+    const places = await memoryPlaces(USER, 'vvb6inkz');
+    // Replace video is switched off for now (replaceVideoSwitch.ts): nothing points to it.
+    expect(memoryDeleteWarning(places)).toBe(
+      'This QR is printed in your order MP-2026-MUGCCF5. Deleting the video makes that printed QR show “Memory not found”.'
+      + ' It comes off page 40 of “HK Trip” too, so the next order doesn\'t print or charge it. Delete it?');
+    // With it on, the question says to use it instead.
+    expect(memoryDeleteWarning(places, true)).toBe(
       'This QR is printed in your order MP-2026-MUGCCF5. Deleting the video makes that printed QR show “Memory not found”. To change the video, use Replace video instead.'
       + ' It comes off page 40 of “HK Trip” too, so the next order doesn\'t print or charge it. Delete it?');
     expect(memoryDeleteWarning({ albums: [], orders: [] })).toBe('This QR isn’t in any of your albums or orders. Delete it?');
