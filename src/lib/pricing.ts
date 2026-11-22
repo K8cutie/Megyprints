@@ -59,6 +59,10 @@ export interface PricingModel {
   /** One-time HD (1080p) memory upgrade, flat (owner, 2026-09-10; migration
    *  0032). Standard 720p is included; HD is a value tier, not cost recovery. */
   hd_memories_price: number;
+  /** Longer videos, one time per album (owner, 2026-11-20; migration 0067).
+   *  Absent before 0067. */
+  video_3min_price?: number;
+  video_5min_price?: number;
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
   /** Shipping built into every album price (owner, 2026-10-08; migration
    *  0041), so checkout can say "Free shipping". Flat, added after the markup
@@ -112,6 +116,9 @@ export interface PriceSchedule {
   hosting_tiers?: HostingTier[];
   /** HD memory upgrade price. Absent on a pre-0032 schedule → free/no offer. */
   hd_memories_price?: number;
+  /** Longer videos, up to 3 or 5 minutes (0067). Absent → videos stay up to
+   *  2 minutes. Read through longVideoPricesOf(). */
+  long_video_prices?: { '3': number; '5': number } | null;
   /** What the free shipping is worth (the allowance already inside the rates),
    *  for the "Free shipping (₱X value)" line. Absent before 0041 → no value shown. */
   free_shipping_value?: number;
@@ -188,6 +195,68 @@ export function hdMemoriesCharge(src: { hd_memories_price?: unknown }, hd: boole
   return hd && qrMemories > 0 ? hdMemoriesPriceOf(src) : 0;
 }
 
+/* ── LONGER VIDEOS (owner, 2026-11-20; migration 0067) ─────────────────────
+   Memory videos are up to 2 minutes. An album can have longer ones for a
+   one-time price set by its LONGEST video: up to 3 minutes or up to 5
+   minutes (720p; HD is its own upgrade on top). Delete the long videos and
+   the charge goes. order_quote() charges the same (orderQuote.spec). */
+export type VideoMinutes = 2 | 3 | 5;
+/** The length every album includes. */
+export const BASE_VIDEO_SECONDS = 120;
+/** The longest a video can be, with the 5-minute upgrade. */
+export const LONGEST_VIDEO_SECONDS = 300;
+
+/** The longer-video prices, or null when the price list doesn't sell them
+ *  (a pre-0067 schedule: videos stay up to 2 minutes). */
+export function longVideoPricesOf(src: { long_video_prices?: unknown }): { 3: number; 5: number } | null {
+  const p = src.long_video_prices;
+  if (!p || typeof p !== 'object') return null;
+  const three = Number((p as Record<string, unknown>)['3']);
+  const five = Number((p as Record<string, unknown>)['5']);
+  if (!Number.isFinite(three) || !Number.isFinite(five) || three < 0 || five < 0) return null;
+  return { 3: Math.round(three), 5: Math.round(five) };
+}
+
+/** The tier one video needs: 2 (included), 3 or 5 minutes, or null when it is
+ *  longer than 5 minutes. A length we couldn't read counts as included. */
+export function videoMinutesFor(seconds: number | null | undefined): VideoMinutes | null {
+  if (seconds == null || !Number.isFinite(seconds)) return 2;
+  if (seconds <= BASE_VIDEO_SECONDS + 0.5) return 2;
+  if (seconds <= 180.5) return 3;
+  if (seconds <= LONGEST_VIDEO_SECONDS + 0.5) return 5;
+  return null;
+}
+
+/** The album's tier: its longest video's (a video too long for any tier
+ *  counts as 5; the picker never lets one in). */
+export function albumVideoMinutes(lengths: readonly (number | null | undefined)[]): VideoMinutes {
+  let tier: VideoMinutes = 2;
+  for (const s of lengths) {
+    const t = videoMinutesFor(s) ?? 5;
+    if (t > tier) tier = t;
+  }
+  return tier;
+}
+
+/** The longest video the picker takes: 5 minutes when the price list sells
+ *  longer videos, else 2. */
+export function maxVideoSecondsOf(src: { long_video_prices?: unknown }): number {
+  return longVideoPricesOf(src) ? LONGEST_VIDEO_SECONDS : BASE_VIDEO_SECONDS;
+}
+
+/** Pesos owed for longer videos on this album (order_quote's long_fee):
+ *  only when the album carries video memories. */
+export function longVideoCharge(src: { long_video_prices?: unknown }, minutes: number | null | undefined, qrMemories: number): number {
+  if (qrMemories <= 0 || (minutes !== 3 && minutes !== 5)) return 0;
+  const prices = longVideoPricesOf(src);
+  return prices ? Math.max(0, prices[minutes]) : 0;
+}
+
+/** The bill's line for it. */
+export function longVideoLine(minutes: 3 | 5): string {
+  return `Longer videos · up to ${minutes} minutes, one time`;
+}
+
 /** The flat reserve, tolerant of a pre-0029 schedule (no field → 0). */
 export function hostingReserveOf(schedule: Pick<PriceSchedule, 'hosting_reserve'>): number {
   const r = Number(schedule.hosting_reserve);
@@ -254,19 +323,39 @@ export function extraPagesCharge(
 export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
-// ── Living-memory QR add-on (owner-set 2026-09-09) ──────────────────────────
-// Every album includes FREE_QR_MEMORIES QR memories; each one past that adds
-// EXTRA_QR_RATE to the order. Counted per QR code (hosted clip or pasted link
-// alike). Public by nature — the customer is told "7 included" — so these sit
-// in the bundle like MIN_PAGES; move them to the schedule if they ever need to
-// be owner-tunable without a deploy.
-export const FREE_QR_MEMORIES = 7;
-export const EXTRA_QR_RATE = 20;
+// ── Video memories (living-memory QRs) ──────────────────────────────────────
+// Owner, 2026-11-19: "2 free video memory, once they see that add they'd want
+// more … 3 videos per 100 php". Every album includes FREE_QR_MEMORIES (a Megy
+// Mini: its own offer's free_qr); past those, videos come in packs of
+// QR_PACK_SIZE for QR_PACK_PRICE: 1–3 extra = ₱100, 4–6 = ₱200, and so on.
+// Counted per QR code (hosted clip or pasted link alike). The database prices
+// the order the same way (0066 order_quote; orderQuote.spec holds them equal).
+export const FREE_QR_MEMORIES = 2;
+export const QR_PACK_SIZE = 3;
+export const QR_PACK_PRICE = 100;
 
-/** Pesos owed for `count` QR memories on one album. */
-export function qrMemoryCharge(count: number): number {
-  return Math.max(0, Math.floor(count) - FREE_QR_MEMORIES) * EXTRA_QR_RATE;
+/** Packs of QR_PACK_SIZE needed for `count` QR memories, `free` included. */
+export function qrPacksFor(count: number, free: number = FREE_QR_MEMORIES): number {
+  const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
+  return Math.ceil(extra / QR_PACK_SIZE);
 }
+
+/** Pesos owed for `count` QR memories on one album (or a Mini, with its own `free`). */
+export function qrMemoryCharge(count: number, free: number = FREE_QR_MEMORIES): number {
+  return qrPacksFor(count, free) * QR_PACK_PRICE;
+}
+
+/** The bill's line for extra videos: "2 included, 4 extra (2 packs of 3 × ₱100)". */
+export function qrPacksLine(count: number, free: number): string {
+  const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
+  const packs = qrPacksFor(count, free);
+  return `${free} included, ${extra} extra (${packs} ${packs === 1 ? 'pack' : 'packs'} of ${QR_PACK_SIZE} × ₱${QR_PACK_PRICE})`;
+}
+
+/** How extra videos are sold, in a few words: "3 more for ₱100". */
+export const QR_PACK_OFFER = `${QR_PACK_SIZE} more for ₱${QR_PACK_PRICE}`;
+/** The same as a sentence, after "2 … included": "Add more in packs of 3 for ₱100." */
+export const QR_PACK_SENTENCE = `Add more in packs of ${QR_PACK_SIZE} for ₱${QR_PACK_PRICE}.`;
 
 /** Structural view of a page for counting — both QR homes: a QR slot on a
  *  photo layout (`qrFills`) and a QR in a combo/caption box (`textSlotQr`). */
@@ -300,6 +389,8 @@ export function priceBreakdown(
   hostingYears: number | null = null,
   /** HD (1080p) memories chosen for this album. Omitted = standard 720p. */
   hdMemories = false,
+  /** The album's longest-video tier (albumVideoMinutes). Omitted = 2. */
+  videoMinutes: number | null = null,
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
   const sizeLabel = SIZE_LABELS[size];
@@ -308,7 +399,8 @@ export function priceBreakdown(
   const qrCharge = qrMemoryCharge(qrMemories);
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
-  const total = printTotal + qrCharge + termCharge + hdCharge;
+  const longCharge = longVideoCharge(schedule, videoMinutes, qrMemories);
+  const total = printTotal + qrCharge + termCharge + hdCharge + longCharge;
 
   const extra = Math.max(0, pages - minPages);
   const items: PriceLine[] = [];
@@ -332,9 +424,8 @@ export function priceBreakdown(
   }
 
   if (qrCharge > 0) {
-    const extraQr = qrMemories - FREE_QR_MEMORIES;
     items.push({
-      label: `Living-memory QR · ${FREE_QR_MEMORIES} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`,
+      label: `Living-memory QR · ${qrPacksLine(qrMemories, FREE_QR_MEMORIES)}`,
       amount: qrCharge,
     });
   }
@@ -350,12 +441,15 @@ export function priceBreakdown(
   if (hdCharge > 0) {
     items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
   }
+  if (longCharge > 0) {
+    items.push({ label: longVideoLine(videoMinutes as 3 | 5), amount: longCharge });
+  }
 
   return { items, total };
 }
 
 /** CUSTOMER-FACING. A Megy Mini's bill (0062): its set price, the shipping
- *  fee on top (albums ship free, the Mini doesn't), ₱20 for each video past
+ *  fee on top (albums ship free, the Mini doesn't), packs of 3 videos past
  *  its free ones, and the same memory term and HD add-ons as an album. The
  *  checkout's mirror of order_quote()'s Mini branch: same total to the peso. */
 export function miniPriceBreakdown(
@@ -364,12 +458,13 @@ export function miniPriceBreakdown(
   qrMemories = 0,
   hostingYears: number | null = null,
   hdMemories = false,
+  videoMinutes: number | null = null,
 ): PriceBreakdown & { shipping: number } {
   const free = Math.max(0, Math.floor(offer.free_qr));
-  const extraQr = Math.max(0, Math.floor(qrMemories) - free);
-  const qrCharge = extraQr * EXTRA_QR_RATE;
+  const qrCharge = qrMemoryCharge(qrMemories, free);
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
+  const longCharge = longVideoCharge(schedule, videoMinutes, qrMemories);
   const items: PriceLine[] = [
     {
       label: `Megy Mini — A5 · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
@@ -378,7 +473,7 @@ export function miniPriceBreakdown(
     { label: 'Shipping', amount: offer.shipping_fee },
   ];
   if (qrCharge > 0) {
-    items.push({ label: `Video memories · ${free} included, ${extraQr} extra × ₱${EXTRA_QR_RATE}`, amount: qrCharge });
+    items.push({ label: `Video memories · ${qrPacksLine(qrMemories, free)}`, amount: qrCharge });
   }
   if (termCharge > 0 && hostingYears != null) {
     const included = includedHostingYears(schedule);
@@ -390,7 +485,10 @@ export function miniPriceBreakdown(
   if (hdCharge > 0) {
     items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
   }
-  return { items, total: offer.price + offer.shipping_fee + qrCharge + termCharge + hdCharge, shipping: offer.shipping_fee };
+  if (longCharge > 0) {
+    items.push({ label: longVideoLine(videoMinutes as 3 | 5), amount: longCharge });
+  }
+  return { items, total: offer.price + offer.shipping_fee + qrCharge + termCharge + hdCharge + longCharge, shipping: offer.shipping_fee };
 }
 
 // ── Owner side (model supplied by owner_pricing_model()) ────────────────────

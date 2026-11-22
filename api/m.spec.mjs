@@ -67,7 +67,7 @@ describe('a REPLACED clip (1-star testers round 2: the old video stayed for anyo
     const res = mkRes();
     await mod.default(mkReq('k7m2p9qz'), res);
     expect(res.code).toBe(200);
-    expect(res.body).toContain(`<video src="${clip}?v=1759620000000"`);
+    expect(res.body).toContain(`<video id="mv" src="${clip}?v=1759620000000"`);
   });
 });
 
@@ -88,6 +88,25 @@ describe('handler', () => {
     expect(csp).not.toContain('frame-src');
     expect(csp).toContain("frame-ancestors 'none'");
     expect(res.headers['x-frame-options']).toBe('DENY');
+  });
+
+  it("a browser that can't play the clip (HEVC from 2.1.5 on an old phone): plain words, by one script allowed by its hash only", async () => {
+    rpc.mockResolvedValue({ data: [row({ expires_at: inYears(5) })], error: null });
+    const res = mkRes();
+    await mod.default(mkReq('k7m2p9qz'), res);
+    // The words are on the page, hidden until the video fails or has no picture.
+    expect(res.body).toContain('<div class="nop" id="nop" hidden>This video can&#39;t play in this browser.');
+    expect(res.body).toContain(`<script>${mod.CLIP_SCRIPT}</script>`);
+    expect(mod.CLIP_SCRIPT).toContain("addEventListener('error'");
+    expect(mod.CLIP_SCRIPT).toContain('videoWidth');
+    // That script and no other: script-src is its hash, never 'unsafe-inline'.
+    const { createHash } = await import('node:crypto');
+    const hash = createHash('sha256').update(mod.CLIP_SCRIPT).digest('base64');
+    const csp = res.headers['content-security-policy'];
+    expect(csp).toContain(`script-src 'sha256-${hash}'`);
+    expect(csp).not.toContain("'unsafe-inline'; frame");
+    expect(csp).not.toMatch(/script-src[^;]*unsafe-inline/);
+    expect(csp).toContain("default-src 'none'");
   });
 
   it('expired term → renewal page: no video, no redirect, still 200, links to the memories page with the code', async () => {

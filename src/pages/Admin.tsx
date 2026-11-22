@@ -1,17 +1,17 @@
 /* ══════════════════════════════════════════════════════════════════════════
    /admin — the OPERATOR CONSOLE. Separate from the customer app; gated by ROLE.
-     • owner       — Overview · Album stats · Orders (full, incl. price) · Bookings · Templates · Team · Errors
+     • owner       — Overview · Album stats · Orders (full, incl. price) · Bookings · Templates · Pricing · Affiliates · Team · Errors
      • fulfillment — Orders only, status changes only (no money, no overview)
    Role resolution + the DB functions in migration 0007 are the real guard.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, TriangleAlert, type LucideIcon } from 'lucide-react';
+import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, TriangleAlert, BadgePercent, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
-import { fetchAllOrders, fetchOrdersCount, ORDERS_PAGE_SIZE, type AdminOrder } from '../lib/adminOrders';
+import { fetchAllOrders, fetchOrdersCount, fetchUnsentOrders, ORDERS_PAGE_SIZE, type AdminOrder } from '../lib/adminOrders';
 import { fetchOwnerBookings } from '../lib/adminBookings';
 import { needsOwner } from '../lib/eventBookings';
 import { supabase } from '../lib/supabase';
@@ -24,8 +24,9 @@ import MessagesPanel from './admin/MessagesPanel';
 import BookingsPanel from './admin/BookingsPanel';
 import AlbumStatsPanel from './admin/AlbumStatsPanel';
 import ErrorsPanel from './admin/ErrorsPanel';
+import AffiliatesPanel from './admin/AffiliatesPanel';
 
-type Tab = 'overview' | 'stats' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'team' | 'errors';
+type Tab = 'overview' | 'stats' | 'orders' | 'bookings' | 'messages' | 'templates' | 'pricing' | 'affiliates' | 'team' | 'errors';
 const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: BarChart3, ownerOnly: true },
   { id: 'stats', label: 'Album stats', icon: Images, ownerOnly: true },
@@ -34,6 +35,7 @@ const ALL_TABS: { id: Tab; label: string; icon: LucideIcon; ownerOnly: boolean }
   { id: 'messages', label: 'Messages', icon: Mail, ownerOnly: true },
   { id: 'templates', label: 'Templates', icon: LayoutGrid, ownerOnly: true },
   { id: 'pricing', label: 'Pricing', icon: Calculator, ownerOnly: true },
+  { id: 'affiliates', label: 'Affiliates', icon: BadgePercent, ownerOnly: true },
   { id: 'team', label: 'Team', icon: Users, ownerOnly: true },
   { id: 'errors', label: 'Errors', icon: TriangleAlert, ownerOnly: true },
 ];
@@ -70,6 +72,9 @@ export default function Admin() {
   // …and the ones that also have their cover, "<id>-cover.pdf". Null until
   // the bucket has been read, so no row says "cover missing" by mistake.
   const [coverReadyIds, setCoverReadyIds] = useState<Set<string> | null>(null);
+  // Open orders that didn't finish sending from the customer's phone (0068):
+  // what never arrived, by order id. Empty before 0068 is live.
+  const [unsent, setUnsent] = useState<Map<string, string[]>>(new Map());
 
   // Resolve the signed-in user's role, then land on a sensible default tab.
   useEffect(() => {
@@ -93,6 +98,9 @@ export default function Admin() {
       const [page, total] = await Promise.all([fetchAllOrders(), fetchOrdersCount()]);
       setOrders(page);
       setOrdersTotal(total);
+      // Best-effort, like the files below: a failure shows the orders as before.
+      const open = page.filter((o) => o.status === 'pending_payment' || o.status === 'paid' || o.status === 'in_production').map((o) => o.id);
+      void fetchUnsentOrders(open).then(setUnsent).catch(() => setUnsent(new Map()));
     }
     catch (e) { setOrdersErr(e instanceof Error ? e.message : 'Failed to load orders'); }
     finally { setOrdersLoading(false); }
@@ -206,7 +214,7 @@ export default function Admin() {
         {tab === 'overview' && isOwner && (ordersLoading ? <Spinner /> : <OverviewPanel orders={orders} />)}
         {tab === 'orders' && (ordersLoading ? <Spinner /> : (
           <>
-            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} coverReadyIds={coverReadyIds} />
+            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} coverReadyIds={coverReadyIds} unsent={unsent} />
             {/* Never let the list imply it is showing everything. */}
             {ordersTotal > orders.length && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">
@@ -227,6 +235,7 @@ export default function Admin() {
         {tab === 'messages' && isOwner && <MessagesPanel />}
         {tab === 'templates' && isOwner && <TemplatesPanel />}
         {tab === 'pricing' && isOwner && <PricingPanel />}
+        {tab === 'affiliates' && isOwner && <AffiliatesPanel />}
         {tab === 'team' && isOwner && <TeamPanel />}
         {tab === 'errors' && isOwner && <ErrorsPanel orders={orders} />}
       </main>

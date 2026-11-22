@@ -253,8 +253,9 @@ export function dealBoxContent(
 
 /* ══════════════════════════════════════════════════════════════════════════
    VIDEO-READY PAGES (owner, 2026-09-12): "7 QR links as the minimum for a
-   40-page album." The album includes 7 video memories, so it must OFFER at
-   least 7 places to put one.
+   40-page album." The album included 7 video memories then, so it OFFERS at
+   least 7 places to put one. Since 2026-11-19 it includes 2 and sells more in
+   packs of 3 (pricing.ts): the 7 places stay, ready for the videos people add.
    2026-10-02 (owner): those places are FULL-PAGE PHOTOS, no longer combo
    boxes ("Add a VIDEO to this QR" is gone). generateAlbum reserves the
    MIN_MEMORY_PAGES photos that crop least on a full page and gives each its

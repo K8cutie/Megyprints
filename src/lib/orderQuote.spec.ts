@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { priceBreakdown, FREE_QR_MEMORIES, EXTRA_QR_RATE, type PriceSchedule, type Binding } from './pricing';
+import { priceBreakdown, miniPriceBreakdown, FREE_QR_MEMORIES, QR_PACK_PRICE, QR_PACK_SIZE, type PriceSchedule, type Binding } from './pricing';
 import { quoteParts, type OrderQuote } from './adminOrders';
 import type { AlbumSizePreset } from '../pages/builder/types';
 
@@ -14,6 +14,8 @@ import type { AlbumSizePreset } from '../pages/builder/types';
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0055_order_quoted_total.sql'), 'utf8');
+/** The newest order_quote(): 2 videos free, then packs of 3 for ₱100 (owner, 2026-11-19). */
+const packsSql = readFileSync(resolve(__dirname, '../../supabase/migrations/0066_video_packs.sql'), 'utf8');
 
 /** The live price list on 2026-10-26 (public_price_schedule(), was-price left out). */
 const LIVE = {
@@ -32,9 +34,9 @@ const LIVE = {
 const DB: [AlbumSizePreset, string, number, number, number | null, boolean, OrderQuote][] = [
   // 66.25 × 9 sheets + 575 = 1171.25 … and 60 pages over: a .25 that Math.round and float8 floor(x + 0.5) agree on
   ['6x4', 'softcover', 100, 0, null, false, { qr: 0, album: 824, total: 1023, years: null, hd_fee: 0, qr_fee: 0, extra_qr: 0, term_fee: 0, extra_pages: 60, extra_pages_fee: 199 }],
-  ['6x6', 'softcover', 46, 9, 10, true, { qr: 9, album: 890, total: 1078, years: 10, hd_fee: 49, qr_fee: 40, extra_qr: 2, term_fee: 99, extra_pages: 6, extra_pages_fee: 0 }],
-  ['6x6', 'hardboundLeather', 130, 6, 5, false, { qr: 6, album: 1215, total: 1679, years: 5, hd_fee: 0, qr_fee: 0, extra_qr: 0, term_fee: 0, extra_pages: 90, extra_pages_fee: 464 }],
-  ['8x8', 'softcover', 41, 8, 20, true, { qr: 8, album: 1288, total: 1622, years: 20, hd_fee: 49, qr_fee: 20, extra_qr: 1, term_fee: 199, extra_pages: 1, extra_pages_fee: 66 }],
+  ['6x6', 'softcover', 46, 9, 10, true, { qr: 9, album: 890, total: 1338, years: 10, hd_fee: 49, qr_fee: 300, extra_qr: 7, term_fee: 99, extra_pages: 6, extra_pages_fee: 0 }],
+  ['6x6', 'hardboundLeather', 130, 6, 5, false, { qr: 6, album: 1215, total: 1879, years: 5, hd_fee: 0, qr_fee: 200, extra_qr: 4, term_fee: 0, extra_pages: 90, extra_pages_fee: 464 }],
+  ['8x8', 'softcover', 41, 8, 20, true, { qr: 8, album: 1288, total: 1802, years: 20, hd_fee: 49, qr_fee: 200, extra_qr: 6, term_fee: 199, extra_pages: 1, extra_pages_fee: 66 }],
   // no QR memories: no term, no HD, whatever the order says
   ['6x8', 'hardboundLeather', 77, 0, 15, true, { qr: 0, album: 1456, total: 1788, years: null, hd_fee: 0, qr_fee: 0, extra_qr: 0, term_fee: 0, extra_pages: 37, extra_pages_fee: 332 }],
   // a term that isn't on the price list costs nothing (hostingTermCharge)
@@ -58,8 +60,10 @@ describe("the database's total is the Pay screen's total", () => {
 });
 
 describe('0055 follows the checkout', () => {
-  it('7 QR memories included, ₱20 each past that: the same numbers as pricing.ts', () => {
-    expect(sql).toContain(`qr_fee := greatest(0, qr - ${FREE_QR_MEMORIES}) * ${EXTRA_QR_RATE};`);
+  it('2 video memories included, then packs of 3 for ₱100: the same numbers as pricing.ts (0066)', () => {
+    expect(packsSql).toContain(`packs  := ceil(greatest(0, qr - ${FREE_QR_MEMORIES})::numeric / ${QR_PACK_SIZE})::integer;`);
+    expect(packsSql).toContain(`packs  := ceil(greatest(0, qr - free_qr)::numeric / ${QR_PACK_SIZE})::integer;`);
+    expect(packsSql.split(`qr_fee := packs * ${QR_PACK_PRICE};`).length - 1).toBe(2);
   });
 
   it("rounds like JavaScript's Math.round (floor(x + 0.5) in float8), never Postgres round()", () => {
@@ -90,11 +94,54 @@ describe('0055 follows the checkout', () => {
   });
 });
 
+/* LONGER VIDEOS (owner, 2026-11-20; 0067): up to 3 minutes ₱199, up to 5
+   minutes ₱399, once per album, only with video memories. The database's
+   answers (local test database, 0067, this price list) pinned. */
+const longSql = readFileSync(resolve(__dirname, '../../supabase/migrations/0067_longer_videos.sql'), 'utf8');
+const WITH_LONG = { ...LIVE, long_video_prices: { '3': 199, '5': 399 },
+  mini: { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 } } as unknown as PriceSchedule;
+const LONG: [AlbumSizePreset, string, number, number, number | null, boolean, number, OrderQuote][] = [
+  ['8x8', 'softcover', 41, 8, 20, true, 5, { qr: 8, album: 1288, total: 2201, years: 20, hd_fee: 49, qr_fee: 200, extra_qr: 6, term_fee: 199, extra_pages: 1, extra_pages_fee: 66, video_minutes: 5, long_fee: 399 }],
+  ['6x6', 'hardboundLeather', 40, 3, null, false, 3, { qr: 3, album: 1215, total: 1514, years: null, hd_fee: 0, qr_fee: 100, extra_qr: 1, term_fee: 0, extra_pages: 0, extra_pages_fee: 0, video_minutes: 3, long_fee: 199 }],
+  // no videos: no fee, whatever the order says
+  ['6x4', 'softcover', 40, 0, null, false, 5, { qr: 0, album: 824, total: 824, years: null, hd_fee: 0, qr_fee: 0, extra_qr: 0, term_fee: 0, extra_pages: 0, extra_pages_fee: 0, video_minutes: 2, long_fee: 0 }],
+  ['8x8', 'hardboundLeather', 40, 2, null, true, 2, { qr: 2, album: 1788, total: 1837, years: null, hd_fee: 49, qr_fee: 0, extra_qr: 0, term_fee: 0, extra_pages: 0, extra_pages_fee: 0, video_minutes: 2, long_fee: 0 }],
+];
+
+describe('longer videos: the database charges what the checkout says (0067)', () => {
+  it.each(LONG)('%s %s, %i pages, %i QR, %s years, HD %s, %i minutes', (size, cover, pages, qr, years, hd, minutes, q) => {
+    const binding: Binding = cover === 'softcover' ? 'soft' : 'hard';
+    const b = priceBreakdown(WITH_LONG, size, binding, pages, qr, qr > 0 ? years : null, hd, minutes);
+    expect(b.total).toBe(q.total);
+    expect(q.album + q.extra_pages_fee + q.qr_fee + q.term_fee + q.hd_fee + (q.long_fee ?? 0)).toBe(q.total);
+    expect(b.items.find((i) => /^Longer videos/.test(i.label))?.amount ?? 0).toBe(q.long_fee);
+  });
+
+  it('a Megy Mini with 5 videos, 10 years, HD and 5 minutes: ₱1,117 as the database said', () => {
+    const offer = (WITH_LONG as unknown as { mini: Parameters<typeof miniPriceBreakdown>[1] }).mini;
+    const b = miniPriceBreakdown(WITH_LONG, offer, 5, 10, true, 5);
+    expect(b.total).toBe(1117);
+    expect(b.items.find((i) => /^Longer videos/.test(i.label))?.amount).toBe(399);
+  });
+
+  it("the price list's prices, and the trigger passes the order's tier", () => {
+    expect(longSql).toContain("'long_video_prices',   jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price)");
+    expect(longSql).toMatch(/default 199[\s\S]*default 399/);
+    expect(longSql).toMatch(/coalesce\(new\.hd_memories, false\),\s+null, new\.video_minutes\);/);
+    expect(longSql).toContain('drop function if exists public.order_quote(text, text, integer, integer, integer, boolean, jsonb);');
+  });
+
+  it('the bill names it, and the admin line does', () => {
+    expect(priceBreakdown(WITH_LONG, '6x6', 'hard', 40, 3, null, false, 3).items.map((i) => i.label)).toContain('Longer videos · up to 3 minutes, one time');
+    expect(quoteParts(LONG[0][7])).toBe('album ₱1,288 + 1 extra page ₱66 + 6 extra QR ₱200 + 20 years ₱199 + HD ₱49 + videos up to 5 min ₱399');
+  });
+});
+
 describe('quoteParts', () => {
   it('names what the total is made of, the free parts left out', () => {
-    expect(quoteParts(DB[1][6])).toBe('album ₱890 + 2 extra QR ₱40 + 10 years ₱99 + HD ₱49');
+    expect(quoteParts(DB[1][6])).toBe('album ₱890 + 7 extra QR ₱300 + 10 years ₱99 + HD ₱49');
     expect(quoteParts(DB[0][6])).toBe('album ₱824 + 60 extra pages ₱199');
-    expect(quoteParts(DB[3][6])).toBe('album ₱1,288 + 1 extra page ₱66 + 1 extra QR ₱20 + 20 years ₱199 + HD ₱49');
-    expect(quoteParts(DB[2][6])).toBe('album ₱1,215 + 90 extra pages ₱464');
+    expect(quoteParts(DB[3][6])).toBe('album ₱1,288 + 1 extra page ₱66 + 6 extra QR ₱200 + 20 years ₱199 + HD ₱49');
+    expect(quoteParts(DB[2][6])).toBe('album ₱1,215 + 90 extra pages ₱464 + 4 extra QR ₱200');
   });
 });

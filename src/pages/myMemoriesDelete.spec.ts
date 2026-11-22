@@ -49,7 +49,7 @@ describe('Delete in My Memories', () => {
   it('asks first, saying the order that printed the QR and the album page it comes off', async () => {
     await tap(q('memory-delete'));
     expect(q('memory-delete-warning')!.textContent).toBe(
-      'This QR is printed in your order MP-2026-MUGCCF5. Deleting the video makes that printed QR show “Memory not found”. To change the video, use Replace video instead.'
+      'This QR is printed in your order MP-2026-MUGCCF5. Deleting the video makes that printed QR show “Memory not found”.'
       + ' It comes off page 40 of “HK Trip” too, so the next order doesn\'t print or charge it. Delete it?');
     expect(deleteMemoryEverywhere).not.toHaveBeenCalled();
   });

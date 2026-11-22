@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
+  reapplyHostingTerm, unsentMarkPaidQuestion, unsentNote,
 } from '../../lib/adminOrders';
 import { peso } from '../../lib/eventBookings';
 import { DELIVERED_FILES_KEEP_DAYS } from '../../lib/orderExpiry';
@@ -15,7 +16,7 @@ import {
   downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
 } from '../../lib/pressSheetFiles';
 
-export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null }: {
+export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null, unsent = null }: {
   orders: AdminOrder[];
   onChanged: () => Promise<void>;
   canSeeFinancials: boolean;
@@ -24,6 +25,8 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
   printReadyIds: Set<string>;
   /** Order ids that have their "<id>-cover.pdf"; null while unknown. */
   coverReadyIds?: Set<string> | null;
+  /** Open orders that didn't finish sending (0068): what never arrived, by order id. */
+  unsent?: Map<string, string[]> | null;
 }) {
   if (orders.length === 0) {
     return <p className="text-sm text-light py-16 text-center">No orders yet.</p>;
@@ -35,7 +38,8 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
         const files = printFilesOf(o);
         const printReady = printReadyIds.has(files);
         return <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReady}
-          coverMissing={printReady && coverReadyIds !== null && !coverReadyIds.has(files) && COVER_STILL_NEEDED.includes(o.status)} />;
+          coverMissing={printReady && coverReadyIds !== null && !coverReadyIds.has(files) && COVER_STILL_NEEDED.includes(o.status)}
+          unsentMissing={unsent?.get(o.id) ?? null} />;
       })}
     </div>
   );
@@ -77,8 +81,10 @@ function PressHowTo() {
   );
 }
 
-function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: {
+function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing, unsentMissing = null }: {
   o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean; printReady: boolean; coverMissing?: boolean;
+  /** What never arrived from the customer's phone (0068); null: the order is whole (or unknown). */
+  unsentMissing?: string[] | null;
 }) {
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
@@ -103,11 +109,23 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
     setSaving(false);
   };
   const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
-  const markPaid = () => run(() => markOrderPaid(o.id));
+  // An order that didn't finish sending (0068): Mark paid asks first (the
+  // money may be real; the order still can't be printed).
+  const markPaid = () => {
+    if (unsentMissing && !window.confirm(unsentMarkPaidQuestion(o.order_number, unsentMissing))) return Promise.resolve();
+    return run(() => markOrderPaid(o.id));
+  };
   // An owner's "Paid" is Mark paid (memory years included). Fulfillment can't
   // mark paid: their "Paid" stays with set_order_status, which refuses it.
+  // In production on a paid order: the memory term again, for QR videos that
+  // arrived after Mark paid (an order finished late). The database refuses
+  // In production while anything is missing (MP031): its words show here.
   const changeStatus = (status: AdminOrder['status']) =>
-    status === 'paid' && canSeeFinancials ? markPaid() : run(() => setOrderStatus(o.id, status));
+    status === 'paid' && canSeeFinancials ? markPaid() : run(async () => {
+      const e = await setOrderStatus(o.id, status);
+      if (!e && status === 'in_production' && canSeeFinancials && o.payment_status === 'paid' && o.hosting_years) await reapplyHostingTerm(o.id);
+      return e;
+    });
 
   // Commit the manually-typed price. The raw input is free text, so a comma,
   // a peso sign, or a stray letter would make `Number(price)` NaN — which
@@ -160,10 +178,24 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                 Tester order · {o.tester_code}
               </span>
             )}
+            {/* Owner only: the code rides on the quote (0061). */}
+            {canSeeFinancials && o.quote?.affiliate && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#E8F0FE] text-[#1F4E99]" data-testid="order-affiliate"
+                title="Placed with an affiliate's code: the customer got the discount, the affiliate earns on it once it's delivered (Affiliates tab).">
+                Affiliate · {o.quote.affiliate.code}
+              </span>
+            )}
             {o.event_booking_number && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#E6F4EA] text-success" data-testid="order-event-album"
                 title="An event album: paid by its booking, not by transfer.">
                 Event album · {o.event_booking_number}
+              </span>
+            )}
+            {/* 0068: the customer's phone stopped half-way; this says what never arrived. */}
+            {unsentMissing && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-unsent"
+                title={unsentNote(unsentMissing)}>
+                <AlertTriangle size={12} /> Didn't finish sending
               </span>
             )}
             {!printReady && o.status === 'delivered' && (
@@ -174,13 +206,13 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                 Delivered · print file not kept
               </span>
             )}
-            {!printReady && o.status !== 'delivered' && (
+            {!printReady && !unsentMissing && o.status !== 'delivered' && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-print-file-missing"
                 title="No print-ready PDF is in the fulfillment bucket for this order. Do not print until the customer re-orders from the device that holds the photos.">
                 <AlertTriangle size={12} /> Print file missing
               </span>
             )}
-            {coverMissing && (
+            {coverMissing && !unsentMissing && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-cover-missing"
                 title={o.created_at < COVER_SAVED_WITH_ALBUM_SINCE
                   // my_orders_missing_cover (0051) skips orders that froze no cover design.
@@ -197,6 +229,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
             {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages · <span data-testid="order-spine">{orderSpine(o)}</span>{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
           </div>
           {o.ship_address && <div className="text-xs text-[#B9B9B9] mt-0.5 max-w-md">{o.ship_address}</div>}
+          {unsentMissing && <div className="text-xs text-[#C0392B] mt-1 max-w-md" data-testid="order-unsent-note">{unsentNote(unsentMissing)}</div>}
           {(o.payment_reference || o.payment_submitted_at) && (
             <div className="text-xs text-medium mt-1">
               Transfer{o.payment_reference ? <> ref <span className="font-mono text-dark">{o.payment_reference}</span></> : ' sent'}
