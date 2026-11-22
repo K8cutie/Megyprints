@@ -22,6 +22,7 @@
        and a stopped send is told to the shop (reportToShop.ts).
    ══════════════════════════════════════════════════════════════════════════ */
 import type { AlbumPage, QrFill } from '@web/pages/builder/types';
+import { HDR_MODE, isHdrFailure, shrinkWithHdrWays } from '../modules/video-shrink';
 import { isOrderBeingSent, markOrderSending, startKeeper, startSending, type KeeperNative } from '../src/lib/checkout/backgroundSend';
 import { reportToShop, shopReport } from '../src/lib/checkout/reportToShop';
 import { OrderNotSentError, sendOrder, sendPayment, type ClipSender, type PlacedOrder, type SendDb, type SendDeps } from '../src/lib/checkout/sendOrder';
@@ -112,8 +113,9 @@ describe('a memory video and the server\'s 50 MB cap', () => {
     files.present.add(clip.uri); files.sizes.set(clip.uri, clip.size);
     box.index = { vid22222: clip };
     expect(await s.prepareStagedClips(['vid22222'])).toEqual([]);
-    expect(asked).toEqual([fitBitrate(120)]);
-    expect(box.index.vid22222).toMatchObject({ size: 41 * MB, ext: 'mp4', fitTried: true });
+    // The album's quality (Standard, 2.2 Mbps) when that already fits; the fit bitrate only below it.
+    expect(asked).toEqual([2_200_000]);
+    expect(box.index.vid22222).toMatchObject({ size: 41 * MB, ext: 'mp4', fitTried: 2 });
     expect(box.index.vid22222.uri).not.toBe(clip.uri);
     expect(files.present.has(clip.uri)).toBe(false); // the big one is gone from the phone
   });
@@ -128,6 +130,10 @@ describe('a memory video and the server\'s 50 MB cap', () => {
     expect(await s.prepareStagedClips(['vid22222'])).toEqual([{ code: 'vid22222', size: 62 * MB }]);
     expect(await s.prepareStagedClips(['vid22222'])).toEqual([{ code: 'vid22222', size: 62 * MB }]);
     expect(tries).toBe(1);
+    // An update with a better shrinker (FIT_VERSION) tries it once more.
+    box.index = { vid22222: { ...box.index.vid22222, fitTried: true } };
+    await s.prepareStagedClips(['vid22222']);
+    expect(tries).toBe(2);
     await expect(s.uploadClip(box.index.vid22222)).rejects.toBeInstanceOf(ClipTooBigError);
     expect(uploads).toEqual([]);
   });
@@ -357,5 +363,49 @@ describe('a stopped send is told to the shop (the console\'s Errors tab)', () =>
 
   it('a report that can\'t go is dropped: it never throws', async () => {
     await expect(reportToShop(shopReport(new Error('x'), { kind: 'app-order', step: null, orderId: null }), async () => { throw new Error('offline'); })).resolves.toBeUndefined();
+  });
+});
+
+/* ── The phone's shrinker and HDR video (the native half: built on the PC) ── */
+describe('an HDR video is shrunk too (reproduced 2026-11-22: a 10-bit HDR clip was kept at 71 MB)', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('node:fs') as typeof import('node:fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require('node:path') as typeof import('node:path');
+  const kt = fs.readFileSync(path.join(__dirname, '../modules/video-shrink/android/src/main/java/expo/modules/megyvideoshrink/VideoShrinkModule.kt'), 'utf8');
+
+  it('the shrink tone-maps HDR to a normal video (Android 10+), through a Composition', () => {
+    expect(kt).toContain('Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL');
+    expect(kt).toContain('.setHdrMode(hdrMode)');
+    expect(kt).toContain('Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q');
+    expect(kt).toContain('transformer.start(composition, out.absolutePath)');
+    expect(kt).not.toContain('transformer.start(item, out.absolutePath)');
+  });
+
+  it('a shrink that fails says why in the phone\'s log', () => {
+    expect(kt).toContain('Log.w("MegyVideoShrink", "shrink failed: ${exportException.errorCodeName}');
+  });
+});
+
+describe("an HDR video the phone can't tone-map with OpenGL (the emulator: no GL_EXT_YUV_target)", () => {
+  const frameErr = Object.assign(new Error('ERROR_CODE_VIDEO_FRAME_PROCESSING_FAILED: Video frame processing error'), { code: 'ERR_SHRINK' });
+  it("tries the phone's own tone-mapping (Android 12+), then reads it as a normal video", async () => {
+    const tried: (number | undefined)[] = [];
+    const r = await shrinkWithHdrWays(async (o) => { tried.push(o.hdrMode); if (o.hdrMode !== HDR_MODE.readAsNormal) throw frameErr; return 'ok'; }, 34);
+    expect(r).toBe('ok');
+    expect(tried).toEqual([undefined, HDR_MODE.toneMapMediaCodec, HDR_MODE.readAsNormal]);
+  });
+  it('Android 10–11: straight to reading it as normal; older: the original is kept (and checked against the cap)', async () => {
+    const tried: (number | undefined)[] = [];
+    await shrinkWithHdrWays(async (o) => { tried.push(o.hdrMode); if (o.hdrMode === undefined) throw frameErr; return 'ok'; }, 29);
+    expect(tried).toEqual([undefined, HDR_MODE.readAsNormal]);
+    await expect(shrinkWithHdrWays(async () => { throw frameErr; }, 28)).rejects.toBe(frameErr);
+  });
+  it('any other failure, or Stop, is not tried again', async () => {
+    let n = 0;
+    await expect(shrinkWithHdrWays(async () => { n++; throw Object.assign(new Error('ERROR_CODE_IO_FILE_NOT_FOUND: gone'), { code: 'ERR_SHRINK' }); }, 34)).rejects.toThrow('gone');
+    await expect(shrinkWithHdrWays(async () => { n++; throw Object.assign(new Error('Stopped'), { code: 'ERR_CANCELLED' }); }, 34)).rejects.toThrow('Stopped');
+    expect(n).toBe(2);
+    expect(isHdrFailure(frameErr)).toBe(true);
   });
 });

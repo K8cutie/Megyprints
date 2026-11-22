@@ -189,6 +189,11 @@ export function tooBigClipMessage(pages: { qrFills?: ({ code: string } | null)[]
     : `The memory videos on ${where} are too big to send (we can take up to ${cap} MB each). Open your album and choose shorter videos for those QRs, then order.`;
 }
 
+/** The shrinker a fit was tried with: 2 = HDR videos tone-mapped (or read as
+ *  normal). A video tried with an older one is tried again. */
+export const FIT_VERSION = 2;
+const fitDone = (c: { fitTried?: boolean | number }) => (c.fitTried === true ? 1 : Number(c.fitTried) || 0) >= FIT_VERSION;
+
 /** Waits between a memory video's upload tries (3 tries, like the cover). */
 export const CLIP_UPLOAD_WAITS_MS = [1500, 4000];
 export const uploadFailed = (message: string) => `Could not upload your memory video (${message || 'storage error'}).`;
@@ -213,8 +218,10 @@ export interface StagedClip {
   uploaded?: boolean;
   /** It replaces what the code pointed at before: upload over it, re-point the row. */
   replace?: boolean;
-  /** A shrink to fit under the server's cap was tried (and is not tried again for this video). */
-  fitTried?: boolean;
+  /** The FIT_VERSION a shrink to fit under the server's cap was last tried
+   *  with (true: before versions). Tried again after an update brings a
+   *  better shrinker (2: HDR videos), never twice with the same one. */
+  fitTried?: boolean | number;
 }
 
 type StorageError = { message: string; statusCode?: string | number; error?: string } | null;
@@ -370,11 +377,14 @@ export function makeClipStore(d: ClipDeps) {
    *  video (a new video for the code tries again). */
   async function fitUnderCap(code: string): Promise<void> {
     const clip = await getStagedClip(code);
-    if (!clip || clip.uploaded || clip.fitTried || !d.shrink) return;
+    if (!clip || clip.uploaded || fitDone(clip) || !d.shrink) return;
     const size = d.files.size(clip.uri) || clip.size;
     if (size <= SERVER_UPLOAD_CAP_BYTES) return;
     const seconds = clip.durationSec ?? (await d.probeSeconds?.(clip.uri).catch(() => null)) ?? null;
-    const bitrate = fitBitrate(seconds);
+    const fit = fitBitrate(seconds);
+    // Never more than the album's own quality: a 40-second video needs no
+    // 9 Mbps to fit, and the free plan holds 1 GB in all.
+    const bitrate = fit ? Math.min(fit, QUALITY_TARGETS[clip.quality ?? 'standard'].bitrate) : null;
     let out: { uri: string; size: number } | null = null;
     if (bitrate) {
       progressByCode.set(code, 0);
@@ -395,8 +405,8 @@ export function makeClipStore(d: ClipDeps) {
     await edit((index) => {
       if (!index[code]) return;
       index[code] = fits
-        ? { ...index[code], uri: out!.uri, ext: 'mp4', size: out!.size, transcoded: true, fitTried: true }
-        : { ...index[code], fitTried: true };
+        ? { ...index[code], uri: out!.uri, ext: 'mp4', size: out!.size, transcoded: true, fitTried: FIT_VERSION }
+        : { ...index[code], fitTried: FIT_VERSION };
     });
     if (fits) await d.files.remove(clip.uri).catch(() => {});
     else if (out) await d.files.remove(out.uri).catch(() => {});
@@ -412,7 +422,7 @@ export function makeClipStore(d: ClipDeps) {
       const clip = await getStagedClip(code);
       if (!clip || clip.uploaded) continue;
       if (!clip.transcoded) pending.push(code);
-      else if (!clip.fitTried && (d.files.size(clip.uri) || clip.size) > SERVER_UPLOAD_CAP_BYTES) over.push(code);
+      else if (!fitDone(clip) && (d.files.size(clip.uri) || clip.size) > SERVER_UPLOAD_CAP_BYTES) over.push(code);
     }
     const total = pending.length + over.length;
     if (!total) return;
