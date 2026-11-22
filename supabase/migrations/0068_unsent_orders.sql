@@ -194,7 +194,7 @@ begin
               where o.id = p_order_id and o.user_id = auth.uid()
                 and o.payment_status = 'unpaid' and o.status = 'pending_payment')
      and cardinality(public.order_files_missing(p_order_id)) > 0 then
-    raise exception 'This order didn''t finish sending from your phone, so we can''t print it yet. Open Your orders in the Megy Prints app on the phone you made the album on, tap Finish sending, then tap I''ve sent the payment again. If you already sent the money, it''s safe: we''ll match it to this order.'
+    raise exception 'This order didn''t finish sending from your phone, so we can''t print it yet. Update the Megy Prints app, open Your orders on the phone you made the album on and tap Finish sending, then tap I''ve sent the payment again. If you already sent the money, it''s safe: we''ll match it to this order.'
       using errcode = 'MP030';
   end if;
 
