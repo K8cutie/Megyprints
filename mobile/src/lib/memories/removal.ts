@@ -3,8 +3,8 @@
    src/lib/memoryRemoval.ts, for My Memories on the phone).
 
    "Delete" asks first, saying where the QR is: the albums and pages that
-   carry it, and the orders that printed it ("To change the video, use
-   Replace video instead"). A confirmed delete removes the memory's row, then
+   carry it, and the orders that printed it (and "To change the video, use
+   Replace video instead" while Replace is on). A confirmed delete removes the memory's row, then
    takes the QR off every album in the account through the album's own save
    (shared albumCloud.ts saveAlbumRowWith, on each album's version, once more
    on a fresh read if another device saved in between), so the next order
@@ -17,6 +17,7 @@
    website's own functions beside these on the same stand-in database.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { REPLACE_VIDEO_ON } from './replaceSwitch';
 import { deserializeAlbum, saveAlbumRowWith, type AlbumData } from '@web/lib/albumCloud';
 import { memoryCodesInSnapshot } from './memories';
 
@@ -79,13 +80,14 @@ export async function memoryPlaces(client: SupabaseClient, userId: string, code:
   return places;
 }
 
-/** "This QR is printed in order MP-… . It comes off page 40 of "HK Trip" …" */
-export function memoryDeleteWarning(places: MemoryPlaces): string {
+/** "This QR is printed in order MP-… . It comes off page 40 of "HK Trip" …"
+ *  Points to Replace video only while it is on (replaceSwitch.ts). */
+export function memoryDeleteWarning(places: MemoryPlaces, replaceOn: boolean = REPLACE_VIDEO_ON): string {
   const quote = (s: string) => `“${s}”`;
   const pageList = (n: number[]) => (n.length === 1 ? `page ${n[0]}` : `pages ${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`);
   const parts: string[] = [];
   if (places.orders.length) {
-    parts.push(`This QR is printed in your order ${places.orders.join(', ')}. Deleting the video makes that printed QR show “Memory not found”. To change the video, use Replace video instead.`);
+    parts.push(`This QR is printed in your order ${places.orders.join(', ')}. Deleting the video makes that printed QR show “Memory not found”.${replaceOn ? ' To change the video, use Replace video instead.' : ''}`);
   }
   if (places.albums.length) {
     parts.push(`It comes off ${places.albums.map((a) => `${pageList(a.pages)} of ${quote(a.title)}`).join(' and ')} too, so the next order doesn't print or charge it.`);

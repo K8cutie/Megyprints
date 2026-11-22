@@ -27,10 +27,10 @@
    upload, no tester-code check (that call counts tries in the database).
    The price is real: the live price list, read only.
    ══════════════════════════════════════════════════════════════════════════ */
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, usePreventRemove } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
 import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, QR_PACK_SENTENCE } from '@web/lib/pricing';
@@ -78,10 +78,17 @@ import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedu
 import { checkTesterCodeOffline, testerLine, type TesterCode } from '../lib/checkout/testerCode';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
-import { albumClipTier } from '../lib/memories/albumTier';
+import { albumClipTier, albumVideoMinutesOnPhone } from '../lib/memories/albumTier';
+import type { VideoMinutes } from '@web/lib/pricing';
 import { dropEventLink, readEventLink, saveEventLink } from '../lib/events/albumEventLink';
 import * as EV from '../lib/events/eventDeal';
-import { MissingClipError, missingClipMessage, type ClipQuality } from '../lib/memories/clips';
+import { ClipTooBigError, MissingClipError, missingClipMessage, tooBigClipMessage, type ClipQuality } from '../lib/memories/clips';
+import {
+  allSentBody, allSentTitle, FINISH_LOAD_FAILED, FINISH_SENDING, finishAlbum, finishEndsOnPayment, finishPlan,
+  listUnsentOrders, loadFinishOrder, NEW_ORDER_INSTEAD, unsentBody, unsentHeadline, type FinishOrderRow, type UnsentOrder,
+} from '../lib/checkout/unsentOrders';
+import { isOrderBeingSent, LEAVE_SCREEN, LEAVE_SENDING_LINE, LEAVE_SENDING_TITLE, STAY_HERE } from '../lib/checkout/backgroundSend';
+import type { CheckoutAlbum } from '../lib/checkout/orderPayload';
 
 type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing' | 'done';
 
@@ -94,7 +101,8 @@ export default function OrderScreen() {
   // The album "Order this album" opened checkout with (its id), or the test
   // album (48 sample photos, made by the shared album maker) from the home
   // screen's test button.
-  const { albumId: ownId } = useLocalSearchParams<{ albumId?: string }>();
+  // `finish`: the order Your orders' "Finish sending" opened checkout for.
+  const { albumId: ownId, finish: finishParam } = useLocalSearchParams<{ albumId?: string; finish?: string }>();
   const own = useOptionalBuilder();
   const ordersOwn = !!ownId && !!own;
   // The account's copy of it, read by its id once signed in (never another
@@ -131,8 +139,9 @@ export default function OrderScreen() {
   // A send that stopped: the form opens again at its words and Place order.
   const showFailure = useRef(false);
   const [placedOrder, setPlacedOrder] = useState<PlacedOrder | null>(null);
-  // The end: a tester order placed, or a payment sent.
-  const [done, setDone] = useState<{ number: string; test: boolean; receiptError: string | null; booking?: string } | null>(null);
+  // The end: a tester order placed, or a payment sent, or (allSent) an order
+  // already paid that Finish sending made whole.
+  const [done, setDone] = useState<{ number: string; test: boolean; receiptError: string | null; booking?: string; allSent?: boolean } | null>(null);
   const b = own?.builder;
   const album = useMemo(() => (ordersOwn && b
     // Until the account's copy is read, a stand-in row with the album's id:
@@ -202,6 +211,38 @@ export default function OrderScreen() {
       .catch(() => { /* can't tell: checkout goes on as before */ });
     return () => { alive = false; };
   }, [userId, album.albumId, step]);
+
+  // AN ORDER THAT DIDN'T FINISH SENDING (0068, lib/checkout/unsentOrders.ts):
+  // this album's, or the one Your orders' "Finish sending" opened. Checkout
+  // then finishes THAT order from what it froze, never a new one (unless
+  // "Place a new order instead"). Orders this app is still sending don't count.
+  const [unsent, setUnsent] = useState<UnsentOrder | null>(null);
+  const [newInstead, setNewInstead] = useState(false);
+  const [finishOrder, setFinishOrder] = useState<FinishOrderRow | null>(null);
+  const [finishAlbumNow, setFinishAlbumNow] = useState<CheckoutAlbum | null>(null);
+  const [finishBusy, setFinishBusy] = useState(false);
+  const [payAfterFinish, setPayAfterFinish] = useState(false);
+  const [unsentRead, setUnsentRead] = useState(0);
+  useEffect(() => {
+    if (!live || !userId || !supabaseConfigured || step !== 'form') return;
+    let alive = true;
+    void listUnsentOrders(supabase).then((list) => {
+      if (!alive) return;
+      const open = list.filter((o) => !isOrderBeingSent(o.order_id));
+      setUnsent(open.find((o) => o.order_id === finishParam) ?? open.find((o) => o.album_id === album.albumId) ?? null);
+    });
+    return () => { alive = false; };
+  }, [live, userId, step, album.albumId, finishParam, unsentRead]);
+  const finishMode = live && !!unsent && !newInstead;
+
+  // Back while the order is being sent: it keeps going (Sending.tsx), so the
+  // question says so and offers to stay (MP-2026-9M5572U).
+  usePreventRemove(step === 'placing' && live, ({ repeat }) => {
+    Alert.alert(LEAVE_SENDING_TITLE, LEAVE_SENDING_LINE, [
+      { text: STAY_HERE, style: 'cancel' },
+      { text: LEAVE_SCREEN, onPress: repeat },
+    ], { cancelable: true });
+  });
 
   const albumSize = album.albumSize;
   const pageCount = album.pages.length;
@@ -306,17 +347,21 @@ export default function OrderScreen() {
   // HD memories: the quality the album's videos were made for (the website's
   // albumTier), read before the price is shown.
   const clipKey = albumQrFills(album.pages).filter((f) => f?.kind === 'clip').map((f) => f!.code).join(',');
-  const [clipTier, setClipTier] = useState<{ key: string; tier: ClipQuality } | null>(null);
+  // Longer videos (0067): the album's longest video kept on this phone.
+  const [clipTier, setClipTier] = useState<{ key: string; tier: ClipQuality; minutes: VideoMinutes } | null>(null);
   useEffect(() => {
     if (!clipKey) return;
     let alive = true;
-    void albumClipTier(clipKey.split(',')).then((tier) => { if (alive) setClipTier({ key: clipKey, tier }); });
+    const codes = clipKey.split(',');
+    void Promise.all([albumClipTier(codes), albumVideoMinutesOnPhone(codes)])
+      .then(([tier, minutes]) => { if (alive) setClipTier({ key: clipKey, tier, minutes }); });
     return () => { alive = false; };
   }, [clipKey]);
   const clipTierReady = !clipKey || clipTier?.key === clipKey;
   const hdMemories = !eventLink && qrCount > 0 && !!clipKey && clipTier?.key === clipKey && clipTier.tier === 'hd';
+  const videoMinutes = !eventLink && qrCount > 0 && !!clipKey && clipTier?.key === clipKey ? clipTier.minutes : 2;
   // An event album: the included term, no tester code (its booking pays).
-  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, tester: eventLink ? null : tester, affiliate: eventLink || tester ? null : affiliate });
+  const priced = checkoutPrice(prices.schedule, { albumSize, cover, pageCount, qrCount, hostingYears: eventLink ? null : hostingYears, hdMemories, videoMinutes, tester: eventLink ? null : tester, affiliate: eventLink || tester ? null : affiliate });
   const price = clipTierReady ? priced : { ...priced, ready: false };
 
   // The bar's steps for this album (made once: a re-render must not restart the bar).
@@ -372,6 +417,7 @@ export default function OrderScreen() {
         shipping: { name: cleanName, phone: cleanPhone, address },
         hostingYears: price.effectiveYears,
         hdMemories,
+        videoMinutes,
         testerCode: eventLink ? null : tester?.code ?? null,
         affiliateCode: eventLink || tester ? null : affiliate?.code ?? null,
         includedYears: price.includedYears,
@@ -383,6 +429,32 @@ export default function OrderScreen() {
       setStep('placing');
     } catch (e) {
       setMessage(e instanceof Error ? e.message : 'Something went wrong placing your order.');
+    }
+  };
+
+  // Finish sending: the order read back with the album it froze, drawn from
+  // this phone's photos, and sent on the SAME order: only what isn't in the
+  // bucket yet goes up (unsentOrders.ts).
+  const startFinishing = async () => {
+    if (!unsent || !userId || !b || finishBusy) return;
+    if (!ownText) { setMessage('Getting your album ready… Tap Finish sending again in a moment.'); return; }
+    setMessage('');
+    setFinishBusy(true);
+    try {
+      const order = await loadFinishOrder(supabase as never, userId, unsent.order_id);
+      if (!order) { setMessage(FINISH_LOAD_FAILED); return; }
+      const fa = finishAlbum(order, b.uploadedPhotos);
+      const p = finishPlan(order, userId, price.ready ? price.includedYears : null);
+      placedRef.current = { id: order.id, order_number: order.order_number, status: order.status };
+      setFinishOrder(order);
+      setFinishAlbumNow(fa);
+      setPlacedAmount(askedToPay(order) ?? price.payTotal);
+      setPlan(p);
+      setStep('placing');
+    } catch (e) {
+      setMessage(e instanceof Error && e.message ? e.message : FINISH_LOAD_FAILED);
+    } finally {
+      setFinishBusy(false);
     }
   };
 
@@ -437,20 +509,43 @@ export default function OrderScreen() {
   };
 
   if (step === 'placing' && plan && live && ownText) {
+    const fo = finishOrder;
     return (
       <Sending
-        plan={plan} album={album} cover={cover} material={material} text={ownText} placed={placedRef.current} sent={sentRef.current}
+        plan={plan} album={fo && finishAlbumNow ? finishAlbumNow : album}
+        cover={fo?.cover ? fo.cover as CoverType : cover} material={fo?.material ? fo.material as MaterialType : material}
+        text={ownText} placed={placedRef.current} sent={sentRef.current}
         bookingNumber={eventLink?.bookingNumber ?? null}
+        finishing={!!fo}
         onOrder={(o) => { placedRef.current = o; }}
         onSent={(r) => {
           placedRef.current = r.order;
           setPlacedOrder(r.order);
+          if (fo) {
+            // Whole now: its payment step while it still waits for one, else "all sent".
+            setFinishOrder(null); setFinishAlbumNow(null); setUnsent(null);
+            if (finishEndsOnPayment(fo)) { setPayAfterFinish(true); setStep('payment'); return; }
+            setDone({ number: r.order.order_number, test: false, receiptError: null, allSent: true }); setStep('done'); return;
+          }
           if (r.paidByTester) { setDone({ number: r.order.order_number, test: true, receiptError: null }); setStep('done'); return; }
           if (r.paidByBooking && eventLink) { setDone({ number: r.order.order_number, test: false, receiptError: null, booking: eventLink.bookingNumber }); setStep('done'); return; }
           setStep('payment');
         }}
         onFailed={(e) => {
           showFailure.current = true;
+          if (fo) {
+            // Back on Finish sending, with the words; what is missing is read again.
+            const pages = finishAlbumNow?.pages ?? album.pages;
+            setFinishOrder(null); setFinishAlbumNow(null);
+            setUnsentRead((n) => n + 1);
+            setMessage(e instanceof ClipTooBigError ? tooBigClipMessage(pages, e.clips)
+              : e instanceof MissingClipError ? missingClipMessage(pages, e.codes)
+                : e instanceof Error && e.message ? e.message : 'Something went wrong sending your order.');
+            setStep('form');
+            return;
+          }
+          // A memory video too big for the server, said before any order was made.
+          if (e instanceof ClipTooBigError) { setMessage(tooBigClipMessage(album.pages, e.clips)); setStep('form'); return; }
           if (e instanceof TesterCodeGoneError) setTester(null);
           if (e instanceof AffiliateCodeGoneError) setAffiliate(null);
           // A memory video that's gone: the website's words, naming its pages.
@@ -467,7 +562,7 @@ export default function OrderScreen() {
   }
 
   if (step === 'done' && done) {
-    return <Done number={done.number} test={done.test} receiptError={done.receiptError} booking={done.booking} />;
+    return <Done number={done.number} test={done.test} receiptError={done.receiptError} booking={done.booking} allSent={done.allSent} />;
   }
 
   if (step === 'placed' && plan) {
@@ -506,18 +601,36 @@ export default function OrderScreen() {
     const albumLine = [ALBUM_SIZES.find((s) => s.preset === albumSize)?.name, MATERIALS.find((m) => m.type === material)?.name, COVERS.find((c) => c.type === cover)?.name].join(' · ');
     const summary = { albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal, shipsFree: !price.mini };
     if (live && placedOrder) {
-      return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={summary} live
+      // After Finish sending the summary is the order's, not the album's now: left out.
+      return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={payAfterFinish ? undefined : summary} live
         onBack={() => setStep('form')}
         onPaid={(receiptError) => { setDone({ number: placedOrder.order_number, test: false, receiptError }); setStep('done'); }} />;
     }
     return <PaymentStep amount={placedAmount} order={null} summary={summary} onBack={() => setStep('form')} />;
   }
 
+  /* ══════════════ AN ORDER THAT DIDN'T FINISH SENDING ══════════════ */
+  if (finishMode && unsent) {
+    return (
+      <ScrollView contentContainerStyle={styles.page} testID="order-finish">
+        <Text style={styles.h1}>{unsentHeadline(unsent.order_number)}</Text>
+        <View style={styles.notice}>
+          <Text style={styles.noticeBody} testID="order-finish-body">{unsentBody(unsent.missing)}</Text>
+        </View>
+        <Button label={FINISH_SENDING} busy={finishBusy} onPress={() => { void startFinishing(); }} testID="order-finish-sending" />
+        {!!message && <Text style={styles.error} accessibilityRole="alert" testID="order-finish-error">{message}</Text>}
+        {/* A new order is still possible (the album changed since, say): outlined. */}
+        <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; setNewInstead(true); setMessage(''); }} testID="order-new-instead" />
+      </ScrollView>
+    );
+  }
+
   /* ══════════════ FORM ══════════════ */
   const sizeName = mini ? `${MINI_NAME} · A5` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
   const materialName = MATERIALS.find((m) => m.type === material)?.name ?? material;
   const coverName = mini ? MINI_COVER_CHOICE.name : COVERS.find((c) => c.type === cover)?.name ?? cover;
-  const words = openOrder ? openOrderWords(openOrder) : null;
+  // An order that didn't finish sending is never "pay that order" (0068).
+  const words = openOrder && openOrder.id !== unsent?.order_id ? openOrderWords(openOrder) : null;
 
   return (
     <ScrollView ref={scrollRef} contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled" testID="order-form"
@@ -749,14 +862,16 @@ function Placing({ frames, onDone }: { frames: PlaceFrame[]; onDone: () => void 
 /** The end of checkout, in the website's words (its tracking step's
  *  headline): a tester order placed, or a payment sent for the shop to
  *  confirm. */
-function Done({ number, test, receiptError, booking }: { number: string; test: boolean; receiptError: string | null; booking?: string }) {
+function Done({ number, test, receiptError, booking, allSent }: { number: string; test: boolean; receiptError: string | null; booking?: string; allSent?: boolean }) {
   // An event album its booking paid for: the order is paid (the website's tracking headline for it).
-  const title = booking ? trackOf({ status: 'paid' }).headline : test ? 'Test order placed' : "Thank you — we're confirming your payment";
+  const title = allSent ? allSentTitle : booking ? trackOf({ status: 'paid' }).headline : test ? 'Test order placed' : "Thank you — we're confirming your payment";
   return (
     <ScrollView contentContainerStyle={styles.page} testID="order-done">
       <Text style={[styles.h1, styles.center]}>{title}</Text>
       <Text style={[styles.strong, styles.center]} testID="order-done-number">Order {number}</Text>
-      {booking
+      {allSent
+        ? <Text style={[styles.small, styles.center]} testID="order-all-sent">{allSentBody(number)}</Text>
+        : booking
         ? <Text style={[styles.small, styles.center]} testID="order-paid-by-booking">{EV.paidByBooking(booking)}</Text>
         : test
           ? <Text style={[styles.small, styles.center]}>Thank you for testing Megy Prints!</Text>

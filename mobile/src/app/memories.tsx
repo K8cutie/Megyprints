@@ -7,11 +7,14 @@
    Every memory, newest first: the address its printed QR opens ("Share
    link"), its scans, how long a video is kept, a longer term waiting on
    payment. A link memory is re-pointed here (the printed QR stays the same).
-   A video memory plays here, and "Replace video" puts a new video behind
-   the same printed QR (lib/memories/replaceVideo.ts). "Delete" asks first,
+   A video memory plays here. "Replace video" puts a new video behind the
+   same printed QR (lib/memories/replaceVideo.ts); it is switched off for now
+   (replaceSwitch.ts, owner 2026-11-21), so it isn't shown, and Delete's
+   question doesn't point to it. "Delete" asks first,
    saying where the QR is, then takes it off the account's albums too
    (lib/memories/removal.ts), as the website does.
    ══════════════════════════════════════════════════════════════════════════ */
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
@@ -24,7 +27,8 @@ import {
 } from '../lib/memories/memories';
 import { supabase, supabaseUrl } from '../lib/supabase';
 import { deletedNotice, deleteMemoryEverywhere, memoryDeleteWarning, memoryPlaces } from '../lib/memories/removal';
-import { replaceMemoryVideo, type ReplaceDeps } from '../lib/memories/replaceVideo';
+import { replaceLimits, replaceMemoryVideo, type OrderVideoQuality, type ReplaceDeps } from '../lib/memories/replaceVideo';
+import { REPLACE_VIDEO_ON } from '../lib/memories/replaceSwitch';
 import { pickVideoFromPhone } from '../editor/memories/pickVideo';
 import { VideoPreview } from '../editor/memories/VideoPreview';
 import { colors, space } from '../lib/theme';
@@ -38,16 +42,29 @@ const replaceDeps: ReplaceDeps = {
     const { clipStore } = require('../lib/memories/clipStore') as typeof import('../lib/memories/clipStore');
     await clipStore.uploadClip({ ...clip, durationSec: null, name: clip.code, stagedAt: 0 });
   },
-  shrink: (input, target) => {
+  shrink: (input, target, onProgress) => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const v = require('../../modules/video-shrink') as typeof import('../../modules/video-shrink');
     if (!v.videoShrinkAvailable) return Promise.reject(new Error('no shrinker'));
-    return v.shrinkVideo(input, `${input}.small.mp4`, target);
+    return v.shrinkVideo(input, `${input}.small.mp4`, target, onProgress);
   },
   relink: (code, destination) => relinkMemory(db, code, destination),
   supabaseUrl,
   now: () => Date.now(),
 };
+
+/** Replace video's quality and length for this account's memory: the ones
+ *  its album's videos were paid for (replaceLimits). Before 0067 is on the
+ *  server there is no orders.video_minutes, so that read fails and it asks
+ *  again without it (every video up to 2 minutes then). */
+async function replaceLimitsOf(userId: string, code: string) {
+  const orders = (supabase as unknown as SupabaseClient).from('orders');
+  const withMinutes = await orders.select('hd_memories, status, album_snapshot, video_minutes').eq('user_id', userId);
+  const read = withMinutes.error
+    ? await orders.select('hd_memories, status, album_snapshot').eq('user_id', userId)
+    : withMinutes;
+  return replaceLimits(read.error ? null : (read.data as OrderVideoQuality[] | null), code);
+}
 
 export default function Memories() {
   const { session } = useAuth();
@@ -101,6 +118,8 @@ function MemoryRow({ row, pending, userId, onRemoved }: {
   const [saved, setSaved] = useState(row.destination);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  // While a new video is prepared and sent: where it has got.
+  const [step, setStep] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
   const isClip = row.kind === 'clip' || isHostedClip(saved, supabaseUrl);
   const expired = !!row.expires_at && new Date(row.expires_at).getTime() < now;
@@ -115,8 +134,9 @@ function MemoryRow({ row, pending, userId, onRemoved }: {
     if (!v) return;
     setSaving(true);
     setMsg(null);
-    const r = await replaceMemoryVideo(row.code, v, replaceDeps);
+    const r = await replaceMemoryVideo(row.code, v, { ...replaceDeps, limits: (code) => replaceLimitsOf(userId, code) }, setStep);
     setSaving(false);
+    setStep(null);
     if (r.ok) { setSaved(r.destination); setDest(r.destination); }
     setMsg({ text: r.text, ok: r.ok });
   };
@@ -166,7 +186,12 @@ function MemoryRow({ row, pending, userId, onRemoved }: {
       {isClip ? (
         <View style={styles.gap}>
           <VideoPreview uri={saved} testID={`memory-video-${row.code}`} />
-          <Button label="Replace video" busy={saving} onPress={() => { if (!saving) void replace(); }} testID={`memory-replace-${row.code}`} />
+          {REPLACE_VIDEO_ON && (
+            <>
+              <Button label="Replace video" busy={saving} onPress={() => { if (!saving) void replace(); }} testID={`memory-replace-${row.code}`} />
+              {saving && !!step && <Text style={styles.small} testID={`memory-replace-step-${row.code}`}>{step}</Text>}
+            </>
+          )}
         </View>
       ) : (
         <View style={styles.gap}>

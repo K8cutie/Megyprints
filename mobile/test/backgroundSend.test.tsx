@@ -214,6 +214,12 @@ jest.mock('../src/lib/checkout/backgroundSend', () => {
   };
 });
 jest.mock('../src/lib/checkout/phoneSend', () => ({ sendFromPhone: (c: never) => mockSend.run(c) }));
+// A stopped send is told to the shop: written down here, never posted.
+const mockReports: { message: string; context: Record<string, unknown> }[] = [];
+jest.mock('../src/lib/checkout/reportToShop', () => ({
+  ...jest.requireActual('../src/lib/checkout/reportToShop'),
+  reportToShop: async (r: { message: string; context: Record<string, unknown> }) => { mockReports.push(r); },
+}));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
 // eslint-disable-next-line import/first
 import { Sending } from '../src/components/checkout/Sending';
@@ -279,6 +285,37 @@ describe('the Sending screen', () => {
     expect(screen.getByText(KEEP_OPEN_NOTE)).toBeOnTheScreen();
     await act(async () => { answer(true); });
     expect(await screen.findByText(BACKGROUND_NOTE)).toBeOnTheScreen();
+  });
+
+  it('left the screen mid-send (MP-2026-9M5572U): the keeper keeps going, and says how it went', async () => {
+    let finish!: (v: unknown) => void;
+    mockSend.run = (c) => { c.onOrder({ id: 'o-9', order_number: 'MP-2026-9M5572U', status: 'pending_payment' }); return new Promise((r) => { finish = r; }); };
+    const onSent = jest.fn();
+    const view = await renderSending(onSent);
+    await new Promise((r) => setImmediate(r));
+    await view.unmount();
+    // Not stopped by the screen going: no finish yet.
+    expect(mockKeeper.native!.calls.filter((c) => c.fn === 'finish')).toEqual([]);
+    finish({ order: { id: 'o-9', order_number: 'MP-2026-9M5572U', status: 'pending_payment' }, paidByTester: false });
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    expect(mockKeeper.native!.calls.at(-1)).toEqual({ fn: 'finish', args: ['Order MP-2026-9M5572U is placed', 'Pay by bank transfer to finish.'] });
+    expect(onSent).not.toHaveBeenCalled(); // the screen is gone; the notification opens the order
+  });
+
+  it('a send that stops is told to the shop: its step, its order, the words', async () => {
+    mockReports.length = 0;
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'o-9', order_number: 'MP-2026-9M5572U', status: 'pending_payment' });
+      c.onStep({ step: 'videos', done: 1, total: 4, phase: 'upload' });
+      throw new Error('Could not upload your memory video (Bad Gateway).');
+    };
+    await renderSending();
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+    expect(mockReports).toHaveLength(1);
+    expect(mockReports[0].message).toBe('Could not upload your memory video (Bad Gateway).');
+    expect(mockReports[0].context).toMatchObject({ kind: 'app-order', step: 'videos', orderId: 'o-9', finishing: false });
   });
 
   it('an older APK: the screen as before', async () => {

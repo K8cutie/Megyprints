@@ -43,6 +43,8 @@ export interface PriceInput {
   /** The memory-hosting term picked; null = the included one. */
   hostingYears: number | null;
   hdMemories: boolean;
+  /** The album's longest-video tier (0067): 2, 3 or 5; omitted = 2. */
+  videoMinutes?: number | null;
   tester: TesterCode | null;
   /** An affiliate code the database said works (0061): its discount off. */
   affiliate?: AffiliateCode | null;
@@ -86,7 +88,7 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
     // MEGY MINI (0062): a set price + shipping on top; never a "was" price.
     const offer = schedule ? miniOfferOf(schedule) : null;
     const breakdown = schedule && offer
-      ? miniPriceBreakdown(schedule, offer, input.qrCount, effectiveYears, input.hdMemories)
+      ? miniPriceBreakdown(schedule, offer, input.qrCount, effectiveYears, input.hdMemories, input.videoMinutes ?? null)
       : { items: [], total: 0 };
     return {
       ready: schedule !== null && offer !== null,
@@ -107,7 +109,7 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
     };
   }
   const breakdown = schedule
-    ? priceBreakdown(schedule, input.albumSize, binding, input.pageCount, input.qrCount, effectiveYears, input.hdMemories)
+    ? priceBreakdown(schedule, input.albumSize, binding, input.pageCount, input.qrCount, effectiveYears, input.hdMemories, input.videoMinutes ?? null)
     : { items: [], total: 0 };
   const total = breakdown.total;
   const wasPrint = schedule

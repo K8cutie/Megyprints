@@ -23,7 +23,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 import type { QrFill } from '@web/pages/builder/types';
 import { bindingEdge } from '@web/pages/builder/binding';
 import { qrBadgeCornerOf, type QrCorner } from '@web/pages/builder/pageTemplates';
-import { FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears, QR_PACK_OFFER } from '@web/lib/pricing';
+import { FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears, longVideoPricesOf, maxVideoSecondsOf, QR_PACK_OFFER, videoMinutesFor } from '@web/lib/pricing';
 import { Button } from '../../components/Button';
 import { loadPriceSchedule, usePriceSchedule } from '../../lib/checkout/priceSchedule';
 import { clipStore, currentClipQuality, setClipQuality } from '../../lib/memories/clipStore';
@@ -34,7 +34,7 @@ import { supabase, supabaseConfigured, supabaseUrl } from '../../lib/supabase';
 import { colors, space } from '../../lib/theme';
 import { EditorSheet } from '../core/EditorSheet';
 import type { SheetProps } from '../registry';
-import { albumQuality, changeMemory, checkPicked, newMemory, removeMemory, safeHost, type FlowDeps, type PickedVideo } from './memoryFlow';
+import { albumQuality, albumVideoTier, changeMemory, checkPicked, newMemory, removeMemory, safeHost, type FlowDeps, type PickedVideo } from './memoryFlow';
 import { pickVideoFromPhone } from './pickVideo';
 import { VideoPreview } from './VideoPreview';
 import * as W from './words';
@@ -76,6 +76,9 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
   const { schedule } = usePriceSchedule(loadSchedule);
   const includedYears = includedHostingYears(schedule ?? {});
   const hdPrice = hdMemoriesPriceOf(schedule ?? {});
+  // Longer videos (0067): up to 5 minutes when the price list sells them.
+  const longPrices = longVideoPricesOf(schedule ?? {});
+  const maxSeconds = maxVideoSecondsOf(schedule ?? {});
 
   // The quality: offered with the album's first memory, then locked.
   const [quality, setQuality] = useState<ClipQuality>('standard');
@@ -110,6 +113,9 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // The picked video makes the album's videos longer: the new price, and what
+  // the album paid for before (the bigger price replaces it, never both).
+  const [longer, setLonger] = useState<{ minutes: 3 | 5; price: number; was: number } | null>(null);
 
   const pick = async () => {
     setError('');
@@ -118,8 +124,14 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
       const v = await pickVideoFromPhone();
       if (!v) return;
       setPicked(null);
-      const r = checkPicked(v);
+      setLonger(null);
+      const r = checkPicked(v, maxSeconds);
       if (!r.ok) { setError(r.error); return; }
+      const need = videoMinutesFor(r.durationSec);
+      if (longPrices && (need === 3 || need === 5)) {
+        const now = await albumVideoTier(builder.albumPages, clipStore, initial?.code ?? null);
+        if (need > now) setLonger({ minutes: need, price: longPrices[need], was: now === 3 ? longPrices[3] : 0 });
+      }
       setPicked({ video: v, ext: r.ext, durationSec: r.durationSec });
     } catch {
       setError(W.SAVE_FAILED);
@@ -173,6 +185,7 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
           <Text style={styles.inviteTitle}>{W.INVITE}</Text>
           <Text style={styles.small}>{W.INVITE_BODY}</Text>
           <Text style={styles.tiny} testID="memory-included">{W.included(FREE_QR_MEMORIES, QR_PACK_OFFER, includedYears)}</Text>
+          {longPrices && <Text style={styles.tiny} testID="memory-longer-offer">{W.longerOffer(longPrices)}</Text>}
         </View>
       )}
 
@@ -213,6 +226,12 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
           <Text style={styles.tinyCenter} testID="memory-picked">▶ {W.pickedLine(picked.video.name, picked.video.size, picked.durationSec)}</Text>
         </View>
       )}
+      {picked && longer && picked.durationSec != null && (
+        <View style={styles.longer} testID="memory-longer">
+          <Text style={styles.longerText}>{W.longerNotice(picked.durationSec, longer.minutes, longer.price, longer.was)}</Text>
+          <Text style={styles.tiny}>{W.SHORTER_OPTION}</Text>
+        </View>
+      )}
 
       {showCorners && (
         <View>
@@ -245,7 +264,7 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
 
       <View style={styles.foot}>
         {initial ? <Button label={W.REMOVE} kind="plain" onPress={() => { void remove(); }} testID="memory-remove" /> : <View />}
-        <Button label={busy ? W.SAVING : W.saveLabel(editing)} busy={busy} onPress={() => { if (picked && !busy) void confirm(); }} testID="memory-save" />
+        <Button label={busy ? W.SAVING : picked && longer ? W.saveWithPrice(editing, longer.price - longer.was) : W.saveLabel(editing)} busy={busy} onPress={() => { if (picked && !busy) void confirm(); }} testID="memory-save" />
       </View>
       {busy && <ActivityIndicator color={colors.accent} />}
     </EditorSheet>
@@ -269,6 +288,8 @@ const styles = StyleSheet.create({
   tierOn: { borderColor: colors.accent, backgroundColor: colors.background },
   tierName: { fontSize: 14, fontWeight: '700', color: colors.text },
   error: { fontSize: 13, color: colors.bad },
+  longer: { borderRadius: 12, borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.background, padding: space.sm, gap: 4 },
+  longerText: { fontSize: 13, lineHeight: 18, fontWeight: '700', color: colors.text },
   cornerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   auto: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.background },
   autoOn: { backgroundColor: colors.accent },

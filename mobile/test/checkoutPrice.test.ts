@@ -177,6 +177,33 @@ describe("the database's saved total (order_quote, 0066) is the phone's total", 
   });
 });
 
+describe('longer videos (0067): the database\'s total is the phone\'s', () => {
+  // order_quote(size, cover, pages, qr, years, hd, LIVE + prices, minutes) as the
+  // local test database answered (src/lib/orderQuote.spec.ts LONG).
+  const WITH_LONG = { ...LIVE, long_video_prices: { '3': 199, '5': 399 } } as PriceSchedule;
+  const DB: [AlbumSizePreset, CoverType, number, number, number | null, boolean, number, number][] = [
+    ['8x8', 'softcover', 41, 8, 20, true, 5, 2201],
+    ['6x6', 'hardboundLeather', 40, 3, null, false, 3, 1514],
+  ];
+  it.each(DB)('%s %s, %i pages, %i QR, %s years, HD %s, %i minutes: ₱%i', (albumSize, cover, pageCount, qrCount, years, hd, minutes, total) => {
+    const a = checkoutPrice(WITH_LONG, { albumSize, cover, pageCount, qrCount, hostingYears: years, hdMemories: hd, videoMinutes: minutes, tester: null, today: TODAY });
+    expect(a.total).toBe(total);
+    expect(a.breakdown.items.find((i) => i.label.startsWith('Longer videos'))?.amount).toBe(minutes === 5 ? 399 : 199);
+  });
+  it('2 minutes, or a price list without them: no line, no charge', () => {
+    const base = { albumSize: '8x8' as const, cover: 'softcover' as const, pageCount: 40, qrCount: 3, hostingYears: null, hdMemories: false, tester: null, today: TODAY };
+    expect(checkoutPrice(WITH_LONG, { ...base, videoMinutes: 2 }).total).toBe(checkoutPrice(WITH_LONG, base).total);
+    expect(checkoutPrice(LIVE, { ...base, videoMinutes: 5 }).total).toBe(checkoutPrice(LIVE, base).total);
+  });
+  it('the website pins the same answers', () => {
+    const spec = readFileSync(path.join(WEB_SRC, 'lib/orderQuote.spec.ts'), 'utf8');
+    for (const [size, cover, pages, qr, years, hd, minutes, total] of DB) {
+      expect(spec).toContain(`['${size}', '${cover}', ${pages}, ${qr}, ${years}, ${hd}, ${minutes}, { `);
+      expect(spec).toContain(`total: ${total},`);
+    }
+  });
+});
+
 describe("the words with the price are the website's", () => {
   it("₱ amounts read as the website's toLocaleString('en-PH')", () => {
     for (const n of [0, 5, 49, 200, 999, 1000, 1005, 1710, 2886, 12_345, 123_456, 1_234_567, 1171.25, -140]) {

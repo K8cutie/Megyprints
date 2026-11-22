@@ -13,6 +13,7 @@
      • REMOVE: the kept video is dropped with it.
    ══════════════════════════════════════════════════════════════════════════ */
 import type { AlbumPage, QrFill } from '@web/pages/builder/types';
+import { albumVideoMinutes, type VideoMinutes } from '@web/lib/pricing';
 import { checkClipMeta, clipExtFor, publicClipUrl, type ClipExt, type ClipQuality, type ClipStore } from '../../lib/memories/clips';
 import { memoryUrl } from '../../lib/memories/memories';
 
@@ -39,13 +40,28 @@ export function mintCode(randomBytes: (n: number) => Uint8Array, len = 8): strin
   return out;
 }
 
-/** validateClipFile: the kind from the type or the name, then the checks. */
-export function checkPicked(v: PickedVideo): { ok: true; ext: ClipExt; durationSec: number | null } | { ok: false; error: string } {
+/** validateClipFile: the kind from the type or the name, then the checks
+ *  (up to `maxSeconds`: 2 minutes, or 5 with longer videos on sale). */
+export function checkPicked(v: PickedVideo, maxSeconds?: number): { ok: true; ext: ClipExt; durationSec: number | null } | { ok: false; error: string } {
   const ext = clipExtFor({ type: v.type, name: v.name });
   const durationSec = ext ? v.durationSec : null;
-  const r = checkClipMeta({ size: v.size, durationSec, ext });
+  const r = checkClipMeta({ size: v.size, durationSec, ext }, maxSeconds);
   if (!r.ok) return r;
   return { ok: true, ext: ext!, durationSec };
+}
+
+/** LONGER VIDEOS (0067): the album's tier from the videos kept on this phone
+ *  (its longest one's), leaving out `except` (the video being replaced).
+ *  A video sent from another device counts as included. */
+export async function albumVideoTier(
+  pages: readonly AlbumPage[],
+  store: Pick<ClipStore, 'getStagedClip'>,
+  except: string | null = null,
+): Promise<VideoMinutes> {
+  const codes = [...new Set(pages.flatMap((p) => [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])])
+    .filter((f): f is QrFill => !!f && f.kind === 'clip' && f.code !== except).map((f) => f.code))];
+  const kept = await Promise.all(codes.map((c) => store.getStagedClip(c).catch(() => null)));
+  return albumVideoMinutes(kept.map((k) => k?.durationSec ?? null));
 }
 
 /** The album's quality: locked once it has a video memory (the website's

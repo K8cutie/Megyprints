@@ -58,6 +58,7 @@ jest.mock('../src/lib/supabase', () => ({ supabase: jest.requireActual('./helper
 jest.mock('expo-router', () => ({
   router: { push: (...a: unknown[]) => mockNav.push(...a), back: () => mockNav.back() },
   useLocalSearchParams: () => mockParams,
+  usePreventRemove: () => () => {},
 }));
 jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => (mockAlbum.builder ? { builder: mockAlbum.builder, text: {}, platform: mockAlbum.platform } : null) }));
 // The phone's part of sending (Skia, the files, the live database): a stand-in.
@@ -66,6 +67,12 @@ jest.mock('../src/lib/checkout/phoneSend', () => ({
   sendPaymentFromPhone: async (plan: never, receipt: unknown) => { mockSend.payments.push({ plan, receipt }); return { receiptError: null }; },
 }));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
+// A stopped send is told to the shop: written down here, never posted.
+const mockReports: { message: string; context: Record<string, unknown> }[] = [];
+jest.mock('../src/lib/checkout/reportToShop', () => ({
+  ...jest.requireActual('../src/lib/checkout/reportToShop'),
+  reportToShop: async (r: { message: string; context: Record<string, unknown> }) => { mockReports.push(r); },
+}));
 // The phone's event links (AsyncStorage on the phone): in memory.
 const mockLinks: Record<string, unknown> = {};
 jest.mock('../src/lib/events/albumEventLink', () => ({
@@ -75,7 +82,7 @@ jest.mock('../src/lib/events/albumEventLink', () => ({
 }));
 // The quality the album's memory videos were made for (read from the phone's store).
 const mockTier = { value: 'standard' as 'standard' | 'hd', asked: [] as string[][] };
-jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; } }));
+jest.mock('../src/lib/memories/albumTier', () => ({ albumClipTier: async (codes: string[]) => { mockTier.asked.push(codes); return mockTier.value; }, albumVideoMinutesOnPhone: async () => 2 }));
 jest.mock('expo-document-picker', () => ({ getDocumentAsync: async () => ({ canceled: true, assets: null }) }));
 // The page renderer (Skia on the phone): the picture it would draw, by what was asked.
 const mockPictures: { page: { id?: string; background?: unknown }; coverMode?: boolean; width: number }[] = [];
@@ -810,6 +817,86 @@ describe('an event\'s album: its booking pays (the website\'s Order.tsx)', () =>
     await render(<OrderScreen />);
     await screen.findByTestId('order-own-album');
     expect(screen.queryByTestId('order-event-offer')).toBeNull();
+  });
+});
+
+
+/* ── MP-2026-9M5572U: an order that didn't finish sending (0068) ── */
+describe("an order that didn't finish sending: checkout finishes THAT order", () => {
+  const HALF = { order_id: 'order-9', order_number: 'MP-2026-HALF001', album_id: 'album-7', status: 'pending_payment', created_at: '2026-11-22T08:36:49Z', missing: ['pages', 'video:vid22222', 'memory:vid22222'] };
+  const ORDER = {
+    id: 'order-9', order_number: 'MP-2026-HALF001', status: 'pending_payment', payment_status: 'unpaid', payment_submitted_at: null,
+    album_id: 'album-7', album_snapshot: { ...ROW }, album_size: '8x8', cover: 'hardcover', material: 'glossy', page_count: pages.length,
+    quoted_amount: 1788, amount: null, created_at: '2026-11-22T08:36:49Z', tester_code: null, user_id: 'user-1',
+  };
+  type FinishCall = SendCall & { album: { pages: unknown; photoIds?: string[] } };
+  beforeEach(() => {
+    fake.rpc.my_unsent_orders = { data: [HALF], error: null };
+    fake.orderRow = ORDER;
+    mockReports.length = 0;
+  });
+
+  it('says so, in place of the form; Finish sending sends the SAME order from what it froze: its cover and paper, no new order row; then its payment step', async () => {
+    mockSend.run = async () => ({ order: { id: 'order-9', order_number: 'MP-2026-HALF001', status: 'pending_payment' }, paidByTester: false });
+    await render(<OrderScreen />);
+    expect(await screen.findByText("Order MP-2026-HALF001 didn't finish sending")).toBeOnTheScreen();
+    expect(screen.getByTestId('order-finish-body')).toHaveTextContent("The pages and 1 memory video never reached us, so we can't print it yet. Tap Finish sending and keep the app open until it's done.");
+    expect(screen.queryByTestId('order-place')).toBeNull();
+    expect(screen.queryByTestId('order-already-open')).toBeNull(); // never "pay that order"
+    await fireEvent.press(screen.getByTestId('order-finish-sending'));
+    expect(await screen.findByTestId('pay-order-placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(1);
+    const call = mockSend.calls[0] as FinishCall;
+    expect(call.placed).toEqual({ id: 'order-9', order_number: 'MP-2026-HALF001', status: 'pending_payment' });
+    expect(call.cover).toBe('hardcover');
+    expect(call.material).toBe('glossy');
+    expect(call.plan.orderRow).toEqual({});
+    expect(call.album.pages).toBe(ORDER.album_snapshot.pages);
+    expect(call.album.photoIds).toEqual(ROW.photos.map((ph) => ph.id));
+    expect(rec.inserts).toHaveLength(0);
+  });
+
+  it('already paid (the shop marked it): ends on "all sent", nothing to pay', async () => {
+    fake.rpc.my_unsent_orders = { data: [{ ...HALF, status: 'paid' }], error: null };
+    fake.orderRow = { ...ORDER, status: 'paid', payment_status: 'paid' };
+    mockSend.run = async () => ({ order: { id: 'order-9', order_number: 'MP-2026-HALF001', status: 'paid' }, paidByTester: false });
+    await render(<OrderScreen />);
+    await fireEvent.press(await screen.findByTestId('order-finish-sending'));
+    expect(await screen.findByTestId('order-all-sent')).toHaveTextContent('Every page and video of order MP-2026-HALF001 reached us.', { exact: false });
+    expect(screen.getByText('Your order is all sent')).toBeOnTheScreen();
+  });
+
+  it('a photo it prints is not on this phone: said, nothing sent', async () => {
+    mockAlbum.builder = { ...ownAlbum, uploadedPhotos: photos.slice(1) };
+    await render(<OrderScreen />);
+    await fireEvent.press(await screen.findByTestId('order-finish-sending'));
+    expect(await screen.findByTestId('order-finish-error')).toHaveTextContent("Some photos this order needs aren't on this phone.", { exact: false });
+    expect(mockSend.calls).toHaveLength(0);
+  });
+
+  it('a finish that stops: back on Finish sending with its words, read again, and told to the shop', async () => {
+    mockSend.run = async (c) => { c.onStep({ step: 'videos', done: 0, total: 1, phase: 'upload' }); throw new Error('Could not upload your memory video (Bad Gateway).'); };
+    await render(<OrderScreen />);
+    await fireEvent.press(await screen.findByTestId('order-finish-sending'));
+    expect(await screen.findByTestId('order-finish-error')).toHaveTextContent('Could not upload your memory video (Bad Gateway).');
+    expect(screen.getByTestId('order-finish-sending')).toBeOnTheScreen();
+    expect(rec.rpcs.filter((r) => r.name === 'my_unsent_orders').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('"Place a new order instead": the usual form, with no "pay that order" box and no second-order question', async () => {
+    await render(<OrderScreen />);
+    await fireEvent.press(await screen.findByTestId('order-new-instead'));
+    expect(await screen.findByTestId('order-place')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-already-open')).toBeNull();
+    expect(screen.queryByTestId('order-finish')).toBeNull();
+  });
+
+  it("another album's unsent order is not this album's business", async () => {
+    fake.rpc.my_unsent_orders = { data: [{ ...HALF, album_id: 'album-other' }], error: null };
+    fake.orderRow = null;
+    await render(<OrderScreen />);
+    expect(await screen.findByTestId('order-place')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-finish')).toBeNull();
   });
 });
 

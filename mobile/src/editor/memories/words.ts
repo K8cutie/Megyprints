@@ -39,3 +39,19 @@ export const REMOVE = 'Remove';
 export const SAVING = 'Saving…';
 export const saveLabel = (editing: boolean) => (editing ? 'Use this video' : 'Place QR');
 
+/* ── LONGER VIDEOS (owner, 2026-11-20; 0067): the app's own words ──────── */
+/** Under "N memories included", when the price list sells longer videos. */
+export const longerOffer = (prices: { 3: number; 5: number }) =>
+  `Longer videos: up to 3 minutes ₱${prices[3]}, up to 5 minutes ₱${prices[5]}, once for this album.`;
+/** "4 min 10 s". */
+export const lengthText = (seconds: number) => {
+  const s = Math.round(seconds);
+  return `${Math.floor(s / 60)} min ${s % 60} s`;
+};
+/** The video just picked makes the album's videos longer: what it costs. */
+export const longerNotice = (seconds: number, minutes: 3 | 5, price: number, was: number) =>
+  `This video is ${lengthText(seconds)}. Videos up to ${minutes} minutes for this album: ₱${price}, one time${was > 0 ? ` (instead of ₱${was})` : ''}, added at checkout.`;
+export const SHORTER_OPTION = 'Or choose a shorter video: up to 2 minutes is included.';
+/** The save button with what it adds: "Place QR · +₱199". */
+export const saveWithPrice = (editing: boolean, added: number) => `${saveLabel(editing)} · +₱${added}`;
+

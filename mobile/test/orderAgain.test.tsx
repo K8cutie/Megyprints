@@ -140,7 +140,8 @@ describe('tapping it', () => {
     expect(mockSteps).toEqual(['page 0', 'push /preview']);
     expect(takeOrderRequest('album-1')).toBe(true);
     expect(takeOrderRequest('album-1')).toBe(false); // once
-    expect(calls.rpcs).toEqual([]); // nothing written
+    // nothing written (my_unsent_orders, 0068, only reads)
+    expect(calls.rpcs.filter((c) => c.name !== 'my_unsent_orders')).toEqual([]);
   });
 
   it('a second tap while it opens does nothing; the button shows it is working, never greyed', async () => {

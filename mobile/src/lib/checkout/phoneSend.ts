@@ -36,6 +36,7 @@ const upload = createOnlyUpload(supabase as unknown as Parameters<typeof createO
 /** The memory videos' part of Place order. */
 const clips: ClipSender = {
   findMissing: (codes) => clipStore.findMissingClips(codes),
+  prepare: (codes, onProgress) => clipStore.prepareStagedClips(codes, onProgress),
   upload: (codes, onProgress) => clipStore.uploadStagedClips(codes, onProgress),
   extOf: async (code) => (await clipStore.getStagedClip(code))?.ext ?? null,
   repoint: (code, destination) => relinkMemory(supabase as never, code, destination),
