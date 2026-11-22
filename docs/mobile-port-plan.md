@@ -4638,14 +4638,14 @@ Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live da
 ### Release notes 2.1.5 (code 115: 2.1.4 + longer videos + the upright screen not required + the unsent-orders fix; check against the app on upload day)
 
     <en-US>
-    New:
-    • Longer video memories: up to 3 minutes for ₱199, or up to 5 minutes for ₱399, once per album
-    Fixed:
-    • Videos from newer phones (HDR) are made smaller before sending, so an order no longer stops half-way
+    From tester feedback:
+    • Orders with a video from a newer phone (HDR) no longer stop half-way: the video is made smaller first
     • An order that didn't finish sending shows "Finish sending" in Your orders, to send the rest
+    Also new:
+    • Longer video memories: up to 3 minutes for ₱199, or up to 5 minutes for ₱399, once per album
     </en-US>
 
-The two "Fixed" lines are the unsent-orders fix (MP-2026-9M5572U, PR #312; 0068 = PR #309). The second is true only once 0068 is on the live database: before that Your orders can't tell which orders didn't finish. The longer-videos line is true only once 0067 is on the live database: before that the app keeps videos at 2 minutes and says nothing about longer ones. If the owner changes the prices (Pricing panel), change the line to match. The upright-screen fix (Play's 2.1.4 warning) changes nothing a customer sees, so it has no line.
+Left out on purpose: HEVC (smaller videos on phones that can make it) is not yet checked on a real phone, and the upright-screen fix changes nothing a customer sees. The two tester lines are the unsent-orders fix (MP-2026-9M5572U, PR #312; 0068 = PR #309). The second is true only once 0068 is on the live database: before that Your orders can't tell which orders didn't finish. The longer-videos line is true only once 0067 is on the live database: before that the app keeps videos at 2 minutes and says nothing about longer ones. If the owner changes the prices (Pricing panel), change the line to match. The upright-screen fix (Play's 2.1.4 warning) changes nothing a customer sees, so it has no line.
 
 ## Events switched off in the app (2026-11-16, `feat/port-remove-events`)
 
