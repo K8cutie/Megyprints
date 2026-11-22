@@ -22,7 +22,7 @@ import { PER_SIZE_AUTHORED } from './templateKit';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
 import { isMiniSize, MINI_SIZE, MINI_PAGES, MINI_MEMORY_PAGES, MINI_OPENING_PAGES } from '../../lib/megyMini';
-import { pickSpreadPhoto, spreadPages, SPREAD_LEFT_INDEX } from './miniSpread';
+import { pickSpreadPhoto, spreadLeftIndex, spreadPages } from './miniSpread';
 import { planMiniPages } from './miniPlanner';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -1463,7 +1463,7 @@ export function generateAlbum(
   return best;
 }
 
-/** The Megy Mini (lib/megyMini): always exactly its 16 pages, every page
+/** The Megy Mini (lib/megyMini): always exactly its 16 (or 24) pages, every page
  *  filled edge to edge with the Mini's own layouts (miniTemplates; owner,
  *  2026-11-17: "im trying to avoid pages with lots of free spaces since the
  *  pages for mini are very few"). One opening full page and two memory pages
@@ -1483,7 +1483,8 @@ function generateMiniBook(
   // 9, the stapled booklet's centre. Never a video memory's own photo. A roll
   // with no landscape photo that fits is made without one, as before.
   const carried = new Set((options?.memories ?? []).map((m) => m.photo));
-  const spread = wanted >= SPREAD_LEFT_INDEX + 2 ? pickSpreadPhoto(photos, carried) : null;
+  const middle = spreadLeftIndex(wanted);
+  const spread = wanted >= middle + 2 ? pickSpreadPhoto(photos, carried) : null;
   if (spread == null) return dealMiniPages(photos, wanted, background, options);
 
   const restMap = photos.map((_, i) => i).filter((i) => i !== spread);
@@ -1497,7 +1498,7 @@ function generateMiniBook(
     memories: options?.memories?.map((m) => ({ ...m, photo: toRest(m.photo) })),
   });
   remapSlotFills(pages, restMap);
-  const at = Math.min(SPREAD_LEFT_INDEX, pages.length);
+  const at = Math.min(middle, pages.length);
   const pair = spreadPages(createEmptyPage(at, MINI_SIZE, background, options?.border), createEmptyPage(at + 1, MINI_SIZE, background, options?.border), spread);
   pages.splice(at, 0, ...pair);
   pages.forEach((p, i) => { p.id = makePageId(i); });

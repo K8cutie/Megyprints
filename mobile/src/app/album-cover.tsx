@@ -81,7 +81,7 @@ export default function AlbumCover() {
 
   const title = coverTitle(builder);
   const fit = titleFontInApp(builder.coverFront) ? coverTitleFit(builder.coverFront, builder.albumSize, platform.textMeasurer()) : null;
-  const next = coverStepNext(albumMade(builder.albumPages), photosIn(builder), builder.albumSize);
+  const next = coverStepNext(albumMade(builder.albumPages), photosIn(builder), builder.albumSize, builder.miniPages);
   const cover = useSettledCover(builder.coverFront);
 
   // The front cover as print draws it, fitted to the screen.

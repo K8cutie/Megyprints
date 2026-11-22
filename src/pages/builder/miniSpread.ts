@@ -27,6 +27,12 @@ export type SpreadHalf = 'left' | 'right';
 /** Page 8 is index 7 (page 1 is index 0); page 9 is index 8. */
 export const SPREAD_LEFT_INDEX = 7;
 
+/** The left half's index in a Mini of `pageCount` pages: the booklet's
+ *  middle (16 pages: page 8, index 7; 24 pages: page 12, index 11). */
+export function spreadLeftIndex(pageCount: number): number {
+  return pageCount >= 4 ? Math.floor(pageCount / 2) - 1 : SPREAD_LEFT_INDEX;
+}
+
 export const SPREAD_LEFT_ID = 'mini-spread-left';
 export const SPREAD_RIGHT_ID = 'mini-spread-right';
 
@@ -175,14 +181,16 @@ export function outerSpreadCorner(side: SpreadHalf, corner: QrCorner): QrCorner 
   return top ? 'tr' : 'br';
 }
 
-/** The middle spread back on pages 8 and 9 (after Studio pages that were kept
- *  go back where they were, which can push it along). Unchanged otherwise. */
+/** The middle spread back in the middle (pages 8 and 9 of 16, 12 and 13 of
+ *  24) after Studio pages that were kept go back where they were, which can
+ *  push it along. Unchanged otherwise. */
 export function placeSpreadPair(pages: AlbumPage[]): AlbumPage[] {
+  const middle = spreadLeftIndex(pages.length);
   const at = pages.findIndex((p, i) => spreadHalfOf(p.templateId) === 'left' && spreadHalfOf(pages[i + 1]?.templateId) === 'right');
-  if (at < 0 || at === SPREAD_LEFT_INDEX || pages.length < SPREAD_LEFT_INDEX + 2) return pages;
+  if (at < 0 || at === middle || pages.length < middle + 2) return pages;
   const next = [...pages];
   const pair = next.splice(at, 2);
-  next.splice(SPREAD_LEFT_INDEX, 0, ...pair);
+  next.splice(middle, 0, ...pair);
   return next;
 }
 

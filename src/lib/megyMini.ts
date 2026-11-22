@@ -1,5 +1,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   MEGY MINI: the 16-page A5 booklet with staples, sold next to the albums.
+   MEGY MINI: the A5 booklet with staples, sold next to the albums, at 16 or
+   24 pages (owner, 2026-11-23: "24 pages at 449", "an additional a second
+   staple offering": one product, "Megy Mini, 16 or 24 pages").
 
    Owner, 2026-11-16: "Megy Mini along side the regular albums", "as an item
    not part of a package 350+shipping", "2 QR videos free for megy mini".
@@ -15,17 +17,31 @@
    '5.8x8.3' (a "WxH" name, because several places read the width off the
    name) and is never offered as an album size (sizeOffer). Its cover is
    'staple'. The database refuses anything else (0062: MP020, MP021, MP022).
+
+   ITS PAGES: 16 (4 folded sheets) or 24 (6). A stapled booklet's pages come
+   in fours and 8 pages fill one press sheet, so 24 (3 sheets) wastes no
+   paper where 20 would. The price list names the page counts on sale
+   (mini.options); one without them (before 0070) sells 16 only. Before the
+   Mini is made, the customer's choice is kept on the phone (MINI_PAGES_KEY,
+   like the occasion); once made, its pages say it (miniPagesOfAlbum).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset, CoverType } from '../pages/builder/types';
 import { MIN_ALBUM_PAGES } from '../pages/builder/densities';
+import type { KeyValueStore } from '../shared/platform';
 
 export const MINI_NAME = 'Megy Mini';
 /** A5 portrait, 148 × 210 mm. */
 export const MINI_SIZE: AlbumSizePreset = '5.8x8.3';
 export const MINI_COVER: CoverType = 'staple';
-/** Always exactly this many pages: 4 sheets folded in half and stapled. */
-export const MINI_PAGES = 16;
+/** The page counts a Mini is made at: 4 or 6 sheets folded in half and stapled. */
+export const MINI_PAGE_OPTIONS = [16, 24] as const;
+export type MiniPages = (typeof MINI_PAGE_OPTIONS)[number];
+/** The Mini's first and usual page count (the only one before 0070). */
+export const MINI_PAGES: MiniPages = 16;
+/** The most photos a Mini page holds on average without getting crowded:
+ *  16 pages hold 40, 24 pages 60. */
+export const MINI_PHOTOS_PER_PAGE_MAX = 2.5;
 /** One photo a page at the least, so no page is ever left empty. */
 export const MINI_MIN_PHOTOS = MINI_PAGES;
 /** The most photos 16 A5 pages hold without a page getting crowded. */
@@ -37,7 +53,16 @@ export const MINI_OPENING_PAGES = 1;
 /** The free videos when the price list doesn't say. */
 export const MINI_FREE_QR = 2;
 
-/** What public_price_schedule().mini carries while Megy Mini is on sale. */
+/** One page count on sale and its prices. */
+export interface MiniOption {
+  pages: MiniPages;
+  price: number;
+  package_price: number;
+}
+
+/** What public_price_schedule().mini carries while Megy Mini is on sale.
+ *  pages / price / package_price are the 16-page Mini's (what 2.1.5 and
+ *  before read); `options` is every page count on sale, 16 first. */
 export interface MiniOffer {
   size: AlbumSizePreset;
   cover: CoverType;
@@ -46,6 +71,7 @@ export interface MiniOffer {
   package_price: number;
   shipping_fee: number;
   free_qr: number;
+  options: MiniOption[];
 }
 
 export function isMiniSize(size: unknown): boolean {
@@ -56,24 +82,78 @@ export function isMiniCover(cover: unknown): boolean {
   return cover === MINI_COVER;
 }
 
-/** The pages a book is made with: 16 for a Mini, the album minimum otherwise. */
-export function bookPagesFor(size: unknown): number {
-  return isMiniSize(size) ? MINI_PAGES : MIN_ALBUM_PAGES;
+/** A page count a Mini is made at (16 or 24). */
+export function isMiniPages(n: unknown): n is MiniPages {
+  return (MINI_PAGE_OPTIONS as readonly unknown[]).includes(n);
+}
+
+/** A Mini's page count: `pages` when it is one, else 16. */
+export function miniPagesOf(pages: unknown): MiniPages {
+  return isMiniPages(pages) ? pages : MINI_PAGES;
+}
+
+/** The photos a Mini of `pages` pages takes: one a page at the least, 2.5 a
+ *  page at the most (16 pages: 16 to 40; 24 pages: 24 to 60). */
+export function miniPhotoRange(pages: unknown = MINI_PAGES): { min: number; max: number } {
+  const n = miniPagesOf(pages);
+  return { min: n, max: Math.floor(n * MINI_PHOTOS_PER_PAGE_MAX) };
+}
+
+/** "16–40" / "24–60", for the Mini's own words. */
+export function miniPhotoRangeLabel(pages: unknown = MINI_PAGES): string {
+  const { min, max } = miniPhotoRange(pages);
+  return `${min}–${max}`;
+}
+
+/** The pages a book is made with: a Mini's 16 or 24 (`miniPages`), the
+ *  album minimum otherwise. */
+export function bookPagesFor(size: unknown, miniPages?: unknown): number {
+  return isMiniSize(size) ? miniPagesOf(miniPages) : MIN_ALBUM_PAGES;
 }
 
 /** The fewest photos a book can be made from. */
-export function minPhotosFor(size: unknown): number {
-  return isMiniSize(size) ? MINI_MIN_PHOTOS : MIN_ALBUM_PAGES;
+export function minPhotosFor(size: unknown, miniPages?: unknown): number {
+  return isMiniSize(size) ? miniPhotoRange(miniPages).min : MIN_ALBUM_PAGES;
 }
 
 /** The most photos a book takes (albums: no limit). */
-export function maxPhotosFor(size: unknown): number {
-  return isMiniSize(size) ? MINI_MAX_PHOTOS : Infinity;
+export function maxPhotosFor(size: unknown, miniPages?: unknown): number {
+  return isMiniSize(size) ? miniPhotoRange(miniPages).max : Infinity;
 }
 
 /** The most pages a book may have (albums: no limit). */
-export function maxPagesFor(size: unknown): number {
-  return isMiniSize(size) ? MINI_PAGES : Infinity;
+export function maxPagesFor(size: unknown, miniPages?: unknown): number {
+  return isMiniSize(size) ? miniPagesOf(miniPages) : Infinity;
+}
+
+/** A Mini's pages are never added or deleted by hand: its 16 or 24 change
+ *  only by making it again at the other count. */
+export function pagesAreFixed(size: unknown): boolean {
+  return isMiniSize(size);
+}
+
+/** The customer's page choice for a Mini not made yet, kept on the phone. */
+export const MINI_PAGES_KEY = 'megy-mini-pages';
+
+export function readMiniPagesFrom(store: Pick<KeyValueStore, 'getItem'>): MiniPages {
+  try { return miniPagesOf(Number(store.getItem(MINI_PAGES_KEY))); } catch { return MINI_PAGES; }
+}
+
+export function writeMiniPagesTo(store: Pick<KeyValueStore, 'setItem' | 'removeItem'>, pages: unknown): void {
+  try {
+    if (isMiniPages(pages) && pages !== MINI_PAGES) store.setItem(MINI_PAGES_KEY, String(pages));
+    else store.removeItem(MINI_PAGES_KEY);
+  } catch { /* full: the Mini is made at 16 */ }
+}
+
+/** A Mini's page count: its own pages once it is made (16 or 24 of them),
+ *  the customer's choice before. */
+export function miniPagesOfAlbum(
+  pages: readonly { slotFills?: readonly (number | null | undefined)[] }[],
+  chosen: unknown,
+): MiniPages {
+  const made = pages.some((p) => (p.slotFills ?? []).some((f) => f != null));
+  return made && isMiniPages(pages.length) ? pages.length : miniPagesOf(chosen);
 }
 
 const whole = (v: unknown): number | null => {
@@ -94,6 +174,20 @@ export function miniOfferOf(schedule: { mini?: unknown } | null | undefined): Mi
   const ship = whole(o.shipping_fee);
   const free = whole(o.free_qr);
   if (pages !== MINI_PAGES || price == null || price < 1 || ship == null) return null;
+  const options: MiniOption[] = [{ pages: MINI_PAGES, price, package_price: packagePrice ?? price }];
+  // The other page counts on sale (0070). A malformed one is left off: the
+  // 16-page Mini still sells.
+  if (Array.isArray(o.options)) {
+    for (const raw of o.options) {
+      if (!raw || typeof raw !== 'object') continue;
+      const r = raw as Record<string, unknown>;
+      const n = whole(r.pages);
+      const p = whole(r.price);
+      if (!isMiniPages(n) || n === MINI_PAGES || p == null || p < 1 || options.some((x) => x.pages === n)) continue;
+      options.push({ pages: n, price: p, package_price: whole(r.package_price) ?? p });
+    }
+    options.sort((a, b) => a.pages - b.pages);
+  }
   return {
     size: MINI_SIZE,
     cover: MINI_COVER,
@@ -102,32 +196,63 @@ export function miniOfferOf(schedule: { mini?: unknown } | null | undefined): Mi
     package_price: packagePrice ?? price,
     shipping_fee: ship,
     free_qr: free ?? MINI_FREE_QR,
+    options,
   };
 }
 
-/** "16–40 photos" for the Mini's own words. */
-export const MINI_PHOTO_RANGE = `${MINI_MIN_PHOTOS}–${MINI_MAX_PHOTOS}`;
+/** The page counts on sale, 16 first ([] when Megy Mini isn't). */
+export function miniPagesOnSale(offer: MiniOffer | null | undefined): MiniPages[] {
+  return offer ? offer.options.map((o) => o.pages) : [];
+}
+
+/** The offer for a Mini of `pages` pages, its own price in place of the
+ *  16-page one's; null when that page count isn't on sale. */
+export function miniOfferFor(offer: MiniOffer | null | undefined, pages: unknown): MiniOffer | null {
+  const o = offer?.options.find((x) => x.pages === miniPagesOf(pages));
+  return offer && o ? { ...offer, pages: o.pages, price: o.price, package_price: o.package_price } : null;
+}
+
+/** "16–40" for the 16-page Mini's own words. */
+export const MINI_PHOTO_RANGE = miniPhotoRangeLabel(MINI_PAGES);
 
 /** An ALBUM short of its 40 photos, while Megy Mini is on sale: the Mini is
  *  offered instead (owner, 2026-11-16: "if they have less than 40 pictures we
  *  will recommend megy mini"). The button, and the line after "add N more". */
 export const MINI_INSTEAD = 'Make a Megy Mini instead';
-export function miniSuggestion(count: number): string {
-  if (count >= MINI_MIN_PHOTOS && count <= MINI_MAX_PHOTOS) {
-    return `Or make a ${MINI_NAME}: ${MINI_PAGES} A5 pages, and your ${count} photos fit.`;
+/** The page count a Mini of `count` photos is best made at, of those on
+ *  sale: the fewest pages the photos fit (16 to 40 photos: 16 pages; 41 to
+ *  60: 24), or null when they fit none. */
+export function miniPagesForPhotos(count: number, onSale: readonly number[] = [MINI_PAGES]): MiniPages | null {
+  for (const n of MINI_PAGE_OPTIONS) {
+    if (!onSale.includes(n)) continue;
+    const { min, max } = miniPhotoRange(n);
+    if (count >= min && count <= max) return n;
+  }
+  return null;
+}
+
+export function miniSuggestion(count: number, onSale: readonly number[] = [MINI_PAGES]): string {
+  const fits = miniPagesForPhotos(count, onSale);
+  if (fits != null) {
+    return `Or make a ${MINI_NAME}: ${fits} A5 pages, and your ${count} photos fit.`;
   }
   return `Or make a ${MINI_NAME}: it needs only ${MINI_MIN_PHOTOS} photos for its ${MINI_PAGES} A5 pages.`;
 }
 
-/** Why a Mini can't be made from this many photos, or null when it can. */
-export function miniPhotoProblem(count: number): string | null {
-  if (count < MINI_MIN_PHOTOS) {
-    const more = MINI_MIN_PHOTOS - count;
-    return `A ${MINI_NAME} needs at least ${MINI_MIN_PHOTOS} photos. Add ${more} more.`;
+/** A Mini named with its page count past the usual 16: "24-page Megy Mini". */
+function miniNamed(pages: unknown): string {
+  const n = miniPagesOf(pages);
+  return n === MINI_PAGES ? MINI_NAME : `${n}-page ${MINI_NAME}`;
+}
+
+/** Why a Mini of `pages` pages can't be made from this many photos, or null when it can. */
+export function miniPhotoProblem(count: number, pages: unknown = MINI_PAGES): string | null {
+  const { min, max } = miniPhotoRange(pages);
+  if (count < min) {
+    return `A ${miniNamed(pages)} needs at least ${min} photos. Add ${min - count} more.`;
   }
-  if (count > MINI_MAX_PHOTOS) {
-    const fewer = count - MINI_MAX_PHOTOS;
-    return `A ${MINI_NAME} holds up to ${MINI_MAX_PHOTOS} photos. Remove ${fewer}, or make an album instead.`;
+  if (count > max) {
+    return `A ${miniNamed(pages)} holds up to ${max} photos. Remove ${count - max}, or make an album instead.`;
   }
   return null;
 }
