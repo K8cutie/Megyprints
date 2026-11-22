@@ -159,3 +159,54 @@ export async function updateOrder(id: string, patch: OrderPatch): Promise<string
  *  dropdown's "Paid" calls this too, so the two can never differ: through
  *  set_order_status alone the order was paid but kept the included term. */
 export const markOrderPaid = (id: string): Promise<string | null> => updateOrder(id, { payment_status: 'paid', status: 'paid' });
+
+/* ── Orders that didn't finish sending (0068, MP-2026-9M5572U) ───────────────
+   The customer's phone makes the order row first, then sends the cover, the
+   memory videos, the pages and the QR rows. When it stops half-way, the order
+   is here without what it needs to be printed. The database says what of each
+   open order is missing, read from Storage and the QR rows; it refuses
+   "I've sent" and In production / Printed / Shipped until it's whole. */
+
+/** What of each open order isn't in yet, by order id: 'cover', 'pages',
+ *  'video:<code>', 'memory:<code>'. Empty when it can't be read (a database
+ *  before 0068): the console then shows what it showed before. */
+export async function fetchUnsentOrders(ids: string[]): Promise<Map<string, string[]>> {
+  if (!ids.length) return new Map();
+  const { data, error } = await supabase.rpc('operator_orders_unsent', { p_ids: ids.slice(0, 500) });
+  if (error || !Array.isArray(data)) return new Map();
+  return new Map((data as { order_id: string; missing: string[] }[])
+    .filter((r) => r && typeof r.order_id === 'string' && Array.isArray(r.missing) && r.missing.length > 0)
+    .map((r) => [r.order_id, r.missing]));
+}
+
+/** The missing parts in words, as the database says them (0068
+ *  order_missing_words): 'the pages, 3 memory videos and 4 QR codes'. */
+export function unsentWords(missing: readonly string[]): string {
+  const videos = missing.filter((m) => m.startsWith('video:')).length;
+  const qrs = missing.filter((m) => m.startsWith('memory:')).length;
+  const parts = [
+    missing.includes('cover') ? 'the cover' : '',
+    missing.includes('pages') ? 'the pages' : '',
+    videos === 1 ? '1 memory video' : videos > 1 ? `${videos} memory videos` : '',
+    qrs === 1 ? '1 QR code' : qrs > 1 ? `${qrs} QR codes` : '',
+  ].filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? '';
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+}
+
+/** What the console says under such an order. */
+export function unsentNote(missing: readonly string[]): string {
+  return `The customer's phone stopped sending this order: ${unsentWords(missing)} never arrived, so it can't be printed. Ask the customer to open Your orders in the Megy Prints app (2.1.5 or later) on the phone they made the album on and tap Finish sending.`;
+}
+
+/** Mark paid on such an order asks first. */
+export function unsentMarkPaidQuestion(orderNumber: string, missing: readonly string[]): string {
+  return `Order ${orderNumber} didn't finish sending (${unsentWords(missing)} never arrived). Mark it paid anyway? It still can't go to production until the customer taps Finish sending.`;
+}
+
+/** In production on a paid order: the customer's memory term is applied
+ *  again, so QR videos that arrived after Mark paid get it too (Mark paid
+ *  extends only the rows there at that moment). Owner only; best-effort. */
+export async function reapplyHostingTerm(id: string): Promise<void> {
+  try { await supabase.rpc('apply_order_hosting_term', { p_order_id: id }); } catch { /* best-effort */ }
+}
