@@ -11,13 +11,16 @@ import { Button } from '../components/Button';
 import { useAuth } from '../lib/auth';
 import type { AppOrder } from '../lib/orders/myOrders';
 import { NO_ORDERS, ORDERS_LEAD, ORDERS_LOAD_FAILED, orderView, testOrderNote } from '../lib/orders/orderWords';
-import { useMyOrders } from '../lib/orders/useMyOrders';
+import { useMyOrders, useUnsentOrders } from '../lib/orders/useMyOrders';
+import { FINISH_SENDING, UNSENT_CARD_LINE, type UnsentOrder } from '../lib/checkout/unsentOrders';
 import { colors, space } from '../lib/theme';
 
 export default function Orders() {
   const { loading: authLoading, session } = useAuth();
   const userId = session?.user.id;
   const orders = useMyOrders(userId);
+  // Orders whose files never all arrived (0068): Finish sending, not Pay.
+  const unsent = useUnsentOrders(userId);
 
   if (!authLoading && !session) return <Redirect href="/sign-in" />;
 
@@ -72,12 +75,12 @@ export default function Orders() {
       style={styles.page}
       contentContainerStyle={styles.list}
       ListHeaderComponent={head}
-      renderItem={({ item }) => <OrderCard order={item} />}
+      renderItem={({ item }) => <OrderCard order={item} unsent={unsent.get(item.id) ?? null} />}
     />
   );
 }
 
-function OrderCard({ order }: { order: AppOrder }) {
+function OrderCard({ order, unsent }: { order: AppOrder; unsent: UnsentOrder | null }) {
   const v = orderView(order);
   const open = () => router.push({ pathname: '/order-details', params: { id: order.id } });
   return (
@@ -93,8 +96,9 @@ function OrderCard({ order }: { order: AppOrder }) {
       </View>
       <Text style={[styles.headline, v.track.cancelled && styles.bad]} testID="order-headline">{v.track.headline}</Text>
       {v.track.test && !!order.tester_code && <Text style={styles.small} testID="order-test-note">{testOrderNote(order.tester_code)}</Text>}
-      {!!v.payBy && <Text style={styles.small} testID="order-pay-by">{v.payBy}</Text>}
-      <Text style={styles.link}>{v.track.awaitingPayment ? 'Pay or see this order' : 'See this order'} ›</Text>
+      {unsent && <Text style={[styles.headline, styles.bad]} testID="order-unsent">{UNSENT_CARD_LINE}</Text>}
+      {!!v.payBy && !unsent && <Text style={styles.small} testID="order-pay-by">{v.payBy}</Text>}
+      <Text style={styles.link}>{unsent ? FINISH_SENDING : v.track.awaitingPayment ? 'Pay or see this order' : 'See this order'} ›</Text>
     </Pressable>
   );
 }

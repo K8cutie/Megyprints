@@ -42,7 +42,7 @@ import type { SentFiles } from './sentFiles';
 import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
 import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from '@web/lib/orderCodes';
-import { MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
+import { ClipTooBigError, MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
 import { bookingErrorMessage } from '../events/eventDeal';
 
 type DbError = { message: string; code?: string | null } | null;
@@ -78,6 +78,9 @@ export type SendStep =
 export interface ClipSender {
   /** The videos neither on this phone nor in the cloud. */
   findMissing(codes: string[]): Promise<string[]>;
+  /** Shrink (and fit under the server's cap) every kept video now; the ones
+   *  still too big to send come back (clips.ts prepareStagedClips). */
+  prepare?(codes: string[], onProgress?: (done: number, total: number) => void): Promise<{ code: string; size: number }[]>;
   /** Shrink what is left, then upload every kept video (one already there
    *  counts). Throws MissingClipError for a video that is gone. */
   upload(codes: string[], onProgress?: (done: number, total: number, phase: 'compress' | 'upload') => void): Promise<{ uploaded: string[]; replaced: string[] }>;
@@ -163,6 +166,16 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
     onStep({ step: 'videosCheck', before: true });
     const gone = await clips!.findMissing(clipCodes);
     if (gone.length) throw new MissingClipError(gone);
+  }
+  // 0b. Every kept video shrunk now, and small enough for the server, BEFORE
+  //     the order row (MP-2026-9M5572U: a video over the cap stopped every
+  //     try after the order was made, so its pages were never sent). An
+  //     order being finished checks too: plain words now, not a refusal at
+  //     the upload.
+  if (clipCodes.length && clips?.prepare) {
+    onStep({ step: 'videos', done: 0, total: clipCodes.length, phase: 'compress' });
+    const big = await clips.prepare(clipCodes, (done, total) => onStep({ step: 'videos', done, total, phase: 'compress' }));
+    if (big.length) throw new ClipTooBigError(big);
   }
 
   // 1. The order row, once.
@@ -293,6 +306,21 @@ export async function sendPayment(plan: PaymentSubmitPlan, receipt: Uint8Array |
     else proofPath = path;
   }
   const { error } = await deps.db.rpc(plan.rpc.name, { ...plan.rpc.args, p_proof_path: proofPath });
+  // An order that didn't finish sending (0068, MP030): the database's own plain words.
+  if (error && isOrderNotSentError(error)) throw new OrderNotSentError(error.message);
   if (error) throw new Error(`Could not record your payment (${error.message}).`);
   return { receiptError };
+}
+
+/** 0068: "I've sent the payment" refused for an order whose files, videos
+ *  or QRs never all arrived. Its words say to tap Finish sending. */
+export const ORDER_NOT_SENT_SQLSTATE = 'MP030';
+export function isOrderNotSentError(e: { message?: string; code?: string | null } | null | undefined): boolean {
+  return !!e && (e.code === ORDER_NOT_SENT_SQLSTATE || /didn't finish sending/i.test(e.message ?? ''));
+}
+export class OrderNotSentError extends Error {
+  constructor(message: string) {
+    super(message || "This order didn't finish sending from your phone, so we can't print it yet. Open Your orders and tap Finish sending.");
+    this.name = 'OrderNotSentError';
+  }
 }

@@ -17,6 +17,7 @@ import androidx.media3.effect.Presentation
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
 import androidx.media3.transformer.EditedMediaItem
+import androidx.media3.transformer.EditedMediaItemSequence
 import androidx.media3.transformer.Effects
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
@@ -41,6 +42,10 @@ class ShrinkOptions : Record {
    *  The same look in about a third less space (owner, 2026-11-21:
    *  "HEVC is low risk so lets do it"). */
   @Field val hevcBitrate: Int = 0
+  /** How an HDR video is made normal (Composition.HDR_MODE_*); -1 = the
+   *  best one: tone-mapped with OpenGL on Android 10+. The caller tries the
+   *  others when that fails (a phone without GL_EXT_YUV_target). */
+  @Field val hdrMode: Int = -1
 }
 
 /** Android's own software encoders (c2.android.*, OMX.google.*). */
@@ -204,8 +209,11 @@ class VideoShrinkModule : Module() {
             main.removeCallbacks(poll)
             running = null
             pending = null
+            Log.w("MegyVideoShrink", "shrink failed: ${exportException.errorCodeName}: ${exportException.message}", exportException)
             if (out.exists()) out.delete()
-            promise.reject(CodedException("ERR_SHRINK", exportException.message ?: "Could not shrink the video", exportException))
+            // The error's name leads the message: the caller tries another HDR
+            // way after a frame-processing or HDR failure (index.ts).
+            promise.reject(CodedException("ERR_SHRINK", "${exportException.errorCodeName}: ${exportException.message ?: "Could not shrink the video"}", exportException))
           }
         })
         .build()
@@ -219,8 +227,24 @@ class VideoShrinkModule : Module() {
         }
         main.postDelayed(poll, 500)
       }
+      // HDR video (10-bit: Samsung's HDR10+, Pixel's 10-bit HDR, an iPhone's
+      // Dolby Vision) is tone-mapped to a normal video. Without this Media3
+      // keeps HDR, which an 8-bit H.264 file can't hold: the shrink failed,
+      // the phone kept the original, and a 40-second clip went up at 71 MB,
+      // over the server's 50 MB (MP-2026-9M5572U, reproduced 2026-11-22 on
+      // the emulator). Tone-mapping with OpenGL needs Android 10 or later.
+      // The caller may ask for another way (MediaCodec's tone-mapping, or
+      // reading HDR as normal video) when this one fails on a phone.
+      val hdrMode = when {
+        options.hdrMode >= 0 -> options.hdrMode
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q -> Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL
+        else -> Composition.HDR_MODE_KEEP_HDR
+      }
+      val composition = Composition.Builder(EditedMediaItemSequence.Builder(item).build())
+        .setHdrMode(hdrMode)
+        .build()
       try {
-        transformer.start(item, out.absolutePath)
+        transformer.start(composition, out.absolutePath)
         main.postDelayed(poll, 500)
       } catch (e: Exception) {
         running = null

@@ -10,6 +10,7 @@
    the video is kept as picked (the website does the same when its browser
    can't shrink). */
 import { requireOptionalNativeModule } from 'expo';
+import { Platform } from 'react-native';
 
 export interface VideoProbe {
   /** As shown (rotation applied). 0 = unknown. */
@@ -22,7 +23,7 @@ export interface VideoProbe {
 
 interface NativeVideoShrink {
   probe(uri: string): Promise<VideoProbe>;
-  shrink(input: string, output: string, options: { shortEdge: number; videoBitrate: number; frameRate: number; hevcBitrate?: number }): Promise<{ uri: string; size: number; codec?: 'hevc' | 'h264' }>;
+  shrink(input: string, output: string, options: { shortEdge: number; videoBitrate: number; frameRate: number; hevcBitrate?: number; hdrMode?: number }): Promise<{ uri: string; size: number; codec?: 'hevc' | 'h264' }>;
   cancel(): Promise<boolean>;
   addListener(event: 'onShrinkProgress', listener: (e: { output: string; progress: number }) => void): { remove(): void };
 }
@@ -61,9 +62,37 @@ export async function shrinkVideo(
         if ((e as { code?: string })?.code === 'ERR_CANCELLED') throw e;
       }
     }
-    return await native.shrink(input, outPath, base);
+    return await shrinkWithHdrWays((o) => native.shrink(input, outPath, { ...base, ...o }), Number(Platform.Version) || 0);
   } finally {
     sub.remove();
+  }
+}
+
+/** Composition.HDR_MODE_* (Media3). */
+export const HDR_MODE = { toneMapMediaCodec: 1, readAsNormal: 3 } as const;
+
+/** A shrink failed in a way an HDR video fails (its frames, or HDR itself). */
+export function isHdrFailure(e: unknown): boolean {
+  const msg = `${(e as { message?: string })?.message ?? ''}`;
+  return /FRAME_PROCESSING|HDR|DECODING_FORMAT_UNSUPPORTED|ENCODING_FORMAT_UNSUPPORTED/i.test(msg);
+}
+
+/** H.264, the native default first (an HDR video tone-mapped with OpenGL);
+ *  when that fails the way HDR does (MP-2026-9M5572U: a phone without
+ *  GL_EXT_YUV_target), the phone's own decoder tone-maps it (Android 12+),
+ *  and last the HDR video is read as a normal one (its colours a little
+ *  flat, but it is sent). Any other failure, or the last one: rejected, and
+ *  the caller keeps the original (and says it is too big before any order). */
+export async function shrinkWithHdrWays<T>(shrink: (o: { hdrMode?: number }) => Promise<T>, androidVersion: number): Promise<T> {
+  try {
+    return await shrink({});
+  } catch (e) {
+    if ((e as { code?: string })?.code === 'ERR_CANCELLED' || !isHdrFailure(e)) throw e;
+    if (androidVersion >= 31) {
+      try { return await shrink({ hdrMode: HDR_MODE.toneMapMediaCodec }); } catch (e2) { if ((e2 as { code?: string })?.code === 'ERR_CANCELLED') throw e2; }
+    }
+    if (androidVersion >= 29) return shrink({ hdrMode: HDR_MODE.readAsNormal });
+    throw e;
   }
 }
 

@@ -121,7 +121,8 @@ describe('the rules are the website\'s', () => {
   });
 
   it('the upload, "is it in the cloud?" and their words are the website\'s calls', async () => {
-    const store = makeClipStore(deps(memFiles()));
+    // No real waits between the app's upload tries (they are its own, below).
+    const store = makeClipStore(deps(memFiles(), { wait: async () => {} }));
     const clip: StagedClip = { code: 'abcd2345', ext: 'mp4', uri: 'file:///kept/abcd2345.mp4', size: 3, durationSec: 4, name: 'a.mp4', stagedAt: 1 };
     await web.uploadClip('abcd2345', 'mp4', new Blob([new Uint8Array(3)]), { replace: false });
     const webUpload = mockStorage.calls.splice(0);
@@ -136,7 +137,8 @@ describe('the rules are the website\'s', () => {
     mockStorage.uploadError = { message: 'The resource already exists', statusCode: '409' };
     await expect(web.uploadClip('abcd2345', 'mp4', new Blob([new Uint8Array(3)]))).resolves.toBeUndefined();
     await expect(store.uploadClip(clip)).resolves.toBeUndefined();
-    mockStorage.uploadError = { message: 'Payload too large' };
+    // (The app tries 3 times before it says so; a file too big has its own words: below.)
+    mockStorage.uploadError = { message: 'Internal Server Error' };
     const webErr = await web.uploadClip('abcd2345', 'mp4', new Blob([new Uint8Array(3)])).catch((e: Error) => e.message);
     await expect(store.uploadClip(clip)).rejects.toThrow(webErr);
     // In the cloud?
