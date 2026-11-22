@@ -61,7 +61,8 @@ beforeEach(() => {
 });
 
 /** Nothing but reads, and the RPCs a test expects. */
-const writes = () => calls.rpcs.map((r) => r.name);
+// my_unsent_orders (0068) only reads.
+const writes = () => calls.rpcs.map((r) => r.name).filter((n) => n !== 'my_unsent_orders');
 
 describe('Your orders', () => {
   it("lists this account's orders, newest first, each where it is now, in the website's words", async () => {
@@ -182,7 +183,7 @@ describe('one order', () => {
     };
     await fireEvent.press(screen.getByTestId('order-cancel'));
     await fireEvent.press(screen.getByTestId('order-cancel-yes'));
-    expect(calls.rpcs).toEqual([{ name: 'cancel_my_unpaid_order', args: { p_order_id: 'wait' } }]);
+    expect(calls.rpcs.filter((c) => c.name !== 'my_unsent_orders')).toEqual([{ name: 'cancel_my_unpaid_order', args: { p_order_id: 'wait' } }]);
     expect(await screen.findByText('Cancelled')).toBeTruthy();
     expect(screen.getByTestId('order-cancelled-note').props.children).toBe("This order was cancelled. Your album is still saved, so you can order it again. If that's a surprise, message us.");
     expect(screen.queryByTestId('order-how-to-pay')).toBeNull();
@@ -247,7 +248,7 @@ describe('one order', () => {
     };
     await fireEvent.press(screen.getByTestId('order-cancel'));
     await fireEvent.press(screen.getByTestId('order-cancel-yes'));
-    expect(calls.rpcs).toEqual([{ name: 'cancel_my_unpaid_order', args: { p_order_id: 'test' } }]);
+    expect(calls.rpcs.filter((c) => c.name !== 'my_unsent_orders')).toEqual([{ name: 'cancel_my_unpaid_order', args: { p_order_id: 'test' } }]);
     expect(await screen.findByText('Cancelled')).toBeTruthy();
     expect(screen.queryByTestId('order-unfinished-test')).toBeNull();
   });
@@ -286,5 +287,44 @@ describe('one order', () => {
     mockParams.id = 'other';
     await render(<OrderDetails />);
     expect(await screen.findByTestId('order-not-found')).toBeTruthy();
+  });
+});
+
+/* ── MP-2026-9M5572U: an order that didn't finish sending (0068) ── */
+describe("an order that didn't finish sending", () => {
+  const unsent = (id: string, number: string, status: string) =>
+    ({ order_id: id, order_number: number, album_id: 'album-1', status, created_at: '2026-11-22T08:36:49Z', missing: ['pages', 'video:83gph59m', 'video:ezftzzur', 'video:6nna5cr5', 'memory:83gph59m'] });
+
+  it('Your orders: "Didn\'t finish sending" and Finish sending, not Pay; the others as before', async () => {
+    answers.rpc.my_unsent_orders = { data: [unsent('wait', 'MP-2026-WAIT001', 'pending_payment'), unsent('print', 'MP-2026-PRNT003', 'in_production')], error: null };
+    await render(<Orders />);
+    await screen.findAllByTestId('order-card');
+    expect(await screen.findAllByTestId('order-unsent')).toHaveLength(2);
+    expect(screen.getAllByText('Finish sending ›')).toHaveLength(2);
+    // The waiting order no longer says when to pay: it can't be paid yet.
+    expect(screen.queryAllByTestId('order-pay-by')).toHaveLength(0);
+    expect(screen.queryAllByText('Pay or see this order ›')).toHaveLength(0); // the only order waiting for payment is the unsent one
+    expect(screen.getAllByText('See this order ›').length).toBeGreaterThan(0); // the others as before
+  });
+
+  it('one order: the box says what never arrived; no Pay button (the database refuses a payment for it)', async () => {
+    answers.rpc.my_unsent_orders = { data: [unsent('wait', 'MP-2026-WAIT001', 'pending_payment')], error: null };
+    mockParams.id = 'wait';
+    await render(<OrderDetails />);
+    expect(await screen.findByTestId('order-unsent-box')).toBeOnTheScreen();
+    expect(screen.getByText("Order MP-2026-WAIT001 didn't finish sending")).toBeOnTheScreen();
+    expect(screen.getByText("The pages and 3 memory videos never reached us, so we can't print it yet. Tap Finish sending and keep the app open until it's done.")).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-pay')).toBeNull();
+    expect(screen.queryByTestId('order-how-to-pay')).toBeNull();
+    // It can still be cancelled while it waits for payment.
+    expect(screen.getByTestId('order-cancel')).toBeOnTheScreen();
+  });
+
+  it('a database before 0068: nothing changes', async () => {
+    answers.rpc.my_unsent_orders = { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.my_unsent_orders' } };
+    mockParams.id = 'wait';
+    await render(<OrderDetails />);
+    expect(await screen.findByTestId('order-pay')).toBeOnTheScreen();
+    expect(screen.queryByTestId('order-unsent-box')).toBeNull();
   });
 });

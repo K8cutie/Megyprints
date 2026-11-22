@@ -6,6 +6,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { AppState } from 'react-native';
 import { supabase } from '../supabase';
 import { getAppOrder, listAppOrders, type AppOrder } from './myOrders';
+import { listUnsentOrders, type UnsentOrder } from '../checkout/unsentOrders';
+import { isOrderBeingSent } from '../checkout/backgroundSend';
 
 interface Loaded<T> { key: string; attempt: number; value: T | null; error: string }
 
@@ -55,6 +57,22 @@ function useReading<T>(key: string | null, read: () => Promise<T>): Reading<T> {
 /** My orders, newest first. */
 export function useMyOrders(userId: string | undefined): Reading<AppOrder[]> {
   return useReading(userId ?? null, () => listAppOrders(supabase, userId as string));
+}
+
+/** My orders that didn't finish sending (0068), by order id; read again when
+ *  the app comes back on screen. Orders this app is still sending are left
+ *  out (their files are on the way). Empty when they can't be read. */
+export function useUnsentOrders(userId: string | undefined): Map<string, UnsentOrder> {
+  const [list, setList] = useState<UnsentOrder[]>([]);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!userId) { setList([]); return; }
+    let alive = true;
+    void listUnsentOrders(supabase).then((l) => { if (alive) setList(l); });
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') setAttempt((a) => a + 1); });
+    return () => { alive = false; sub.remove(); };
+  }, [userId, attempt]);
+  return new Map(list.filter((o) => !isOrderBeingSent(o.order_id)).map((o) => [o.order_id, o]));
 }
 
 /** One of my orders by id (null: not found, or not mine). */

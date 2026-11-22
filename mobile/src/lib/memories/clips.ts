@@ -20,6 +20,8 @@
    it with the real ones.
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { uploadTimeLimitMs } from '../checkout/storage';
+
 /* ── The rules (memoryClips.ts, word for word) ─────────────────────────── */
 
 export const MAX_CLIP_SECONDS = 120;
@@ -125,6 +127,70 @@ export function missingClipMessage(pages: { qrFills?: ({ code: string } | null)[
 /** uploadClip's words for a video still too big after shrinking. */
 export const tooBigToUpload = (size: number) =>
   `One of your memory videos is ${Math.round(size / 1024 / 1024)} MB, which is too large to upload from this device. Replace it with a shorter clip.`;
+
+/* ── What the server takes (MP-2026-9M5572U, 2026-11-22) ──────────────────
+   The bucket says 100 MB (200 MB from 0067), but the live Supabase project
+   itself takes at most 50 MB a file on its plan (checked 2026-11-21), and
+   refuses more with a 400 before the file is in. A Megy Mini's second video
+   was over it: the order was made, its cover sent, then every try stopped at
+   that video, so its pages were never made. So before the order is made, a
+   video over the cap is shrunk once more at a bitrate that fits, and one
+   that still doesn't fit stops checkout BEFORE any order exists, naming its
+   page. Raise the cap here if the project's plan changes. */
+
+/** The most one upload may be: the live project's own per-file limit. */
+export const SERVER_UPLOAD_CAP_BYTES = 50 * 1024 * 1024;
+/** What a video over the cap is shrunk to fit in: room for the sound and the
+ *  file's own parts, which the bitrate doesn't count. */
+export const FIT_TARGET_BYTES = 46 * 1024 * 1024;
+/** Below this picture bitrate a 720p video turns to blocks: no fit then. */
+export const MIN_FIT_BITRATE = 600_000;
+const FIT_AUDIO_BITRATE = 128_000;
+
+/** The picture bitrate that makes a video `seconds` long fit in `bytes` with
+ *  its sound; null when its length is unknown or no usable bitrate fits. */
+export function fitBitrate(seconds: number | null | undefined, bytes: number = FIT_TARGET_BYTES): number | null {
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return null;
+  const video = Math.floor((bytes * 8) / seconds) - FIT_AUDIO_BITRATE;
+  return video >= MIN_FIT_BITRATE ? video : null;
+}
+
+/** Storage's answer for a file over the limit (HTTP 400 or 413, with
+ *  statusCode "413" in its body). Trying it again never helps. */
+export function isTooLargeError(e: { message?: string; statusCode?: string | number; status?: number; error?: string } | null | undefined): boolean {
+  if (!e) return false;
+  if (String(e.statusCode ?? '') === '413' || e.status === 413) return true;
+  return /payload too large|exceeded the maximum allowed size|entity too large/i.test(`${e.message ?? ''} ${e.error ?? ''}`);
+}
+
+/** Memory videos too big to send, even shrunk. */
+export class ClipTooBigError extends Error {
+  readonly clips: { code: string; size: number }[];
+  constructor(clips: { code: string; size: number }[]) {
+    super(clips.length === 1
+      ? tooBigToUpload(clips[0].size)
+      : `${clips.length} of your memory videos are too large to upload from this device. Replace them with shorter clips.`);
+    this.name = 'ClipTooBigError';
+    this.clips = clips;
+  }
+}
+
+/** Which pages hold the videos too big to send, and what to do. */
+export function tooBigClipMessage(pages: { qrFills?: ({ code: string } | null)[] | null; textSlotQr?: ({ code: string } | null)[] | null }[], clips: { code: string; size: number }[]): string {
+  const codes = clips.map((c) => c.code);
+  const at = pages.flatMap((p, i) =>
+    [...(p.qrFills ?? []), ...(p.textSlotQr ?? [])].some((f) => !!f && codes.includes(f.code)) ? [i + 1] : []);
+  if (!at.length) return new ClipTooBigError(clips).message;
+  const where = at.length === 1 ? `page ${at[0]}` : `pages ${at.slice(0, -1).join(', ')} and ${at[at.length - 1]}`;
+  const mb = Math.round(Math.max(...clips.map((c) => c.size)) / 1024 / 1024);
+  const cap = Math.round(SERVER_UPLOAD_CAP_BYTES / 1024 / 1024);
+  return clips.length === 1
+    ? `The memory video on ${where} is ${mb} MB, too big to send (we can take up to ${cap} MB). Open your album and choose a shorter video for the QR on ${where}, then order.`
+    : `The memory videos on ${where} are too big to send (we can take up to ${cap} MB each). Open your album and choose shorter videos for those QRs, then order.`;
+}
+
+/** Waits between a memory video's upload tries (3 tries, like the cover). */
+export const CLIP_UPLOAD_WAITS_MS = [1500, 4000];
 export const uploadFailed = (message: string) => `Could not upload your memory video (${message || 'storage error'}).`;
 export const checkFailed = (message: string) => `Could not check your memory video (${message || 'storage error'}).`;
 
@@ -147,6 +213,8 @@ export interface StagedClip {
   uploaded?: boolean;
   /** It replaces what the code pointed at before: upload over it, re-point the row. */
   replace?: boolean;
+  /** A shrink to fit under the server's cap was tried (and is not tried again for this video). */
+  fitTried?: boolean;
 }
 
 type StorageError = { message: string; statusCode?: string | number; error?: string } | null;
@@ -167,8 +235,13 @@ export interface ClipDeps {
     /** Where a shrunk copy of `code` is written. */
     shrunkPath(code: string, stagedAt: number): string;
   };
-  /** The shrinker (modules/video-shrink); null when this APK has none. */
-  shrink: ((input: string, output: string, quality: ClipQuality, onProgress: (f: number) => void) => Promise<{ uri: string; size: number }>) | null;
+  /** The shrinker (modules/video-shrink); null when this APK has none. With
+   *  `bitrate`, a 720p video at that picture bitrate (to fit under the cap). */
+  shrink: ((input: string, output: string, quality: ClipQuality, onProgress: (f: number) => void, bitrate?: number) => Promise<{ uri: string; size: number }>) | null;
+  /** The video's length in seconds (the shrinker's probe); null when unknown. */
+  probeSeconds?: (uri: string) => Promise<number | null>;
+  /** Waits between upload tries (default: real time). */
+  wait?: (ms: number) => Promise<void>;
   /** The storage client (supabase.storage). */
   storage: {
     from(bucket: string): {
@@ -291,36 +364,118 @@ export function makeClipStore(d: ClipDeps) {
     return job;
   }
 
-  /** ensureClipsTranscoded: finish shrinking everything before an upload. */
-  async function ensureClipsTranscoded(codes: string[], onProgress?: (done: number, total: number) => void): Promise<void> {
-    const pending: string[] = [];
-    for (const code of [...new Set(codes)]) {
-      const clip = await getStagedClip(code);
-      if (clip && !clip.transcoded && !clip.uploaded) pending.push(code);
+  /** A kept video over what the server takes, shrunk once more at a bitrate
+   *  that fits (720p). Never throws: when it can't, the video stays as it is
+   *  and checkout says it's too big before any order is made. Tried once per
+   *  video (a new video for the code tries again). */
+  async function fitUnderCap(code: string): Promise<void> {
+    const clip = await getStagedClip(code);
+    if (!clip || clip.uploaded || clip.fitTried || !d.shrink) return;
+    const size = d.files.size(clip.uri) || clip.size;
+    if (size <= SERVER_UPLOAD_CAP_BYTES) return;
+    const seconds = clip.durationSec ?? (await d.probeSeconds?.(clip.uri).catch(() => null)) ?? null;
+    const bitrate = fitBitrate(seconds);
+    let out: { uri: string; size: number } | null = null;
+    if (bitrate) {
+      progressByCode.set(code, 0);
+      try {
+        out = await d.shrink(clip.uri, d.files.shrunkPath(code, clip.stagedAt + 1), 'standard', (f) => progressByCode.set(code, f), bitrate);
+      } catch {
+        out = null;
+      } finally {
+        progressByCode.delete(code);
+      }
     }
-    const total = pending.length;
+    const latest = (await getStagedClip(code)) ?? clip;
+    if (latest.stagedAt !== clip.stagedAt) {
+      if (out) await d.files.remove(out.uri).catch(() => {});
+      return;
+    }
+    const fits = !!out && out.size > 0 && out.size <= SERVER_UPLOAD_CAP_BYTES;
+    await edit((index) => {
+      if (!index[code]) return;
+      index[code] = fits
+        ? { ...index[code], uri: out!.uri, ext: 'mp4', size: out!.size, transcoded: true, fitTried: true }
+        : { ...index[code], fitTried: true };
+    });
+    if (fits) await d.files.remove(clip.uri).catch(() => {});
+    else if (out) await d.files.remove(out.uri).catch(() => {});
+  }
+
+  /** ensureClipsTranscoded: finish shrinking everything before an upload,
+   *  then fit any video still over the server's cap. */
+  async function ensureClipsTranscoded(codes: string[], onProgress?: (done: number, total: number) => void): Promise<void> {
+    const unique = [...new Set(codes)];
+    const pending: string[] = [];
+    const over: string[] = [];
+    for (const code of unique) {
+      const clip = await getStagedClip(code);
+      if (!clip || clip.uploaded) continue;
+      if (!clip.transcoded) pending.push(code);
+      else if (!clip.fitTried && (d.files.size(clip.uri) || clip.size) > SERVER_UPLOAD_CAP_BYTES) over.push(code);
+    }
+    const total = pending.length + over.length;
     if (!total) return;
     let done = 0;
     onProgress?.(0, total);
     for (const code of pending) {
       await startTranscode(code);
+      await fitUnderCap(code);
+      onProgress?.(++done, total);
+    }
+    for (const code of over) {
+      await fitUnderCap(code);
       onProgress?.(++done, total);
     }
   }
 
-  /** uploadClip: `<code>.<ext>`; one already there counts as done. */
+  /** The kept videos still over what the server takes (not yet in the bucket). */
+  async function tooBigClips(codes: string[]): Promise<{ code: string; size: number }[]> {
+    const out: { code: string; size: number }[] = [];
+    for (const code of [...new Set(codes)]) {
+      const clip = await getStagedClip(code);
+      if (!clip || clip.uploaded) continue;
+      const size = d.files.size(clip.uri) || clip.size;
+      if (size > SERVER_UPLOAD_CAP_BYTES) out.push({ code, size });
+    }
+    return out;
+  }
+
+  /** prepareStagedClips: shrink (and fit) every kept video now, before an
+   *  order is made; the ones still too big to send come back. */
+  async function prepareStagedClips(codes: string[], onProgress?: (done: number, total: number) => void): Promise<{ code: string; size: number }[]> {
+    await ensureClipsTranscoded(codes, onProgress);
+    return tooBigClips(codes);
+  }
+
+  const wait = d.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+
+  /** uploadClip: `<code>.<ext>`; one already there counts as done. 3 tries,
+   *  each with a time limit (a dropped connection, or a 502, is often gone on
+   *  the next); a file over the server's cap is never tried. */
   async function uploadClip(clip: StagedClip): Promise<void> {
     const size = d.files.size(clip.uri) || clip.size;
-    if (size > MAX_CLIP_BYTES) throw new Error(tooBigToUpload(size));
+    if (size > SERVER_UPLOAD_CAP_BYTES) throw new ClipTooBigError([{ code: clip.code, size }]);
     const bytes = await d.files.bytes(clip.uri);
     const body = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-    const { error } = await d.storage.from(CLIP_BUCKET).upload(clipObjectPath(clip.code, clip.ext), body, {
-      contentType: clipMimeFor(clip.ext),
-      upsert: !!clip.replace,
-      cacheControl: '31536000',
-    });
-    if (!error || alreadyThere(error)) return;
-    throw new Error(uploadFailed(error.message));
+    for (let attempt = 1; ; attempt++) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = new Promise<{ error: StorageError }>((done) => {
+        timer = setTimeout(() => done({ error: { message: 'Upload timed out: no answer from the server' } }), uploadTimeLimitMs(size));
+      });
+      const { error } = await Promise.race([
+        d.storage.from(CLIP_BUCKET).upload(clipObjectPath(clip.code, clip.ext), body, {
+          contentType: clipMimeFor(clip.ext),
+          upsert: !!clip.replace,
+          cacheControl: '31536000',
+        }).catch((e: unknown) => ({ error: { message: e instanceof Error ? e.message : String(e) } })),
+        timedOut,
+      ]).finally(() => clearTimeout(timer));
+      if (!error || alreadyThere(error)) return;
+      if (isTooLargeError(error)) throw new ClipTooBigError([{ code: clip.code, size }]);
+      if (attempt > CLIP_UPLOAD_WAITS_MS.length) throw new Error(uploadFailed(error.message));
+      await wait(CLIP_UPLOAD_WAITS_MS[attempt - 1]);
+    }
   }
 
   /** clipInBucket: asked with list(), which reads Storage's own table. */
@@ -418,7 +573,7 @@ export function makeClipStore(d: ClipDeps) {
 
   return {
     getStagedClip, listStagedCodes, stageClip, markClipUploaded, removeStagedClip,
-    startTranscode, clipTranscodeProgress, ensureClipsTranscoded,
+    startTranscode, clipTranscodeProgress, ensureClipsTranscoded, fitUnderCap, tooBigClips, prepareStagedClips,
     uploadClip, clipInBucket, uploadStagedClips, findMissingClips,
     stagedClipQuality, stagedClipBytes, freePaidStagedClips,
   };

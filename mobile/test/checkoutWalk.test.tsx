@@ -28,7 +28,7 @@ const mockPicked: { asset: { uri: string; name: string; size: number; mimeType: 
 
 jest.mock('../src/lib/auth', () => ({ useAuth: () => ({ session: mockAuth.session, loading: false }) }));
 jest.mock('../src/lib/supabase', () => ({ supabase: jest.requireActual('./helpers/fakeSupabase').fakeClient, supabaseConfigured: true }));
-jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) }, useLocalSearchParams: () => ({}) }));
+jest.mock('expo-router', () => ({ router: { push: (...a: unknown[]) => mockPush(...a) }, useLocalSearchParams: () => ({}), usePreventRemove: () => () => {} }));
 // Opened from the home screen's test button: no album id, no album (the test album).
 jest.mock('../src/builder/BuilderProvider', () => ({ useOptionalBuilder: () => null }));
 jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));

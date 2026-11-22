@@ -51,7 +51,8 @@ import {
   trackingLine,
   UNFINISHED_TEST_NOTE,
 } from '../lib/orders/orderWords';
-import { useMyOrder } from '../lib/orders/useMyOrders';
+import { useMyOrder, useUnsentOrders } from '../lib/orders/useMyOrders';
+import { FINISH_SENDING, UNSENT_NO_ALBUM, unsentBody, unsentHeadline, type UnsentOrder } from '../lib/checkout/unsentOrders';
 import { supabase } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 
@@ -60,6 +61,7 @@ export default function OrderDetails() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const userId = session?.user.id;
   const reading = useMyOrder(userId, typeof id === 'string' ? id : undefined);
+  const unsentOrders = useUnsentOrders(userId);
   const [paying, setPaying] = useState(false);
 
   if (!authLoading && !session) return <Redirect href="/sign-in" />;
@@ -94,10 +96,10 @@ export default function OrderDetails() {
     return <PaymentStep amount={askedToPay(order)} order={order} live onBack={() => setPaying(false)} backLabel="Back to this order"
       onPaid={() => { setPaying(false); reading.retry(); }} />;
   }
-  return <OrderScreen order={order} onPay={() => setPaying(true)} onChanged={reading.retry} />;
+  return <OrderScreen order={order} unsent={unsentOrders.get(order.id) ?? null} onPay={() => setPaying(true)} onChanged={reading.retry} />;
 }
 
-function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () => void; onChanged: () => void }) {
+function OrderScreen({ order, unsent, onPay, onChanged }: { order: AppOrder; unsent: UnsentOrder | null; onPay: () => void; onChanged: () => void }) {
   const v = orderView(order);
   const track = v.track;
   const total = askedToPay(order);
@@ -158,7 +160,26 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
         {!!order.tracking && track.stage >= 4 && <Text style={styles.small} testID="order-tracking">{trackingLine(order.tracking)}</Text>}
       </View>
 
-      {track.awaitingPayment && (
+      {/* Its files never all arrived (0068): finish it before anything else
+          (the database refuses a payment for it until then). */}
+      {unsent && (
+        <View style={styles.payBox} testID="order-unsent-box">
+          <Text style={styles.payHead}>{unsentHeadline(order.order_number)}</Text>
+          {order.album_id ? (
+            <>
+              <Text style={styles.payText}>{unsentBody(unsent.missing)}</Text>
+              {!askCancel && <FinishSending albumId={order.album_id} orderId={order.id} />}
+            </>
+          ) : (
+            <>
+              <Text style={styles.payText}>{UNSENT_NO_ALBUM}</Text>
+              <Button label="Message us" kind="plain" onPress={messageUs} testID="order-unsent-message-us" />
+            </>
+          )}
+          {track.awaitingPayment && cancelButtons}
+        </View>
+      )}
+      {track.awaitingPayment && !unsent && (
         <View style={styles.payBox} testID="order-how-to-pay">
           <Text style={styles.payHead}>{payHeadline(total)}</Text>
           <Text style={styles.payText}>The button below shows our InstaPay QR. Scan it with your bank or e-wallet app, and put {order.order_number} in the note if your app asks.</Text>
@@ -174,7 +195,7 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
           {cancelButtons}
         </View>
       )}
-      {canOrderAgain(order, track.awaitingPayment) && (
+      {canOrderAgain(order, track.awaitingPayment) && !unsent && (
         <OrderAgain albumId={order.album_id!} main={order.status === 'delivered' || track.cancelled} note={order.status === 'delivered'} />
       )}
       {!!cancelErr && (
@@ -184,6 +205,26 @@ function OrderScreen({ order, onPay, onChanged }: { order: AppOrder; onPay: () =
         </View>
       )}
     </ScrollView>
+  );
+}
+
+/** "Finish sending": the order's album opened (My albums' way), then its
+ *  checkout, which finishes THIS order from what it froze (unsentOrders.ts). */
+function FinishSending({ albumId, orderId }: { albumId: string; orderId: string }) {
+  const own = useOptionalBuilder();
+  if (!own) return null;
+  return <FinishSendingButton own={own} albumId={albumId} orderId={orderId} />;
+}
+
+function FinishSendingButton({ own, albumId, orderId }: { own: Own; albumId: string; orderId: string }) {
+  const { open, opening, couldNot } = useOpenAlbum(own.builder, (id) => {
+    router.push({ pathname: '/order', params: { albumId: id, finish: orderId } });
+  });
+  return (
+    <View style={styles.again}>
+      <Button label={FINISH_SENDING} busy={opening === albumId} onPress={() => { void open(albumId); }} testID="order-finish-sending" />
+      {couldNot === albumId && <Text style={styles.error} accessibilityRole="alert" testID="order-finish-error">{ORDER_AGAIN_FAILED}</Text>}
+    </View>
   );
 }
 

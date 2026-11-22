@@ -4,7 +4,7 @@
    AsyncStorage, the app's shrinker (modules/video-shrink) and Supabase. */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
-import { shrinkVideo, videoShrinkAvailable } from '../../../modules/video-shrink';
+import { probeVideo, shrinkVideo, videoShrinkAvailable } from '../../../modules/video-shrink';
 import { supabase } from '../supabase';
 import { HEVC_BITRATES, makeClipStore, QUALITY_TARGETS, type ClipQuality, type StagedClip } from './clips';
 
@@ -50,9 +50,16 @@ export const clipStore = makeClipStore({
     shrunkPath: (code, stagedAt) => new File(folder(), `${code}-${stagedAt}-small.mp4`).uri,
   },
   shrink: videoShrinkAvailable
-    ? (input, output, quality, onProgress) =>
-      shrinkVideo(input, output, { ...QUALITY_TARGETS[quality], hevcBitrate: HEVC_BITRATES[quality] }, onProgress)
+    ? (input, output, quality, onProgress, bitrate) =>
+      // A fit under the server's cap (clips.ts fitUnderCap): 720p at the bitrate that fits.
+      bitrate
+        ? shrinkVideo(input, output, { shortEdge: QUALITY_TARGETS.standard.shortEdge, bitrate, hevcBitrate: bitrate }, onProgress)
+        : shrinkVideo(input, output, { ...QUALITY_TARGETS[quality], hevcBitrate: HEVC_BITRATES[quality] }, onProgress)
     : null,
+  probeSeconds: async (uri) => {
+    const p = await probeVideo(uri);
+    return p && p.durationMs > 0 ? p.durationMs / 1000 : null;
+  },
   storage: supabase.storage as never,
   rpc: (name, args) => supabase.rpc(name, args) as never,
 });

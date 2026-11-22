@@ -30,6 +30,13 @@ export const KEEPER_TITLE = 'Placing your order';
 /** The "done" notification when Place order stopped: its text is the same
  *  words the screen shows (why, and what to do). */
 export const FAILED_TITLE = 'Placing your order stopped';
+/** Back while the order is being sent (MP-2026-9M5572U): it keeps going, so
+ *  the question says so and offers to stay. */
+export const LEAVE_SENDING_TITLE = 'Your order is still sending';
+export const LEAVE_SENDING_LINE = "It keeps going if you leave this screen or use other apps, and a notification tells you when it's done. Don't close the app until then.";
+export const STAY_HERE = 'Stay here';
+export const LEAVE_SCREEN = 'Leave this screen';
+
 /** Under the bar when the keeper runs (instead of "Keep this screen open"). */
 export const BACKGROUND_NOTE = 'You can use other apps while we make and send your order. A notification will tell you when it is done.';
 
@@ -81,7 +88,19 @@ export function startSending(): () => void {
     if (ended) return;
     ended = true;
     sending -= 1;
+    if (sending === 0) sendingOrders.clear();
   };
+}
+
+/* The orders this app is sending right now (their ids, once the order row
+   exists): Your orders doesn't call one of them "didn't finish sending"
+   while its files are still on the way (MP-2026-9M5572U). */
+const sendingOrders = new Set<string>();
+export function markOrderSending(orderId: string): void {
+  if (sending > 0) sendingOrders.add(orderId);
+}
+export function isOrderBeingSent(orderId: string): boolean {
+  return sending > 0 && sendingOrders.has(orderId);
 }
 
 export interface KeeperDeps {
@@ -99,11 +118,13 @@ export interface Keeper {
   background: Promise<boolean>;
   /** A step of the bar (placeRun.ts sendFrame). */
   step(frame: { progress: PlaceProgress; message: string }): void;
-  /** Sent: stops; says so if the person is in another app. */
-  sent(order: Pick<PlacedOrder, 'order_number'>, tester: boolean, bookingNumber?: string | null): Promise<void>;
-  /** Stopped with an error: stops; says why if the person is in another app. */
-  failed(message: string): Promise<void>;
-  /** The screen went away first: stops, says nothing. */
+  /** Sent: stops; says so if the person is in another app, or left the
+   *  "Placing your order" screen (`screenGone`: nothing else would tell them). */
+  sent(order: Pick<PlacedOrder, 'order_number'>, tester: boolean, bookingNumber?: string | null, screenGone?: boolean): Promise<void>;
+  /** Stopped with an error: stops; says why if the person is in another app,
+   *  or left the screen. */
+  failed(message: string, screenGone?: boolean): Promise<void>;
+  /** Nothing was sent (the screen went before the order started): stops, says nothing. */
   end(): Promise<void>;
 }
 
@@ -131,10 +152,10 @@ export async function startKeeper(firstMessage: string, deps: KeeperDeps = realD
   }
   let open = true;
   let lastMessage = '';
-  const stop = async (words: { title: string; text: string } | null) => {
+  const stop = async (words: { title: string; text: string } | null, screenGone = false) => {
     if (!open) return;
     open = false;
-    const say = words && notify && deps.appState() !== 'active' ? words : null;
+    const say = words && notify && (screenGone || deps.appState() !== 'active') ? words : null;
     try {
       await native.finish(say?.title ?? null, say?.text ?? null);
     } catch {
@@ -152,8 +173,8 @@ export async function startKeeper(firstMessage: string, deps: KeeperDeps = realD
         // The notification is only a mirror of the screen.
       }
     },
-    sent: (order, tester, bookingNumber) => stop(placedNotice(order, tester, bookingNumber ?? null)),
-    failed: (message) => stop({ title: FAILED_TITLE, text: message }),
+    sent: (order, tester, bookingNumber, screenGone) => stop(placedNotice(order, tester, bookingNumber ?? null), !!screenGone),
+    failed: (message, screenGone) => stop({ title: FAILED_TITLE, text: message }, !!screenGone),
     end: () => stop(null),
   };
 }
