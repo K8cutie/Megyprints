@@ -33,9 +33,12 @@ import { BUNDLED_FONTS, bundledFace } from '../render/fontTable';
 /** Longest side of a photo's copy for drawing on screen: enough for a page
  *  the width of a phone screen (1080 px) with a full-page photo. */
 export const PHOTO_MAX_SIDE = 1280;
-/** Changes when what the app draws changes, so old page pictures are dropped.
- *  2: textures, QR codes, graphics, stickers, colour looks and soft edges drawn. */
-export const PAGE_PICTURE_VERSION = 2;
+/** Changes when what the app draws changes, or what a picture's notes say
+ *  (its notDrawn, kept beside it), so old page pictures are dropped.
+ *  2: textures, QR codes, graphics, stickers, colour looks and soft edges drawn.
+ *  3: a bold or italic the website fakes too (Shrikhand bold) is no longer
+ *     "not drawn": a picture saved before said "look simpler here" for ever. */
+export const PAGE_PICTURE_VERSION = 3;
 
 /** Where a photo's picture comes from (by its address on the phone). */
 export interface PhotoImages {
