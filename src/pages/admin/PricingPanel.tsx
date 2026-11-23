@@ -12,6 +12,7 @@ import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
 import MegyMiniPricing from './MegyMiniPricing';
+import LaunchPricing from './LaunchPricing';
 import { isMiniSize } from '../../lib/megyMini';
 import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
@@ -382,6 +383,9 @@ export default function PricingPanel() {
 
         {/* Megy Mini (0062): its own price, shipping on top, off until turned on */}
         <MegyMiniPricing model={model} onSaved={setModel} />
+
+        {/* Launch price (0072): today's prices as % off a regular price, with an end date */}
+        <LaunchPricing />
 
         {/* Crossed-out "was" price — the real old price, with an end date */}
         <div className="mt-5 pt-5 border-t border-sand-deep">
