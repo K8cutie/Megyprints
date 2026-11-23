@@ -4635,6 +4635,19 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.
 
+### Release notes 2.1.6 (code 116: 2.1.5 + the font fix; check against the app on upload day)
+
+    <en-US>
+    From tester feedback:
+    • Bold or italic words in fonts like Shrikhand no longer stop your order
+    • Orders with a video from a newer phone (HDR) no longer stop half-way: the video is made smaller first
+    • An order that didn't finish sending shows "Finish sending" in Your orders, to send the rest
+    Also new:
+    • Longer video memories: up to 3 minutes for ₱199, or up to 5 minutes for ₱399, once per album
+    </en-US>
+
+The first line is PR #319 (the owner's Mini, 2026-11-23: "the cover has font "Shrikhand", cursive bold (no bold file: faked by the app)"). The other three are 2.1.5's: 2.1.5 was still in Play review when 2.1.6 was made, so a customer may go straight from 2.1.4 to 2.1.6. If 2.1.5 is already live on upload day, drop those three and keep only the first line. Left out on purpose: fonts downloaded before Place order (a customer only ever saw it as the same error) and the page-picture refresh (it changes nothing a customer does).
+
 ### Release notes 2.1.5 (code 115: 2.1.4 + longer videos + the upright screen not required + the unsent-orders fix; check against the app on upload day)
 
     <en-US>
