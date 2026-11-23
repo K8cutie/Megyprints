@@ -11,11 +11,16 @@ import { resolve } from 'node:path';
    price), but the load now tries again and tells checkout when it lands.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const net = vi.hoisted(() => ({ online: false, calls: 0 }));
+const net = vi.hoisted(() => ({ online: false, calls: 0, launch: null as unknown }));
 vi.mock('./supabase', () => ({
   supabaseConfigured: true,
   supabase: {
-    rpc: async () => {
+    // `calls` counts the price list's requests; the launch price (0072) is
+    // read beside it and never decides whether the prices loaded.
+    rpc: async (name: string) => {
+      if (name === 'public_launch_price') {
+        return net.online && net.launch ? { data: net.launch, error: null } : { data: null, error: { message: 'Failed to fetch' } };
+      }
       net.calls++;
       return net.online
         ? { data: { rates: { '8x8': 1 }, disabled_sizes: ['6x4'] }, error: null }
@@ -29,10 +34,31 @@ let m: Mod;
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.resetModules();
-  net.online = false; net.calls = 0;
+  net.online = false; net.calls = 0; net.launch = null;
   m = await import('./storeSettings');
 });
 afterEach(() => { vi.useRealTimers(); });
+
+describe('the launch price (0072) rides along with the prices', () => {
+  it('while it runs, the schedule carries it', async () => {
+    net.online = true; net.launch = { pct: 40, until: '2099-03-31' };
+    await m.loadStoreSettings();
+    expect(m.getPriceSchedule()?.launch).toEqual({ pct: 40, until: '2099-03-31' });
+  });
+
+  it('a database before 0072 (or a failed read): the prices still load, with no launch price', async () => {
+    net.online = true; net.launch = null;
+    await m.loadStoreSettings();
+    expect(m.getPriceSchedule()).not.toBeNull();
+    expect(m.getPriceSchedule()?.launch).toBeNull();
+  });
+
+  it('a dishonest one (over 90%) is never put on the schedule', async () => {
+    net.online = true; net.launch = { pct: 95, until: '2099-03-31' };
+    await m.loadStoreSettings();
+    expect(m.getPriceSchedule()?.launch).toBeNull();
+  });
+});
 
 describe('a schedule that did not load is tried again', () => {
   it('offline at start: no price (fail-closed), but ready — and it retries with backoff', async () => {
