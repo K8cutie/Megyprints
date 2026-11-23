@@ -20,8 +20,8 @@ import type { PlaceProgress } from '@web/lib/placeProgress';
 import type { CoverType, MaterialType } from '@web/pages/builder/types';
 import { BACKGROUND_NOTE, markOrderSending, startKeeper, startSending, type Keeper } from '../../lib/checkout/backgroundSend';
 import { reportToShop, shopReport } from '../../lib/checkout/reportToShop';
-import type { CheckoutAlbum, PlaceOrderPlan } from '../../lib/checkout/orderPayload';
-import { KEEP_OPEN_NOTE, sendFrame } from '../../lib/checkout/placeRun';
+import { planClipCodes, type CheckoutAlbum, type PlaceOrderPlan } from '../../lib/checkout/orderPayload';
+import { KEEP_OPEN_NOTE, placingNotice, sendFrame } from '../../lib/checkout/placeRun';
 import type { PlacedOrder, SendStep } from '../../lib/checkout/sendOrder';
 import type { SentFiles } from '../../lib/checkout/sentFiles';
 import { colors, space } from '../../lib/theme';
@@ -106,6 +106,7 @@ export function Sending({ plan, album, cover, material, text, placed, sent, book
   return (
     <View style={styles.placing} testID="order-placing">
       <Text style={styles.h1}>{finishing ? 'Finishing your order' : 'Placing your order'}</Text>
+      <Text style={styles.notice} testID="order-placing-notice">{placingNotice(planClipCodes(plan).length, finishing)}</Text>
       <Text style={styles.placingStep} accessibilityLiveRegion="polite">{frame.message}</Text>
       <PlaceProgressBar progress={frame.progress} note={background ? BACKGROUND_NOTE : KEEP_OPEN_NOTE} />
     </View>
@@ -115,5 +116,6 @@ export function Sending({ plan, album, cover, material, text, placed, sent, book
 const styles = StyleSheet.create({
   h1: { fontSize: 28, fontWeight: '800', color: colors.text },
   placing: { flex: 1, justifyContent: 'center', padding: space.lg, gap: space.lg, backgroundColor: colors.background },
+  notice: { fontSize: 17, lineHeight: 24, color: colors.text, marginTop: -space.sm },
   placingStep: { fontSize: 20, fontWeight: '700', color: colors.text, minHeight: 28 },
 });

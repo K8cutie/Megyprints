@@ -216,3 +216,8 @@ export function placeOrderPlan(input: PlanInput): PlaceOrderPlan {
   const files = steps.flatMap((s) => (s.kind === 'upload' ? [{ bucket: s.bucket, path: s.path, contentType: s.contentType }] : []));
   return { steps, orderRow, files };
 }
+
+/** The memory videos a plan uploads, by code (each once). */
+export function planClipCodes(plan: Pick<PlaceOrderPlan, 'steps'>): string[] {
+  return [...new Set(plan.steps.flatMap((s) => (s.kind === 'upload' && s.bucket === 'memory-clips' ? [s.path.split('.')[0]] : [])))];
+}

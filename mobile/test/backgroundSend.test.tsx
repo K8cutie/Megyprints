@@ -224,12 +224,35 @@ jest.mock('expo-keep-awake', () => ({ useKeepAwake: jest.fn() }));
 // eslint-disable-next-line import/first
 import { Sending } from '../src/components/checkout/Sending';
 
-function renderSending(onSent = jest.fn(), onFailed = jest.fn()) {
+/** A plan's upload step for one memory video (only `steps` is read by the screen). */
+const videoStep = (code: string) => ({ kind: 'upload', what: 'A memory video', bucket: 'memory-clips', path: `${code}.<mp4|webm>`, contentType: 'video/*', mode: 'create-only' });
+
+function renderSending(onSent = jest.fn(), onFailed = jest.fn(), steps: unknown[] = [], finishing = false) {
   return render(
-    <Sending plan={{} as never} album={{} as never} cover={'hardcover' as never} material={'matte' as never} text={{} as never} placed={null}
+    <Sending plan={{ steps } as never} finishing={finishing} album={{} as never} cover={'hardcover' as never} material={'matte' as never} text={{} as never} placed={null}
       onOrder={jest.fn()} onSent={onSent} onFailed={onFailed} />,
   );
 }
+
+describe('the notice under "Placing your order" (owner, 2026-11-23)', () => {
+  beforeEach(() => { mockKeeper.native = fakeNative(); mockKeeper.ask = true; mockKeeper.asking = undefined; mockSend.run = () => new Promise(() => {}); });
+  it('names the videos only when the order has some', async () => {
+    await renderSending(jest.fn(), jest.fn(), [videoStep('A1B2C3'), videoStep('D4E5F6'), videoStep('A1B2C3')]);
+    expect(await screen.findByTestId('order-placing-notice')).toHaveTextContent('Please wait while we finish your album and upload your videos.');
+  });
+  it('one video', async () => {
+    await renderSending(jest.fn(), jest.fn(), [videoStep('A1B2C3')]);
+    expect(await screen.findByTestId('order-placing-notice')).toHaveTextContent('Please wait while we finish your album and upload your video.');
+  });
+  it('no videos: the album only', async () => {
+    await renderSending();
+    expect(await screen.findByTestId('order-placing-notice')).toHaveTextContent('Please wait while we finish your album.');
+  });
+  it('Finish sending: the rest of the order', async () => {
+    await renderSending(jest.fn(), jest.fn(), [videoStep('A1B2C3')], true);
+    expect(await screen.findByTestId('order-placing-notice')).toHaveTextContent('Please wait while we send the rest of your order.');
+  });
+});
 
 describe('the Sending screen', () => {
   beforeEach(() => { mockKeeper.native = fakeNative(); mockKeeper.ask = true; mockKeeper.asking = undefined; });
