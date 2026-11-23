@@ -11,7 +11,7 @@ import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Cal
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
 import { resolveRole, type Role } from '../lib/roles';
-import { fetchAllOrders, fetchOrdersCount, ORDERS_PAGE_SIZE, type AdminOrder } from '../lib/adminOrders';
+import { fetchAllOrders, fetchOrdersCount, fetchUnsentOrders, ORDERS_PAGE_SIZE, type AdminOrder } from '../lib/adminOrders';
 import { fetchOwnerBookings } from '../lib/adminBookings';
 import { needsOwner } from '../lib/eventBookings';
 import { supabase } from '../lib/supabase';
@@ -72,6 +72,9 @@ export default function Admin() {
   // …and the ones that also have their cover, "<id>-cover.pdf". Null until
   // the bucket has been read, so no row says "cover missing" by mistake.
   const [coverReadyIds, setCoverReadyIds] = useState<Set<string> | null>(null);
+  // Open orders that didn't finish sending from the customer's phone (0068):
+  // what never arrived, by order id. Empty before 0068 is live.
+  const [unsent, setUnsent] = useState<Map<string, string[]>>(new Map());
 
   // Resolve the signed-in user's role, then land on a sensible default tab.
   useEffect(() => {
@@ -95,6 +98,9 @@ export default function Admin() {
       const [page, total] = await Promise.all([fetchAllOrders(), fetchOrdersCount()]);
       setOrders(page);
       setOrdersTotal(total);
+      // Best-effort, like the files below: a failure shows the orders as before.
+      const open = page.filter((o) => o.status === 'pending_payment' || o.status === 'paid' || o.status === 'in_production').map((o) => o.id);
+      void fetchUnsentOrders(open).then(setUnsent).catch(() => setUnsent(new Map()));
     }
     catch (e) { setOrdersErr(e instanceof Error ? e.message : 'Failed to load orders'); }
     finally { setOrdersLoading(false); }
@@ -208,7 +214,7 @@ export default function Admin() {
         {tab === 'overview' && isOwner && (ordersLoading ? <Spinner /> : <OverviewPanel orders={orders} />)}
         {tab === 'orders' && (ordersLoading ? <Spinner /> : (
           <>
-            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} coverReadyIds={coverReadyIds} />
+            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} coverReadyIds={coverReadyIds} unsent={unsent} />
             {/* Never let the list imply it is showing everything. */}
             {ordersTotal > orders.length && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">

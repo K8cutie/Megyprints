@@ -17,7 +17,7 @@
 
 import { supabase, supabaseConfigured } from './supabase';
 import type { AlbumSizePreset } from '../pages/builder/types';
-import type { PriceSchedule, PricingModel } from './pricing';
+import { parseLaunchPrice, type LaunchPrice, type PriceSchedule, type PricingModel } from './pricing';
 
 let schedule: PriceSchedule | null = null;
 // Album sizes the owner has turned OFF (hidden from the customer size picker).
@@ -68,6 +68,18 @@ if (typeof window !== 'undefined') {
   window.addEventListener('online', () => { if (!schedule) void retryStoreSettings(); });
 }
 
+/** The launch price while one runs (public_launch_price, 0072), or null. It
+ *  only adds a crossed-out regular price, so any failure (a database before
+ *  0072, no connection) is "no launch price" and never blocks the prices. */
+async function loadLaunchPrice(): Promise<LaunchPrice | null> {
+  try {
+    const { data, error } = await supabase.rpc('public_launch_price');
+    return error ? null : parseLaunchPrice(data);
+  } catch {
+    return null;
+  }
+}
+
 let inflight: Promise<void> | null = null;
 /** Load the customer price schedule (on app start, and again until it lands). */
 export function loadStoreSettings(): Promise<void> {
@@ -75,10 +87,10 @@ export function loadStoreSettings(): Promise<void> {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const { data, error } = await supabase.rpc('public_price_schedule');
+      const [{ data, error }, launch] = await Promise.all([supabase.rpc('public_price_schedule'), loadLaunchPrice()]);
       if (error) { console.warn('price schedule load failed:', error.message); return; }
       if (data && typeof data === 'object') {
-        schedule = data as PriceSchedule;
+        schedule = { ...(data as PriceSchedule), launch };
         if (Array.isArray(schedule.disabled_sizes)) {
           disabledSizes = schedule.disabled_sizes as AlbumSizePreset[];
         }
@@ -158,11 +170,47 @@ export async function setHdMemoriesPrice(next: number): Promise<string | null> {
   return null;
 }
 
+/** Owner-only (definer RPC, 0067). Sets the longer-video prices: up to 3
+ *  minutes and up to 5 minutes, once per album. */
+export async function setLongVideoPrices(threeMin: number, fiveMin: number): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_long_video_prices', { p_3min: Math.round(threeMin), p_5min: Math.round(fiveMin) });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only (definer RPC, 0041). Sets the shipping built into every album
  *  price ("Free shipping" at checkout) and reloads the schedule. */
 export async function setShippingAllowance(next: number): Promise<string | null> {
   if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
   const { error } = await supabase.rpc('set_shipping_allowance', { p_amount: Math.round(next) });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
+/** Owner-only (pricing_model is owner-only, 0058). The launch price as set,
+ *  running or not, for the Pricing panel; null when it can't be read (not the
+ *  owner, or a database before 0072). */
+export async function loadOwnerLaunchPrice(): Promise<{ pct: number | null; until: string | null } | null> {
+  if (!supabaseConfigured) return null;
+  try {
+    const { data, error } = await supabase.from('pricing_model').select('launch_pct, launch_until').eq('id', 1).maybeSingle();
+    if (error || !data) return null;
+    const row = data as { launch_pct: number | null; launch_until: string | null };
+    return { pct: row.launch_pct ?? null, until: row.launch_until ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** Owner-only (definer RPC, 0072). Sets the launch price — a whole % off and
+ *  its last day (YYYY-MM-DD) — or ends it with nulls. The SQL refuses more
+ *  than 90% and an end date past 6 months. Reloads the schedule. */
+export async function setLaunchPrice(pct: number | null, until: string | null): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_launch_price', { p_pct: pct, p_until: until });
   if (error) return error.message;
   await loadStoreSettings();
   return null;

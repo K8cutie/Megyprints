@@ -4,17 +4,18 @@
    (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
+import { Loader2, Check, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
+  reapplyHostingTerm, unsentMarkPaidQuestion, unsentNote,
 } from '../../lib/adminOrders';
 import { peso } from '../../lib/eventBookings';
 import { supabase } from '../../lib/supabase';
 import {
-  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
+  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, orderSpine,
 } from '../../lib/pressSheetFiles';
 
-export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null }: {
+export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null, unsent = null }: {
   orders: AdminOrder[];
   onChanged: () => Promise<void>;
   canSeeFinancials: boolean;
@@ -23,6 +24,8 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
   printReadyIds: Set<string>;
   /** Order ids that have their "<id>-cover.pdf"; null while unknown. */
   coverReadyIds?: Set<string> | null;
+  /** Open orders that didn't finish sending (0068): what never arrived, by order id. */
+  unsent?: Map<string, string[]> | null;
 }) {
   if (orders.length === 0) {
     return <p className="text-sm text-light py-16 text-center">No orders yet.</p>;
@@ -34,7 +37,8 @@ export default function OrdersPanel({ orders, onChanged, canSeeFinancials, print
         const files = printFilesOf(o);
         const printReady = printReadyIds.has(files);
         return <OrderRow key={o.id} o={o} onChanged={onChanged} canSeeFinancials={canSeeFinancials} printReady={printReady}
-          coverMissing={printReady && coverReadyIds !== null && !coverReadyIds.has(files) && COVER_STILL_NEEDED.includes(o.status)} />;
+          coverMissing={printReady && coverReadyIds !== null && !coverReadyIds.has(files) && COVER_STILL_NEEDED.includes(o.status)}
+          unsentMissing={unsent?.get(o.id) ?? null} />;
       })}
     </div>
   );
@@ -76,8 +80,10 @@ function PressHowTo() {
   );
 }
 
-function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: {
+function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing, unsentMissing = null }: {
   o: AdminOrder; onChanged: () => Promise<void>; canSeeFinancials: boolean; printReady: boolean; coverMissing?: boolean;
+  /** What never arrived from the customer's phone (0068); null: the order is whole (or unknown). */
+  unsentMissing?: string[] | null;
 }) {
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(o.amount != null ? String(o.amount) : '');
@@ -86,8 +92,8 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
   // What a long download is doing ("Making the JPEG pictures: 3 of 25…").
   const [progress, setProgress] = useState<string | null>(null);
 
-  // The print files, as they are or laid out on the shop's 12.5 × 19 sheet
-  // (pressSheetFiles). None of them has a font.
+  // The print files, laid out on the shop's 12.5 × 19 sheet (pressSheetFiles).
+  // None of them has a font.
   const pressFile = async (make: (progress: (line: string) => void) => Promise<string>) => {
     setSaving(true); setErr(null); setNote(null); setProgress(null);
     try { setNote(await make(setProgress)); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the sheet file.'); }
@@ -102,11 +108,23 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
     setSaving(false);
   };
   const saveFin = (patch: OrderPatch) => run(() => updateOrder(o.id, patch));
-  const markPaid = () => run(() => markOrderPaid(o.id));
+  // An order that didn't finish sending (0068): Mark paid asks first (the
+  // money may be real; the order still can't be printed).
+  const markPaid = () => {
+    if (unsentMissing && !window.confirm(unsentMarkPaidQuestion(o.order_number, unsentMissing))) return Promise.resolve();
+    return run(() => markOrderPaid(o.id));
+  };
   // An owner's "Paid" is Mark paid (memory years included). Fulfillment can't
   // mark paid: their "Paid" stays with set_order_status, which refuses it.
+  // In production on a paid order: the memory term again, for QR videos that
+  // arrived after Mark paid (an order finished late). The database refuses
+  // In production while anything is missing (MP031): its words show here.
   const changeStatus = (status: AdminOrder['status']) =>
-    status === 'paid' && canSeeFinancials ? markPaid() : run(() => setOrderStatus(o.id, status));
+    status === 'paid' && canSeeFinancials ? markPaid() : run(async () => {
+      const e = await setOrderStatus(o.id, status);
+      if (!e && status === 'in_production' && canSeeFinancials && o.payment_status === 'paid' && o.hosting_years) await reapplyHostingTerm(o.id);
+      return e;
+    });
 
   // Commit the manually-typed price. The raw input is free text, so a comma,
   // a peso sign, or a stray letter would make `Number(price)` NaN — which
@@ -149,7 +167,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
             </span>
             {o.copy_of_order_number && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#F1ECFF] text-[#7A5EC9]" data-testid="order-copy-of"
-                title="A guest's copy of an event album: print it from that order's files (Print PDF and Cover PDF here already do).">
+                title="A guest's copy of an event album: print it from that order's files (Print sheets, Cover sheet and Sheets as JPEG here already do).">
                 Copy of {o.copy_of_order_number}
               </span>
             )}
@@ -172,13 +190,20 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
                 Event album · {o.event_booking_number}
               </span>
             )}
-            {!printReady && (
+            {/* 0068: the customer's phone stopped half-way; this says what never arrived. */}
+            {unsentMissing && (
+              <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-unsent"
+                title={unsentNote(unsentMissing)}>
+                <AlertTriangle size={12} /> Didn't finish sending
+              </span>
+            )}
+            {!printReady && !unsentMissing && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1"
                 title="No print-ready PDF is in the fulfillment bucket for this order. Do not print until the customer re-orders from the device that holds the photos.">
                 <AlertTriangle size={12} /> Print file missing
               </span>
             )}
-            {coverMissing && (
+            {coverMissing && !unsentMissing && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#FDE7E7] text-[#C0392B] flex items-center gap-1" data-testid="order-cover-missing"
                 title={o.created_at < COVER_SAVED_WITH_ALBUM_SINCE
                   // my_orders_missing_cover (0051) skips orders that froze no cover design.
@@ -195,6 +220,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
             {[o.album_size, o.material, o.cover].filter(Boolean).join(' · ') || '—'} · {o.page_count} pages · <span data-testid="order-spine">{orderSpine(o)}</span>{o.hosting_years ? ` · memories ${o.hosting_years} yrs` : ''}{o.hd_memories ? ' · HD' : ''}
           </div>
           {o.ship_address && <div className="text-xs text-[#B9B9B9] mt-0.5 max-w-md">{o.ship_address}</div>}
+          {unsentMissing && <div className="text-xs text-[#C0392B] mt-1 max-w-md" data-testid="order-unsent-note">{unsentNote(unsentMissing)}</div>}
           {(o.payment_reference || o.payment_submitted_at) && (
             <div className="text-xs text-medium mt-1">
               Transfer{o.payment_reference ? <> ref <span className="font-mono text-dark">{o.payment_reference}</span></> : ' sent'}
@@ -257,18 +283,9 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing }: 
               <FileImage size={13} /> Sheets as JPEG
             </button>
           )}
-          {paid && (
-            <button onClick={() => pressFile(() => downloadPrintFile(o))} disabled={saving} data-testid="order-print-pdf"
-              className="h-8 px-3 rounded-lg bg-blush text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
-              <Download size={13} /> Print PDF
-            </button>
-          )}
-          {paid && (
-            <button onClick={() => pressFile(() => downloadCoverFile(o))} disabled={saving} data-testid="order-cover-pdf"
-              className="h-8 px-3 rounded-lg bg-[#F1ECFF] text-xs font-medium text-[#7A5EC9] flex items-center gap-1 disabled:opacity-50">
-              <Download size={13} /> Cover PDF
-            </button>
-          )}
+          {/* No loose-page downloads ("Print PDF" / "Cover PDF", removed 2026-11-23):
+              the press takes only the 12.5 × 19 sheet, and a file of loose
+              album-size pages beside these got opened as the printout. */}
           <select value={o.status} onChange={(e) => changeStatus(e.target.value as AdminOrder['status'])} disabled={saving}
             className="h-8 px-2 rounded-lg border border-line text-sm outline-none focus:border-peach bg-white">
             {ORDER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}

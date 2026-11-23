@@ -59,6 +59,10 @@ export interface PricingModel {
   /** One-time HD (1080p) memory upgrade, flat (owner, 2026-09-10; migration
    *  0032). Standard 720p is included; HD is a value tier, not cost recovery. */
   hd_memories_price: number;
+  /** Longer videos, one time per album (owner, 2026-11-20; migration 0067).
+   *  Absent before 0067. */
+  video_3min_price?: number;
+  video_5min_price?: number;
   sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
   /** Shipping built into every album price (owner, 2026-10-08; migration
    *  0041), so checkout can say "Free shipping". Flat, added after the markup
@@ -112,11 +116,17 @@ export interface PriceSchedule {
   hosting_tiers?: HostingTier[];
   /** HD memory upgrade price. Absent on a pre-0032 schedule → free/no offer. */
   hd_memories_price?: number;
+  /** Longer videos, up to 3 or 5 minutes (0067). Absent → videos stay up to
+   *  2 minutes. Read through longVideoPricesOf(). */
+  long_video_prices?: { '3': number; '5': number } | null;
   /** What the free shipping is worth (the allowance already inside the rates),
    *  for the "Free shipping (₱X value)" line. Absent before 0041 → no value shown. */
   free_shipping_value?: number;
   /** The crossed-out "was" prices, while they run (0041). */
   compare_at?: CompareAt | null;
+  /** The launch price (0072), put here by the loaders from
+   *  public_launch_price(); absent or null = none. Read it through launchOf(). */
+  launch?: LaunchPrice | null;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
   /** Megy Mini while it is on sale (0062); null or absent otherwise. Read it
@@ -197,6 +207,68 @@ export function hdMemoriesCharge(src: { hd_memories_price?: unknown }, hd: boole
   return hd && qrMemories > 0 ? hdMemoriesPriceOf(src) : 0;
 }
 
+/* ── LONGER VIDEOS (owner, 2026-11-20; migration 0067) ─────────────────────
+   Memory videos are up to 2 minutes. An album can have longer ones for a
+   one-time price set by its LONGEST video: up to 3 minutes or up to 5
+   minutes (720p; HD is its own upgrade on top). Delete the long videos and
+   the charge goes. order_quote() charges the same (orderQuote.spec). */
+export type VideoMinutes = 2 | 3 | 5;
+/** The length every album includes. */
+export const BASE_VIDEO_SECONDS = 120;
+/** The longest a video can be, with the 5-minute upgrade. */
+export const LONGEST_VIDEO_SECONDS = 300;
+
+/** The longer-video prices, or null when the price list doesn't sell them
+ *  (a pre-0067 schedule: videos stay up to 2 minutes). */
+export function longVideoPricesOf(src: { long_video_prices?: unknown }): { 3: number; 5: number } | null {
+  const p = src.long_video_prices;
+  if (!p || typeof p !== 'object') return null;
+  const three = Number((p as Record<string, unknown>)['3']);
+  const five = Number((p as Record<string, unknown>)['5']);
+  if (!Number.isFinite(three) || !Number.isFinite(five) || three < 0 || five < 0) return null;
+  return { 3: Math.round(three), 5: Math.round(five) };
+}
+
+/** The tier one video needs: 2 (included), 3 or 5 minutes, or null when it is
+ *  longer than 5 minutes. A length we couldn't read counts as included. */
+export function videoMinutesFor(seconds: number | null | undefined): VideoMinutes | null {
+  if (seconds == null || !Number.isFinite(seconds)) return 2;
+  if (seconds <= BASE_VIDEO_SECONDS + 0.5) return 2;
+  if (seconds <= 180.5) return 3;
+  if (seconds <= LONGEST_VIDEO_SECONDS + 0.5) return 5;
+  return null;
+}
+
+/** The album's tier: its longest video's (a video too long for any tier
+ *  counts as 5; the picker never lets one in). */
+export function albumVideoMinutes(lengths: readonly (number | null | undefined)[]): VideoMinutes {
+  let tier: VideoMinutes = 2;
+  for (const s of lengths) {
+    const t = videoMinutesFor(s) ?? 5;
+    if (t > tier) tier = t;
+  }
+  return tier;
+}
+
+/** The longest video the picker takes: 5 minutes when the price list sells
+ *  longer videos, else 2. */
+export function maxVideoSecondsOf(src: { long_video_prices?: unknown }): number {
+  return longVideoPricesOf(src) ? LONGEST_VIDEO_SECONDS : BASE_VIDEO_SECONDS;
+}
+
+/** Pesos owed for longer videos on this album (order_quote's long_fee):
+ *  only when the album carries video memories. */
+export function longVideoCharge(src: { long_video_prices?: unknown }, minutes: number | null | undefined, qrMemories: number): number {
+  if (qrMemories <= 0 || (minutes !== 3 && minutes !== 5)) return 0;
+  const prices = longVideoPricesOf(src);
+  return prices ? Math.max(0, prices[minutes]) : 0;
+}
+
+/** The bill's line for it. */
+export function longVideoLine(minutes: 3 | 5): string {
+  return `Longer videos · up to ${minutes} minutes, one time`;
+}
+
 /** The flat reserve, tolerant of a pre-0029 schedule (no field → 0). */
 export function hostingReserveOf(schedule: Pick<PriceSchedule, 'hosting_reserve'>): number {
   const r = Number(schedule.hosting_reserve);
@@ -241,6 +313,91 @@ export function compareAtPriceOf(
   const sheets = sheetsFor(schedule.sizes[size].pps, schedule.min_pages, pages);
   const was = Math.round(sheets * sheetRate + rate);
   return was > priceOf(schedule, size, binding, pages) ? was : null;
+}
+
+/* ── LAUNCH PRICE (owner, 2026-11-24: "Yes, 40% to Mar 31") ──────────────────
+   Megy Prints is a premium product. Today's album prices are its LAUNCH
+   price: N% off a regular price we really start charging the day after
+   `until`. The crossed-out number is that regular price, so the "% off" is
+   true for the album it sits on. Honest only while it ends: the database
+   (0072 set_launch_price) refuses an end date more than 6 months out, and
+   public_launch_price() stops sending it after `until` (Manila date).
+   Albums only: the Megy Mini keeps its own price with no % off, and the
+   add-ons (videos, HD, hosting years) are never discounted. While a launch
+   price runs it replaces the old "was" price (0041). */
+
+/** What public_launch_price() sends while a launch price runs. */
+export interface LaunchPrice {
+  /** Whole percent off the regular price, 1–90. */
+  pct: number;
+  /** The last day (Asia/Manila, YYYY-MM-DD) it runs. */
+  until: string;
+}
+
+/** A launch price as the database sent it, or null when it isn't one that
+ *  can be shown honestly (a whole % from 1 to 90 and a real end date). */
+export function parseLaunchPrice(data: unknown): LaunchPrice | null {
+  if (!data || typeof data !== 'object') return null;
+  const { pct, until } = data as { pct?: unknown; until?: unknown };
+  const p = Number(pct);
+  if (!Number.isInteger(p) || p < 1 || p > 90) return null;
+  if (typeof until !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(until)) return null;
+  return { pct: p, until };
+}
+
+/** The launch price running on `today` (Manila), or null. */
+export function launchOf(
+  schedule: Pick<PriceSchedule, 'launch'> | null | undefined,
+  today: string = manilaToday(),
+): LaunchPrice | null {
+  const l = parseLaunchPrice(schedule?.launch);
+  return l && today <= l.until ? l : null;
+}
+
+/** The regular price of the print (album + extra pages) while a launch price
+ *  runs: today's price is `pct`% off it, so regular = today ÷ (1 − pct/100).
+ *  Null when none runs, or the size isn't an album on the price list (the
+ *  Megy Mini never is). */
+export function launchRegularOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  const l = launchOf(schedule, today);
+  if (!l || !schedule.sizes?.[size]) return null;
+  const now = priceOf(schedule, size, binding, pages);
+  if (!Number.isFinite(now) || now <= 0) return null;
+  return Math.round(now / (1 - l.pct / 100));
+}
+
+/** The crossed-out price of the print: the launch price's regular price while
+ *  it runs, else the old "was" price (0041), else null. */
+export function crossedOutPrintOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  return launchRegularOf(schedule, size, binding, pages, today)
+    ?? compareAtPriceOf(schedule, size, binding, pages, today);
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "March 31, 2027" from "2027-03-31" (written out: phones differ in the
+ *  date words they carry). */
+export function longDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return MONTHS[m - 1] ? `${MONTHS[m - 1]} ${d}, ${y}` : ymd;
+}
+
+/** The line under the total, the same in the app and on the website. */
+export function launchLine(l: LaunchPrice): string {
+  return `Launch price: ${l.pct}% off the album until ${longDate(l.until)}`;
 }
 
 /** What the pages past the included minimum add to the price. Pages print
@@ -329,6 +486,8 @@ export function priceBreakdown(
   hostingYears: number | null = null,
   /** HD (1080p) memories chosen for this album. Omitted = standard 720p. */
   hdMemories = false,
+  /** The album's longest-video tier (albumVideoMinutes). Omitted = 2. */
+  videoMinutes: number | null = null,
 ): PriceBreakdown {
   const bindingLabel = binding === 'hard' ? 'Hardbound' : 'Softcover';
   const sizeLabel = SIZE_LABELS[size];
@@ -337,7 +496,8 @@ export function priceBreakdown(
   const qrCharge = qrMemoryCharge(qrMemories);
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
-  const total = printTotal + qrCharge + termCharge + hdCharge;
+  const longCharge = longVideoCharge(schedule, videoMinutes, qrMemories);
+  const total = printTotal + qrCharge + termCharge + hdCharge + longCharge;
 
   const extra = Math.max(0, pages - minPages);
   const items: PriceLine[] = [];
@@ -378,6 +538,9 @@ export function priceBreakdown(
   if (hdCharge > 0) {
     items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
   }
+  if (longCharge > 0) {
+    items.push({ label: longVideoLine(videoMinutes as 3 | 5), amount: longCharge });
+  }
 
   return { items, total };
 }
@@ -392,11 +555,13 @@ export function miniPriceBreakdown(
   qrMemories = 0,
   hostingYears: number | null = null,
   hdMemories = false,
+  videoMinutes: number | null = null,
 ): PriceBreakdown & { shipping: number } {
   const free = Math.max(0, Math.floor(offer.free_qr));
   const qrCharge = qrMemoryCharge(qrMemories, free);
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
+  const longCharge = longVideoCharge(schedule, videoMinutes, qrMemories);
   const items: PriceLine[] = [
     {
       label: `Megy Mini — A5 · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
@@ -417,7 +582,10 @@ export function miniPriceBreakdown(
   if (hdCharge > 0) {
     items.push({ label: 'HD memories · 1080p, one time', amount: hdCharge });
   }
-  return { items, total: offer.price + offer.shipping_fee + qrCharge + termCharge + hdCharge, shipping: offer.shipping_fee };
+  if (longCharge > 0) {
+    items.push({ label: longVideoLine(videoMinutes as 3 | 5), amount: longCharge });
+  }
+  return { items, total: offer.price + offer.shipping_fee + qrCharge + termCharge + hdCharge + longCharge, shipping: offer.shipping_fee };
 }
 
 // ── Owner side (model supplied by owner_pricing_model()) ────────────────────
