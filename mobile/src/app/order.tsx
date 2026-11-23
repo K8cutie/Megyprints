@@ -64,6 +64,7 @@ import { forgetCheckoutOnPhone, keepCheckoutForm, keptCheckoutForm } from '../li
 import { sentFiles, type SentFiles } from '../lib/checkout/sentFiles';
 import { fixtureCheckoutAlbum } from '../lib/checkout/fixtureAlbum';
 import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart';
+import { earlyPagesKey, stopEarlyPages } from '../lib/checkout/earlyPages';
 import { useOptionalBuilder } from '../builder/BuilderProvider';
 import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
 import { TesterCodeGoneError } from '../lib/checkout/testerCode';
@@ -94,6 +95,9 @@ type Step = 'form' | 'placing' | 'placed' | 'payment' | 'existing' | 'done';
 
 const DEFAULT_MATERIAL: MaterialType = 'matte';
 const DEFAULT_COVER: CoverType = 'softcover';
+
+/** Checkout opens and draws first; then the print pages start (earlyPages.ts). */
+const EARLY_PAGES_AFTER_MS = 1500;
 
 export default function OrderScreen() {
   const { session } = useAuth();
@@ -234,6 +238,25 @@ export default function OrderScreen() {
     return () => { alive = false; };
   }, [live, userId, step, album.albumId, finishParam, unsentRead]);
   const finishMode = live && !!unsent && !newInstead;
+
+  // The print pages, made while the customer fills in the form (owner's
+  // 5-year-old phone: 78 seconds of Place order was making 16 pages;
+  // lib/checkout/earlyPages.ts). Again for another album or cover type;
+  // stopped when checkout closes. Loaded only on a phone with a real album
+  // (phoneSend needs Skia); anything wrong and Place order makes them as before.
+  const earlyKey = useMemo(() => (live && album.pages.length ? earlyPagesKey(album, cover) : null), [live, album, cover]);
+  useEffect(() => {
+    if (!earlyKey || !ownText || step !== 'form' || finishMode || finishParam) return;
+    const t = setTimeout(() => {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const send = require('../lib/checkout/phoneSend') as Partial<typeof import('../lib/checkout/phoneSend')>;
+        send.startEarlyPagesOnPhone?.({ album, cover, material, text: ownText });
+      } catch { /* made at Place order */ }
+    }, EARLY_PAGES_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [earlyKey, ownText, step, finishMode, finishParam]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => stopEarlyPages(), []);
 
   // Back while the order is being sent: it keeps going (Sending.tsx), so the
   // question says so and offers to stay (MP-2026-9M5572U).
