@@ -304,3 +304,19 @@ export function familiesOn(page: { textElements?: { fontFamily?: string }[]; slo
   for (const s of page.slotTexts ?? []) if (s?.fontFamily) out.add(s.fontFamily);
   return [...out];
 }
+
+/** Place order and Finish sending (lib/checkout/phoneSend.ts): every font the
+ *  album's pages and cover use, got before its print files are made. The
+ *  editor gets them as the album is opened (text/index.ts PageFonts), but an
+ *  order can start before that is done: an album made on the website, "Order
+ *  this album again" on a new phone, a slow connection. A font not here yet
+ *  then stopped the order with "drawn in the phone's own font" (2026-11-23).
+ *  Never throws; 'offline' first when some fonts failed either way. */
+export async function ensureAlbumFonts(
+  store: Pick<FontStore, 'ensure'>,
+  pages: readonly (Parameters<typeof familiesOn>[0] | null | undefined)[],
+): Promise<EnsureResult> {
+  const families = [...new Set(pages.flatMap((p) => (p ? familiesOn(p) : [])))];
+  const results = await Promise.all(families.map((f) => store.ensure(f).catch((): EnsureResult => ({ ok: false, reason: 'failed' }))));
+  return results.find((r) => !r.ok && r.reason === 'offline') ?? results.find((r) => !r.ok) ?? { ok: true };
+}
