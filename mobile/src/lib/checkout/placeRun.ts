@@ -90,6 +90,16 @@ export function sendFrame(prev: PlaceProgress | null, s: SendStep): { progress: 
 /** The note under the bar, as on the website (PlaceOrderProgress). */
 export const KEEP_OPEN_NOTE = 'Keep this screen open. This can take a few minutes.';
 
+/** Under "Placing your order": what the wait is for (owner, 2026-11-23:
+ *  "put a notice here saying something like please, finalizing the album
+ *  and uploading the videos"). The videos are named only when the order has
+ *  some; Finish sending says it sends the rest (some files are in already). */
+export function placingNotice(videos: number, finishing = false): string {
+  if (finishing) return 'Please wait while we send the rest of your order.';
+  if (videos > 0) return `Please wait while we finish your album and upload your ${videos === 1 ? 'video' : 'videos'}.`;
+  return 'Please wait while we finish your album.';
+}
+
 /** The bar's width, 0–100 (PlaceOrderProgress). */
 export function barPercent(p: PlaceProgress): number {
   return Math.round(Math.min(1, Math.max(0, p.at)) * 100);

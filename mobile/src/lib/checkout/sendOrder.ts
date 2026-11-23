@@ -37,7 +37,7 @@
    screen's choice (order.tsx: off unless switched on).
    ══════════════════════════════════════════════════════════════════════════ */
 import { isUnpaidLimitError, UnpaidLimitError } from '@web/lib/orderExpiry';
-import { ORDER_ID, type PlaceOrderPlan, type PlanStep } from './orderPayload';
+import { ORDER_ID, planClipCodes, type PlaceOrderPlan, type PlanStep } from './orderPayload';
 import type { SentFiles } from './sentFiles';
 import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
@@ -153,7 +153,7 @@ const realWait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  *  order and whether it is a tester order (marked paid: no payment step). */
 export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: PlacedOrder | null = null): Promise<{ order: PlacedOrder; paidByTester: boolean; paidByBooking?: boolean }> {
   const { db, upload, onStep = () => {}, wait = realWait, clips } = deps;
-  const clipCodes = [...new Set(plan.steps.flatMap((s) => (s.kind === 'upload' && s.bucket === 'memory-clips' ? [s.path.split('.')[0]] : [])))];
+  const clipCodes = planClipCodes(plan);
   if (clipCodes.length && !clips) throw new MemoryVideosNotInAppError();
   const sendVideos = async () => {
     onStep({ step: 'videos', done: 0, total: clipCodes.length, phase: 'upload' });
