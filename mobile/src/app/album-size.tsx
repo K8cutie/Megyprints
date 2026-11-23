@@ -28,8 +28,10 @@ import { offerableSizes, pagesHoldPhotos, resizeMadeAlbum, saveStep, SIZE_LINE, 
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
-import type { PriceSchedule } from '@web/lib/pricing';
-import { startsAt, startsAtLine } from '../lib/checkout/startsAt';
+import { launchLine, launchOf, type PriceSchedule } from '@web/lib/pricing';
+import { startsAt, startsAtLine, startsAtRegular } from '../lib/checkout/startsAt';
+import { peso } from '../lib/checkout/price';
+import { loadLaunchPrice } from '../lib/checkout/priceSchedule';
 
 /** From the price list (public_price_schedule): the sizes the owner switched
  *  off, or none; the Megy Mini while it is on sale (0062), or null; and the
@@ -37,8 +39,10 @@ import { startsAt, startsAtLine } from '../lib/checkout/startsAt';
 async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null; schedule: PriceSchedule | null }> {
   if (!supabaseConfigured) return { off: [], mini: null, schedule: null };
   try {
-    const { data, error } = await supabase.rpc('public_price_schedule');
-    const schedule = !error && data && typeof data === 'object' ? (data as { disabled_sizes?: unknown; mini?: unknown }) : null;
+    const [{ data, error }, launch] = await Promise.all([supabase.rpc('public_price_schedule'), loadLaunchPrice(supabase)]);
+    const schedule = !error && data && typeof data === 'object'
+      ? ({ ...(data as object), launch } as { disabled_sizes?: unknown; mini?: unknown })
+      : null;
     const list = schedule?.disabled_sizes;
     return {
       off: Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [],
@@ -60,6 +64,8 @@ export default function AlbumSize() {
   const [prices, setPrices] = useState<PriceSchedule | null>(null);
   const [resizing, setResizing] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  // The launch price (owner, 2026-11-24) while it runs: one line on top.
+  const launch = launchOf(prices);
   // The builder as of now, for answers that arrive later.
   const now = useRef(builder);
   now.current = builder;
@@ -115,11 +121,13 @@ export default function AlbumSize() {
       <ScrollView contentContainerStyle={styles.body}>
         <Text style={styles.title}>Pick the size for your album</Text>
         <Text style={styles.lead}>Choose the size that fits your photos best. You can always change this later.</Text>
+        {launch && <Text style={styles.launch} testID="size-launch">{launchLine(launch)}</Text>}
         {resizing && <Text style={styles.said} testID="size-resizing">Laying out every page again for the new size…</Text>}
         {!resizing && said && <Text style={styles.said} testID="size-said">{said}</Text>}
         {sizes.map((s) => {
           const on = s.preset === builder.albumSize;
           const from = startsAt(prices, s.preset);
+          const regular = startsAtRegular(prices, s.preset);
           return (
             <Pressable key={s.preset} accessibilityRole="radio" accessibilityState={{ checked: on, busy: resizing === s.preset }} onPress={() => pick(s)}
               style={[styles.card, on && styles.cardOn]} testID={`size-${s.preset}`}>
@@ -129,6 +137,9 @@ export default function AlbumSize() {
                   <Text style={styles.name}>{s.name}</Text>
                   <Text style={styles.perPage}>{sizePhotosPerPage(s.preset)}</Text>
                   {from !== null && <Text style={styles.price} testID={`size-price-${s.preset}`}>{startsAtLine(from)}</Text>}
+                  {from !== null && regular !== null && (
+                    <Text style={styles.regular} testID={`size-regular-${s.preset}`}>Regular price <Text style={styles.regularWas}>{peso(regular)}</Text></Text>
+                  )}
                 </View>
                 {resizing === s.preset ? <ActivityIndicator color={colors.accent} />
                   : on && <Text style={styles.tick} accessibilityLabel="Picked">✓</Text>}
@@ -191,6 +202,9 @@ const styles = StyleSheet.create({
   name: { fontSize: 18, fontWeight: '700', color: colors.text },
   perPage: { fontSize: 14, color: colors.muted },
   price: { fontSize: 15, fontWeight: '700', color: colors.accent, marginTop: 2 },
+  regular: { fontSize: 13, color: colors.muted, marginTop: 1 },
+  regularWas: { textDecorationLine: 'line-through' },
+  launch: { fontSize: 15, lineHeight: 21, fontWeight: '700', color: colors.accent, backgroundColor: '#FFF5F0', borderRadius: 10, padding: space.sm },
   tick: { fontSize: 22, fontWeight: '800', color: colors.accent },
   line: { fontSize: 15, color: colors.text },
   said: { fontSize: 15, lineHeight: 21, color: colors.text, backgroundColor: '#FFF5F0', borderRadius: 10, padding: space.sm },

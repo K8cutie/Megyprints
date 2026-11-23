@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
-import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, QR_PACK_SENTENCE } from '@web/lib/pricing';
+import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, launchLine, QR_PACK_SENTENCE } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
@@ -757,7 +757,9 @@ export default function OrderScreen() {
         {coveredByBooking && <Text style={styles.savings} testID="order-covered">{EV.COVERED_LINE}</Text>}
         {!!eventLink && !coveredByBooking && <Text style={styles.small} testID="order-covered-later">{EV.COVERED_LATER}</Text>}
         {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && (
-          <Text style={styles.savings} testID="order-savings">New lower price: you save {peso(price.wasTotal - price.total)}</Text>
+          <Text style={styles.savings} testID="order-savings">
+            {price.launch ? launchLine(price.launch) : `New lower price: you save ${peso(price.wasTotal - price.total)}`}
+          </Text>
         )}
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
