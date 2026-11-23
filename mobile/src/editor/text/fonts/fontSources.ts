@@ -27,9 +27,10 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import { FONTS, fontFace } from '@web/pages/builder/fontCatalog';
 import { BUNDLED_FONTS } from '../../../render/fontTable';
+import { WEBSITE_STYLES, type StyleKey } from '../../../render/websiteFontStyles';
 
 /** A style: weight 400 or 700, upright or italic ('i'). */
-export type StyleKey = '400' | '700' | '400i' | '700i';
+export type { StyleKey };
 export const STYLE_KEYS: readonly StyleKey[] = ['400', '700', '400i', '700i'];
 
 export const styleOf = (bold: boolean | undefined, italic: boolean | undefined): StyleKey =>
@@ -37,83 +38,8 @@ export const styleOf = (bold: boolean | undefined, italic: boolean | undefined):
 export const weightOf = (s: StyleKey): 400 | 700 => (s.startsWith('7') ? 700 : 400);
 export const isItalic = (s: StyleKey): boolean => s.endsWith('i');
 
-/** The styles the website loads for each caption font (by face), from
- *  index.html and src/index.css. Georgia is not loaded: it is not a web font. */
-export const WEBSITE_STYLES: Readonly<Record<string, readonly StyleKey[]>> = {
-  'Playfair Display': ['400', '700', '400i', '700i'],
-  'Lora': ['400', '700', '400i', '700i'],
-  'Merriweather': ['400', '700', '400i', '700i'],
-  'Cormorant Garamond': ['400', '700', '400i', '700i'],
-  'Libre Baskerville': ['400', '700', '400i', '700i'],
-  'Cinzel': ['400', '700'],
-  'Yeseva One': ['400'],
-  'Crimson Text': ['400', '700', '400i', '700i'],
-  'DM Serif Display': ['400', '700'],
-  'Bodoni Moda': ['400', '700'],
-  'Prata': ['400', '700'],
-  'Marcellus': ['400', '700'],
-  'Italiana': ['400', '700'],
-  'Gloock': ['400', '700'],
-  'Fraunces': ['400', '700'],
-  'Dancing Script': ['400', '700'],
-  'Great Vibes': ['400'],
-  'Sacramento': ['400'],
-  'Parisienne': ['400'],
-  'Pinyon Script': ['400'],
-  'Satisfy': ['400'],
-  'Allura': ['400', '700'],
-  'Alex Brush': ['400', '700'],
-  'Tangerine': ['400', '700'],
-  'Italianno': ['400', '700'],
-  'Mrs Saint Delafield': ['400', '700'],
-  'Birthstone': ['400', '700'],
-  'WindSong': ['400', '700'],
-  'Caveat': ['400', '700'],
-  'Amatic SC': ['400', '700'],
-  'Shadows Into Light': ['400', '700'],
-  'Indie Flower': ['400', '700'],
-  'Patrick Hand': ['400', '700'],
-  'Kalam': ['400', '700'],
-  'Homemade Apple': ['400', '700'],
-  'Nothing You Could Do': ['400', '700'],
-  'DM Sans': ['400', '700', '400i', '700i'],
-  'Montserrat': ['400', '700', '400i', '700i'],
-  'Poppins': ['400', '700', '400i', '700i'],
-  'Raleway': ['400', '700', '400i', '700i'],
-  'Nunito': ['400', '700', '400i', '700i'],
-  'Quicksand': ['400', '700'],
-  'Work Sans': ['400', '700', '400i', '700i'],
-  'Inter': ['400', '700'],
-  'Open Sans': ['400', '700', '400i', '700i'],
-  'Lato': ['400', '700', '400i', '700i'],
-  'Source Sans 3': ['400', '700', '400i', '700i'],
-  'Outfit': ['400', '700'],
-  'Bricolage Grotesque': ['400', '700'],
-  'Josefin Sans': ['400', '700'],
-  'Jost': ['400', '700'],
-  'Manrope': ['400', '700'],
-  'Urbanist': ['400', '700'],
-  'Fredoka': ['400', '700'],
-  'Pacifico': ['400'],
-  'Lobster': ['400'],
-  'Shrikhand': ['400'],
-  'Righteous': ['400'],
-  'Baloo 2': ['400', '700'],
-  'Chewy': ['400', '700'],
-  'Bubblegum Sans': ['400', '700'],
-  'Luckiest Guy': ['400', '700'],
-  'Comfortaa': ['400', '700'],
-  'Sniglet': ['400', '700'],
-  'Bebas Neue': ['400'],
-  'Abril Fatface': ['400'],
-  'Anton': ['400', '700'],
-  'Oswald': ['400', '700'],
-  'Alfa Slab One': ['400', '700'],
-  'Archivo Black': ['400', '700'],
-  'Special Elite': ['400', '700'],
-  'Courier Prime': ['400', '700'],
-  'Cutive Mono': ['400', '700'],
-};
+/** The styles the website loads for each caption font: render/websiteFontStyles.ts. */
+export { WEBSITE_STYLES };
 
 /** Not on Google Fonts and not in the app: the phone's own font. Georgia,
  *  a Microsoft font, is in the app as Gelasio (render/fontTable.ts), which

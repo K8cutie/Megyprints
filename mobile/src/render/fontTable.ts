@@ -10,8 +10,10 @@
    900; index.html: Cinzel 400 and 700, the cover's face: a new cover title
    and the reserved back's Megy Prints lockup). Two exceptions: Dancing
    Script and Cinzel have no italic anywhere (Google has none, so the
-   browser slants the upright itself); a page in either italic is listed in
-   PagePlan.notDrawn, like a missing font.
+   browser slants the upright itself). Since 2026-11-23 a style the website
+   has no file for either (render/websiteFontStyles.ts) is faked the same
+   way on both and is NOT listed as not drawn: the print is what the
+   Preview shows (fontNotDrawn).
 
    A page in a font that is not here draws in the phone's own font for that
    family list (its generic serif / sans-serif included, as Chrome on
@@ -25,6 +27,8 @@
    words added on the phone was "drawn in the phone's own font", and the
    print file refused it (owner's phone test, 2026-11-02).
    ══════════════════════════════════════════════════════════════════════════ */
+
+import { WEBSITE_STYLES, type StyleKey } from './websiteFontStyles';
 
 export interface BundledFont {
   /** The family name a page stores, without quotes: 'Playfair Display'. */
@@ -176,13 +180,36 @@ export function paragraphFamilies(family: string | undefined): string[] {
   return all.length ? all : ['serif'];
 }
 
+/** The website loads no file for this face in this style (Shrikhand has no
+ *  bold, Dancing Script no italic anywhere): the browser fakes it there,
+ *  exactly as Skia does here. */
+export function websiteFakesStyle(ask: FontAsk): boolean {
+  const face = familyFaces(ask.family)[0];
+  if (!face) return false;
+  const key = `${ask.bold ? '700' : '400'}${ask.italic ? 'i' : ''}`;
+  const styles = websiteStylesOf(face);
+  return !!styles && !styles.includes(key as StyleKey);
+}
+
+const WEBSITE_BY_FACE = new Map<string, readonly StyleKey[]>(Object.entries(WEBSITE_STYLES).map(([face, styles]) => [face.toLowerCase(), styles]));
+const websiteStylesOf = (face: string) => WEBSITE_BY_FACE.get(face.toLowerCase()) ?? null;
+
 /** How a page names a text's font that is not drawn the website's way, or
  *  null when it is: 'font Georgia, serif (drawn in the phone's own font)',
- *  'font "Dancing Script", cursive italic (no italic file: slanted by the app)'. */
+ *  'font "Lora", serif bold (no bold file: faked by the app)' while Lora's
+ *  bold is still downloading.
+ *
+ *  A style the WEBSITE has no file for either is drawn the website's way:
+ *  both fake it (MP order 2026-11-23: a Megy Mini's cover title in Shrikhand
+ *  bold could never be ordered, because Shrikhand has no bold anywhere and
+ *  the app refused every page it had to thicken; 12 of the 74 fonts have
+ *  only one weight). The Preview shows that same thickened bold, so the
+ *  print is what the customer saw. */
 export function fontNotDrawn(ask: FontAsk): string | null {
   if (hasExactFont(ask)) return null;
   const family = String(ask.family ?? 'serif');
   if (!ownFaceDrawn(ask.family)) return `font ${family} (drawn in the phone's own font)`;
+  if (websiteFakesStyle(ask)) return null;
   const style = [ask.bold ? 'bold' : '', ask.italic ? 'italic' : ''].filter(Boolean).join(' ');
   return `font ${family} ${style} (no ${style} file: faked by the app)`;
 }
