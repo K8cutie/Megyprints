@@ -152,9 +152,9 @@ describe('only photos that fit a full page — never a cut head', () => {
   });
 
   // The book's own pages: 40 for an album, 16 for a Megy Mini (lib/megyMini bookPagesFor).
-  it('the builder asks for faces for half the pages of the book on Surprise (half a 40-page album)', () => {
+  it('the builder asks for faces for half the pages of the book on Surprise (half a 40-page album, or of a Mini of 16 or 24 pages)', () => {
     const src = readFileSync(resolve(__dirname, 'useBuilderState.ts'), 'utf8');
-    expect(src).toMatch(/memoryFaceCandidates\(pool, size, undefined,\s*photosPerPage == null \? Math\.ceil\(bookPagesFor\(size\) \* FULL_PAGE_SHARE\) : undefined\)/);
+    expect(src).toMatch(/memoryFaceCandidates\(pool, size, undefined,\s*photosPerPage == null \? Math\.ceil\(bookPagesFor\(size, miniNow\) \* FULL_PAGE_SHARE\) : undefined\)/);
   });
 });
 

@@ -248,7 +248,7 @@ export default function OrderScreen() {
   const pageCount = album.pages.length;
   const qrCount = countQrMemories(album.pages);
   const photosIn = albumPhotoCount(album.pages);
-  const tooFew = photosShortBy(photosIn, albumSize) > 0;
+  const tooFew = photosShortBy(photosIn, albumSize, pageCount) > 0;
   // MEGY MINI (lib/megyMini): its own cover (staples), its own price + shipping.
   const mini = isMiniSize(albumSize);
 
@@ -805,7 +805,7 @@ export default function OrderScreen() {
       </Section>
 
       {tooFew ? (
-        <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn, albumSize)}</Text></View>
+        <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn, albumSize, pageCount)}</Text></View>
       ) : asking ? null : (
         <>
           <Button

@@ -24,7 +24,7 @@ import {
   type PriceSchedule,
 } from '@web/lib/pricing';
 import type { AlbumSizePreset, CoverType } from '@web/pages/builder/types';
-import { isMiniSize, miniOfferOf } from '@web/lib/megyMini';
+import { isMiniSize, miniOfferFor, miniOfferOf } from '@web/lib/megyMini';
 import { checkoutPayTotal, type AffiliateCode } from '@web/lib/orderCodes';
 import type { TesterCode } from './testerCode';
 
@@ -86,7 +86,8 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
   if (isMiniSize(input.albumSize)) {
     // MEGY MINI (0062): a set price + shipping on top; never a "was" price.
-    const offer = schedule ? miniOfferOf(schedule) : null;
+    // Its price is its page count's: 16 or 24 pages (0070).
+    const offer = schedule ? miniOfferFor(miniOfferOf(schedule), input.pageCount) : null;
     const breakdown = schedule && offer
       ? miniPriceBreakdown(schedule, offer, input.qrCount, effectiveYears, input.hdMemories, input.videoMinutes ?? null)
       : { items: [], total: 0 };

@@ -27,14 +27,14 @@ import { Image } from 'expo-image';
 import { ALBUM_SIZES, type AlbumPage, type PageTemplate } from '@web/pages/builder/types';
 import { relayPageOnTemplate } from '@web/pages/builder/useBuilderState';
 import { memoriesOn } from '@web/pages/builder/generateAlbum';
-import { spreadHalfOf } from '@web/pages/builder/miniSpread';
+import { spreadHalfOf, spreadLeftIndex } from '@web/pages/builder/miniSpread';
 import { PRIORITY, usePagePicture } from '../../builder/usePagePicture';
 import { Button } from '../../components/Button';
 import { colors, space } from '../../lib/theme';
 import { EditorSheet, SheetPlacement, useSheetBodyWidth } from '../core/EditorSheet';
 import type { EditorContext, SheetProps } from '../registry';
 import { applyLayout, layoutChoices, photosHeld, tryLayout, type LayoutAsk } from './actions';
-import { LAYOUT_CURRENT, LAYOUT_MEMORY_NOTE, LAYOUT_NONE, LAYOUT_SPREAD_NOTE, LAYOUT_TITLE, leftoverWords } from './words';
+import { LAYOUT_CURRENT, LAYOUT_MEMORY_NOTE, LAYOUT_NONE, LAYOUT_TITLE, layoutSpreadNote, leftoverWords } from './words';
 
 /** Across the short sheet upright, so more layouts show at once; two in the side panel. */
 const COLUMNS_UPRIGHT = 3;
@@ -94,7 +94,7 @@ export function LayoutSheet({ ctx, close }: SheetProps<undefined>) {
   if (spreadHalfOf(start.templateId)) {
     return (
       <EditorSheet title={LAYOUT_TITLE} onClose={close} scroll testID="photos-layout-sheet">
-        <Text style={styles.none} testID="photos-layout-spread">{LAYOUT_SPREAD_NOTE}</Text>
+        <Text style={styles.none} testID="photos-layout-spread">{layoutSpreadNote(spreadLeftIndex(ctx.builder.albumPages.length))}</Text>
       </EditorSheet>
     );
   }
