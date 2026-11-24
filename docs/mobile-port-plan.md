@@ -4635,6 +4635,15 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.
 
+### Release notes 2.1.6 (code 116: 2.1.5 + the font fix; check against the app on upload day)
+
+    <en-US>
+    From tester feedback:
+    • Bold or italic words in fonts like Shrikhand no longer stop your order
+    </en-US>
+
+The line is PR #319 (the owner's Mini, 2026-11-23: "the cover has font "Shrikhand", cursive bold (no bold file: faked by the app)"). 2.1.5 was live when 2.1.6 was uploaded (owner: "2.1.5 is live"), so its lines are not repeated. Left out on purpose: fonts downloaded before Place order (a customer only ever saw it as the same error) and the page-picture refresh (it changes nothing a customer does).
+
 ### Release notes 2.1.5 (code 115: 2.1.4 + longer videos + the upright screen not required + the unsent-orders fix; check against the app on upload day)
 
     <en-US>
