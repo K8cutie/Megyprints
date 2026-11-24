@@ -149,7 +149,8 @@ async function compareWith(base, manifest, set) {
     await compare(`${c.name} (words baked in)`, 'page', { ...input, bakeWords: true });
   }
   // WordArt is new: print code from before it draws those covers plain, as it should.
-  const covers = set.covers.filter((c) => !c.name.startsWith('cover-wordart-'));
+  // So is the order tag (2026-11-24): print code from before draws no tag.
+  const covers = set.covers.filter((c) => !c.name.startsWith('cover-wordart-') && !c.name.startsWith('cover-order-tag-'));
   for (const c of covers) {
     await compare(c.name, 'cover', { albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material, coverFront: c.coverFront, coverDesign: c.coverDesign, photos: set.photos });
   }
