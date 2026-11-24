@@ -148,11 +148,16 @@ export default function Admin() {
   useEffect(() => { if (role) void loadOrders(); }, [role, loadOrders]);
 
   // A scanned order not on the page loaded yet: load the next page, until it
-  // is found or every order is loaded.
+  // is found or every order is loaded. A page that brought nothing new (the
+  // count moved under us) stops it: never ask for the same page twice.
   const scan = scannedOrders(orders, ordersTotal, scanned);
+  const [lookedAt, setLookedAt] = useState(-1);
+  const stuck = scan.keepLooking && lookedAt === orders.length && !loadingMore;
   useEffect(() => {
-    if (scan.keepLooking && !ordersLoading && !loadingMore && !ordersErr) void loadMoreOrders();
-  }, [scan.keepLooking, ordersLoading, loadingMore, ordersErr, loadMoreOrders]);
+    if (!scan.keepLooking || ordersLoading || loadingMore || ordersErr || lookedAt === orders.length) return;
+    setLookedAt(orders.length);
+    void loadMoreOrders();
+  }, [scan.keepLooking, ordersLoading, loadingMore, ordersErr, lookedAt, orders.length, loadMoreOrders]);
   const showAllOrders = () => setParams((p) => { p.delete('order'); return p; }, { replace: true });
 
   // How many bookings wait on the owner (a request to price, a payment to
@@ -233,8 +238,8 @@ export default function Admin() {
             {scanned && (
               <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm" data-testid="scanned-order">
                 <span className="text-dark">
-                  {scan.keepLooking ? <>Looking for order <b className="font-mono">{scanned}</b>…</>
-                    : scan.notFound ? <>No order <b className="font-mono">{scanned}</b> was found.</>
+                  {scan.keepLooking && !stuck ? <>Looking for order <b className="font-mono">{scanned}</b>…</>
+                    : scan.notFound || stuck ? <>No order <b className="font-mono">{scanned}</b> was found.</>
                     : <>Scanned order <b className="font-mono">{scanned}</b></>}
                 </span>
                 <button onClick={showAllOrders} className="ml-auto text-[#C98A5E] underline">Show all orders</button>

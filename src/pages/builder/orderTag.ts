@@ -38,8 +38,9 @@ export const orderScanUrl = (orderNumber: string): string => `${ORDER_SCAN_BASE}
 
 /** How big the code is printed, inches (its white square, quiet zone in). */
 export const ORDER_TAG_QR_IN = 0.8;
-/** The order number's size, inches (about 8.5 pt). */
-export const ORDER_TAG_TEXT_IN = 0.12;
+/** The order number's size, inches (about 10 pt): easy to read at the
+ *  printer and the packing table. */
+export const ORDER_TAG_TEXT_IN = 0.14;
 /** Space between the code and the number, inches. */
 export const ORDER_TAG_GAP_IN = 0.06;
 /** Error correction M (15%): a short address stays a small code (version 4). */
