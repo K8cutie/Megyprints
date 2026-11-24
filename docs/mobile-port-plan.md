@@ -4635,6 +4635,17 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.
 
+### Release notes 2.1.7 (code 117: 2.1.6 + the launch price + the Christmas video sale + the placing notice; check against the app on upload day)
+
+    <en-US>
+    • Albums show their launch price: 40% off until March 31, 2027
+    • Christmas sale: extra video memories are 3 for ₱100 (₱50 each) until December 31
+    • Adding a video past your free ones now tells you the price first
+    • Placing your order now says what the wait is for
+    </en-US>
+
+Lines: #325 (launch price, 0072, LIVE since 2026-11-24), #328 (the video sale pop-up, 0073), #321 (the placing notice). **The second and third lines are true only once 0073 is applied** (website PR #327): merge #327 and db push 0073 the day 2.1.7 goes live, then check the pop-up on a phone before relying on these words. 2.1.6 was live when 2.1.7 was prepared (owner: "2.1.6 is released"), so its line is not repeated.
+
 ### Release notes 2.1.6 (code 116: 2.1.5 + the font fix; check against the app on upload day)
 
     <en-US>
