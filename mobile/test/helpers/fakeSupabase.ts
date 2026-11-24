@@ -24,6 +24,9 @@ export const fake = {
   rpc: {} as Record<string, { data: unknown; error: { message: string; code?: string } | null }>,
   /** What the orders insert answers with as an error (a refused code, the unpaid limit). */
   insertError: null as { message: string; code?: string } | null,
+  /** Refusals for the next orders inserts, one each, before `insertError`
+   *  (a first try refused, the second accepted). */
+  insertErrors: [] as { message: string; code?: string }[],
   /** Holds an RPC's answer until the test lets it go (a request still on its way). */
   hold: {} as Record<string, Promise<void> | undefined>,
   /** The account's event bookings (event_bookings reads). */
@@ -32,7 +35,7 @@ export const fake = {
 
 export function resetFake(): void {
   rec.inserts = []; rec.upserts = []; rec.rpcs = []; rec.reads = []; rec.uploads = [];
-  fake.userId = 'user-1'; fake.albumRow = null; fake.orderRow = null; fake.rpc = {}; fake.insertError = null; fake.hold = {}; fake.bookings = [];
+  fake.userId = 'user-1'; fake.albumRow = null; fake.orderRow = null; fake.rpc = {}; fake.insertError = null; fake.insertErrors = []; fake.hold = {}; fake.bookings = [];
 }
 
 function from(table: string) {
@@ -61,9 +64,12 @@ function from(table: string) {
       rec.inserts.push({ table, row });
       return {
         select: () => ({
-          single: async () => (fake.insertError
-            ? { data: null, error: fake.insertError }
-            : { data: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' }, error: null }),
+          single: async () => {
+            const refused = fake.insertErrors.shift() ?? fake.insertError;
+            return refused
+              ? { data: null, error: refused }
+              : { data: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' }, error: null };
+          },
         }),
       };
     },

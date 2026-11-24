@@ -4753,3 +4753,46 @@ own long-lived branch, `native-2.0`.
 - The local gates stay the same: website `npx tsc -b && npx vitest run &&
   npm run build`; app `npm ci && npm run check` in `mobile/` (the golden
   test needs `npm ci` in `tools/golden` first).
+
+---
+
+## Which post an order came from (2026-11-18, `feat/app-order-source`)
+
+Owner: what is promoted is the app, so the app has to say which post an
+install, and its order, came from.
+
+- A post's Play Store link carries a tag in Play's `referrer`:
+  `…/details?id=com.megyprints.app&referrer=utm_source%3Dfacebook%26utm_medium%3Dsocial%26utm_campaign%3Dxmas-01`.
+  Play Console already counts store visits and installs per UTM source and
+  campaign from such links, with nothing in the app.
+- For **orders**, the app asks Google Play once per install which link it was
+  installed from (`expo-application` `getInstallReferrerAsync`, the Install
+  Referrer API), reads `utm_campaign`, and keeps it on the phone for 30 days
+  counted from the install (`src/lib/installSource.ts`; rules in
+  `src/lib/orderSource.ts`). Place order adds it to the order row as `source`
+  (`checkout/sendOrder.ts`, `phoneSend.ts`).
+- The plan's order row is unchanged: it stays the website's, key by key
+  (`test/checkoutPayload.test.ts`). The tag is added at send time, only when
+  there is one.
+- **A tag never costs a sale.** A database without `orders.source` refuses the
+  whole insert over that one column (PGRST204); the order is then sent again
+  without the tag. So the app can be out before the column exists.
+- The column, its tidy-or-blank trigger and the owner's summary
+  (`owner_order_sources()`) are migration 0063, on main in the website's own
+  change for `?p=TAG` links. It reaches this branch with the next
+  `git merge --no-ff origin/main`.
+- What is kept is the post's label, the same for everyone who came from that
+  post. No device or advertising id is read (`expo-application` can read the
+  Android id; this code never calls it).
+- **Before a version with this ships:**
+  1. **Privacy page** (`src/pages/Privacy.tsx`) and the app's own privacy
+     screen say nothing yet about recording which link an install came from.
+     Add it, in the owner's words.
+  2. **Play Data safety form**: review the answers with this in mind (the
+     order now records a marketing label).
+  3. Look at the built APK's manifest: Google's install referrer library
+     (`com.android.installreferrer:installreferrer:2.2`, brought in by
+     `expo-application`) may add a Play Store permission.
+  4. **On a phone:** it can only be seen working on an install from Google
+     Play through a tagged link (any track). A build put on by hand has no
+     referrer. Not done yet.

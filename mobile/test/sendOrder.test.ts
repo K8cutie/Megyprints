@@ -429,3 +429,54 @@ describe('"I\'ve sent ₱X" sends what the website sends', () => {
     await expect(sendPayment(paymentSubmitPlan('order-1', '', null), null, deps())).rejects.toThrow('Could not record your payment (denied).');
   });
 });
+
+describe("the post's tag on the order row (lib/orderSource.ts)", () => {
+  const MISSING = { code: 'PGRST204', message: "Could not find the 'source' column of 'orders' in the schema cache" };
+
+  it('no tag: the row is the plan\'s, and the column is never named', async () => {
+    const plan = placeOrderPlan(input());
+    await sendOrder(plan, deps());
+    await sendOrder(plan, deps({ source: null }));
+    await sendOrder(plan, deps({ source: '' }));
+    expect(rec.inserts).toHaveLength(3);
+    for (const { row } of rec.inserts) {
+      expect(row).toEqual(plan.orderRow);
+      expect('source' in row).toBe(false);
+    }
+  });
+
+  it('a tag rides on the row, and nothing else on it changes', async () => {
+    const plan = placeOrderPlan(input());
+    const r = await sendOrder(plan, deps({ source: 'xmas-01' }));
+    expect(r.order.id).toBe('order-1');
+    expect(rec.inserts).toHaveLength(1);
+    expect(rec.inserts[0].row).toEqual({ ...plan.orderRow, source: 'xmas-01' });
+    expect('source' in plan.orderRow).toBe(false); // the plan's row stays the website's
+  });
+
+  it('a database without the column: the order goes again without the tag, and is placed once', async () => {
+    fake.insertErrors.push(MISSING);
+    const plan = placeOrderPlan(input());
+    const handed: string[] = [];
+    const d = deps({ source: 'xmas-01', onOrder: (o) => { handed.push(o.id); } });
+    const r = await sendOrder(plan, d);
+    expect(r.order.id).toBe('order-1');
+    expect(rec.inserts.map((i) => i.row)).toEqual([{ ...plan.orderRow, source: 'xmas-01' }, plan.orderRow]);
+    expect(handed).toEqual(['order-1']);
+    // The rest of the order goes on as usual.
+    expect(d.made).toEqual(['cover', 'pages']);
+  });
+
+  it('any other refusal is not sent twice: the unpaid limit keeps its own words', async () => {
+    fake.insertError = { message: 'UNPAID_LIMIT', code: 'MP001' };
+    fake.insertErrors.push({ message: 'new row violates check constraint', code: '23514' });
+    await expect(sendOrder(placeOrderPlan(input()), deps({ source: 'xmas-01' }))).rejects.toThrow(/Could not place your order/);
+    expect(rec.inserts).toHaveLength(1);
+  });
+
+  it('a missing column with no tag sent is not this code\'s to retry', async () => {
+    fake.insertErrors.push(MISSING);
+    await expect(sendOrder(placeOrderPlan(input()), deps())).rejects.toThrow(/Could not place your order/);
+    expect(rec.inserts).toHaveLength(1);
+  });
+});
