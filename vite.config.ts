@@ -87,7 +87,7 @@ export default defineConfig(({ command }) => ({
         // runs BEFORE runtimeCaching below. Without this denylist it served the
         // app shell for QR links (/m/…), /api, and the static pages, so the
         // exclusions below never took effect for a browser with the SW installed.
-        navigateFallbackDenylist: [/^\/m\//, /^\/api\//, /^\/\.well-known\//, /^\/delete-account\.html/, /^\/auth-native\./],
+        navigateFallbackDenylist: [/^\/m\//, /^\/o\//, /^\/api\//, /^\/\.well-known\//, /^\/delete-account\.html/, /^\/auth-native\./],
         runtimeCaching: [
           {
             // App-shell navigations only. CRUCIAL: exclude server-rendered routes
@@ -97,6 +97,7 @@ export default defineConfig(({ command }) => ({
             urlPattern: ({ request, url }) =>
               request.mode === 'navigate' &&
               !url.pathname.startsWith('/m/') &&
+              !url.pathname.startsWith('/o/') &&
               !url.pathname.startsWith('/api/'),
             handler: 'NetworkFirst',
             options: {

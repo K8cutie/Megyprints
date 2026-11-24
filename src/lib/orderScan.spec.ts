@@ -1,5 +1,21 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { orderScanHash, orderScanDestination, scannedOrders } from './orderScan';
+
+const ROOT = resolve(__dirname, '../..');
+const read = (f: string) => readFileSync(resolve(ROOT, f), 'utf8');
+
+/** Where public/o.js (the page vercel.json serves at /o/…) sends a browser. */
+function oJsTarget(pathname: string): string {
+  let to = '';
+  runInNewContext(read('public/o.js'), {
+    location: { pathname, replace: (u: string) => { to = u; } },
+    document: { getElementById: () => null },
+  });
+  return to;
+}
 
 /* The order tag's QR (the back cover) scanned: the printed /o/<number>
    reaches its page on this HashRouter site, and each person goes where they
@@ -22,6 +38,36 @@ describe('the printed address reaches its page', () => {
     expect(orderScanHash('/o/<script>', '')).toBeNull();
     // Already on a page of the site: not taken over.
     expect(orderScanHash('/o/MP-2026-9M5572U', '#/orders')).toBeNull();
+  });
+});
+
+describe('on the live site, /o/<number> is a page of its own (the site is not served there)', () => {
+  // The site links its files relatively (vite base './'): served at /o/…
+  // it looked for /o/assets/… and showed a blank page (the PR preview, 2026-11-24).
+  it('vercel.json serves o.html for /o/<number>, and never the site', () => {
+    const v = JSON.parse(read('vercel.json')) as { rewrites: { source: string; destination: string }[] };
+    expect(v.rewrites).toContainEqual({ source: '/o/:number', destination: '/o.html' });
+    const shell = v.rewrites.find((r) => r.destination === '/index.html')!;
+    // Its source is a plain regular expression (a negative lookahead).
+    const catchAll = new RegExp(`^${shell.source}$`);
+    expect(catchAll.test('/o/MP-2026-9M5572U')).toBe(false);
+    expect(catchAll.test('/o.js')).toBe(false);
+    expect(catchAll.test('/orders')).toBe(true);
+  });
+
+  it('the service worker leaves /o/ to the network, as it does /m/', () => {
+    const cfg = read('vite.config.ts');
+    const denylist = cfg.split('\n').find((l) => l.includes('navigateFallbackDenylist:')) ?? '';
+    expect(denylist).toContain('/^\\/o\\//');
+    expect(cfg).toContain("!url.pathname.startsWith('/o/')");
+  });
+
+  it('o.js sends the browser where orderScanHash says', () => {
+    for (const p of ['/o/MP-2026-9M5572U', '/o/MP-2026-9M5572U/', '/o/mp-2026-9m5572u']) {
+      expect(oJsTarget(p)).toBe(orderScanHash(p, ''));
+    }
+    expect(oJsTarget('/o/<script>')).toBe('/');
+    expect(oJsTarget('/o/MP-2026-9M5572U/extra')).toBe('/');
   });
 });
 
