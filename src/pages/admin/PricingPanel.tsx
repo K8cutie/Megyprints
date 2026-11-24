@@ -13,6 +13,7 @@ import { ALBUM_SIZES } from '../builder/types';
 import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
 import MegyMiniPricing from './MegyMiniPricing';
 import LaunchPricing from './LaunchPricing';
+import VideoSalePricing from './VideoSalePricing';
 import { isMiniSize } from '../../lib/megyMini';
 import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
@@ -386,6 +387,9 @@ export default function PricingPanel() {
 
         {/* Launch price (0072): today's prices as % off a regular price, with an end date */}
         <LaunchPricing />
+
+        {/* Video memory sale (0073): ₱50 a video, a named sale with a pack price */}
+        <VideoSalePricing />
 
         {/* Crossed-out "was" price — the real old price, with an end date */}
         <div className="mt-5 pt-5 border-t border-sand-deep">

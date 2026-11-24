@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
    price), but the load now tries again and tells checkout when it lands.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const net = vi.hoisted(() => ({ online: false, calls: 0, launch: null as unknown }));
+const net = vi.hoisted(() => ({ online: false, calls: 0, launch: null as unknown, video: 'missing' as unknown }));
 vi.mock('./supabase', () => ({
   supabaseConfigured: true,
   supabase: {
@@ -20,6 +20,15 @@ vi.mock('./supabase', () => ({
     rpc: async (name: string) => {
       if (name === 'public_launch_price') {
         return net.online && net.launch ? { data: net.launch, error: null } : { data: null, error: { message: 'Failed to fetch' } };
+      }
+      // The video offer (0073) IS part of the prices. 'missing' = a database
+      // before 0073 (no such function: the 0066 packs).
+      if (name === 'public_video_offer') {
+        if (!net.online) return { data: null, error: { message: 'Failed to fetch' } };
+        return net.video === 'missing'
+          ? { data: null, error: { code: 'PGRST202', message: 'Could not find the function public.public_video_offer' } }
+          : net.video === 'fail' ? { data: null, error: { code: '57014', message: 'canceling statement due to statement timeout' } }
+            : { data: net.video, error: null };
       }
       net.calls++;
       return net.online
@@ -34,10 +43,34 @@ let m: Mod;
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.resetModules();
-  net.online = false; net.calls = 0; net.launch = null;
+  net.online = false; net.calls = 0; net.launch = null; net.video = 'missing';
   m = await import('./storeSettings');
 });
 afterEach(() => { vi.useRealTimers(); });
+
+describe('the video offer (0073) is part of the prices', () => {
+  it('the sale rides along with the prices', async () => {
+    net.online = true; net.video = { single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2026-12-31' } };
+    await m.loadStoreSettings();
+    expect(m.getPriceSchedule()?.video_offer).toEqual({ single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2026-12-31' } });
+  });
+
+  it('a database before 0073 (no such function): the prices load, with no offer (the 0066 packs)', async () => {
+    net.online = true; net.video = 'missing';
+    await m.loadStoreSettings();
+    expect(m.getPriceSchedule()).not.toBeNull();
+    expect(m.getPriceSchedule()?.video_offer).toBeNull();
+  });
+
+  it('an offer that did not load: NO prices (never a guessed video price), and it tries again', async () => {
+    net.online = true; net.video = 'fail';
+    await m.loadStoreSettings();
+    expect(m.getPriceSchedule()).toBeNull();
+    net.video = { single: 50, pack: null };
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(m.getPriceSchedule()?.video_offer).toEqual({ single: 50, pack: null });
+  });
+});
 
 describe('the launch price (0072) rides along with the prices', () => {
   it('while it runs, the schedule carries it', async () => {
