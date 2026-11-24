@@ -395,6 +395,12 @@ export function longDate(ymd: string): string {
   return MONTHS[m - 1] ? `${MONTHS[m - 1]} ${d}, ${y}` : ymd;
 }
 
+/** The short tag beside an album price while the launch runs (owner,
+ *  2026-11-24: "show on the album pricing the % discount"): "40% off". */
+export function launchOff(l: LaunchPrice): string {
+  return `${l.pct}% off`;
+}
+
 /** The line under the total, the same in the app and on the website. */
 export function launchLine(l: LaunchPrice): string {
   return `Launch price: ${l.pct}% off the album until ${longDate(l.until)}`;

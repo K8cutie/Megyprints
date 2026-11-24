@@ -93,16 +93,18 @@ describe('the size step', () => {
     expect(screen.queryByTestId('size-regular-8x8')).toBeNull();
   });
 
-  it('during the launch price: one line on top, and each size its regular price crossed out', async () => {
+  it('during the launch price: one line on top, and each size its regular price crossed out with its "% off"', async () => {
     mockRpc.launch = { data: { pct: 40, until: '2099-12-31' }, error: null };
     await render(<AlbumSize />);
     expect(await screen.findByTestId('size-launch')).toHaveTextContent('Launch price: 40% off the album until December 31, 2099');
     // The price paid doesn't change; the regular price is that price ÷ 0.6.
     expect(screen.getByTestId('size-price-8x8')).toHaveTextContent('Starts at ₱1,288 for 40 pages, soft cover');
-    expect(screen.getByTestId('size-regular-8x8')).toHaveTextContent('Regular price ₱2,147');
+    expect(screen.getByTestId('size-regular-8x8')).toHaveTextContent(/^Regular price ₱2,147\s+40% off$/);
     for (const size of SIZES) {
       const now = startsAt(LIVE, size)!;
-      expect(screen.getByTestId(`size-regular-${size}`)).toHaveTextContent(`Regular price ₱${Math.round(now / 0.6).toLocaleString('en-US')}`);
+      expect(screen.getByTestId(`size-regular-${size}`)).toHaveTextContent(new RegExp(`^Regular price ₱${Math.round(now / 0.6).toLocaleString('en-US')}\\s+40% off$`));
+      // The owner, 2026-11-24: "show on the album pricing the % discount they're getting".
+      expect(screen.getByTestId(`size-off-${size}`)).toHaveTextContent('40% off');
     }
   });
 

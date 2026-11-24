@@ -28,7 +28,7 @@ import { offerableSizes, pagesHoldPhotos, resizeMadeAlbum, saveStep, SIZE_LINE, 
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
-import { launchLine, launchOf, type PriceSchedule } from '@web/lib/pricing';
+import { launchLine, launchOf, launchOff, type PriceSchedule } from '@web/lib/pricing';
 import { startsAt, startsAtLine, startsAtRegular } from '../lib/checkout/startsAt';
 import { peso } from '../lib/checkout/price';
 import { loadLaunchPrice } from '../lib/checkout/priceSchedule';
@@ -138,7 +138,10 @@ export default function AlbumSize() {
                   <Text style={styles.perPage}>{sizePhotosPerPage(s.preset)}</Text>
                   {from !== null && <Text style={styles.price} testID={`size-price-${s.preset}`}>{startsAtLine(from)}</Text>}
                   {from !== null && regular !== null && (
-                    <Text style={styles.regular} testID={`size-regular-${s.preset}`}>Regular price <Text style={styles.regularWas}>{peso(regular)}</Text></Text>
+                    <Text style={styles.regular} testID={`size-regular-${s.preset}`}>
+                      Regular price <Text style={styles.regularWas}>{peso(regular)}</Text>
+                      {launch && <Text style={styles.off} testID={`size-off-${s.preset}`}>{`  ${launchOff(launch)}`}</Text>}
+                    </Text>
                   )}
                 </View>
                 {resizing === s.preset ? <ActivityIndicator color={colors.accent} />
@@ -204,6 +207,7 @@ const styles = StyleSheet.create({
   price: { fontSize: 15, fontWeight: '700', color: colors.accent, marginTop: 2 },
   regular: { fontSize: 13, color: colors.muted, marginTop: 1 },
   regularWas: { textDecorationLine: 'line-through' },
+  off: { fontSize: 13, fontWeight: '800', color: colors.good },
   launch: { fontSize: 15, lineHeight: 21, fontWeight: '700', color: colors.accent, backgroundColor: '#FFF5F0', borderRadius: 10, padding: space.sm },
   tick: { fontSize: 22, fontWeight: '800', color: colors.accent },
   line: { fontSize: 15, color: colors.text },
