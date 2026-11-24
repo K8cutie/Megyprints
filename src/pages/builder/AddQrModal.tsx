@@ -11,7 +11,7 @@ import {
 } from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
-import { FREE_QR_MEMORIES, QR_PACK_OFFER, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
+import { FREE_QR_MEMORIES, QR_PACK_OFFER, includedHostingYears, hdMemoriesPriceOf, countQrMemories, videoStartsNewPack, packOfferTitle, PACK_OFFER_BODY, PACK_OFFER_YES, PACK_OFFER_NO } from '../../lib/pricing';
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useBuilderContext } from './BuilderContext';
@@ -105,6 +105,15 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
     return () => { alive = false; };
   }, [albumPages]);
   const offerTier = !initial && tierLocked === false && hdPrice > 0 && !fromEvent;
+
+  // THE PACK OFFER (owner's design 2026-10-26: "they click on the golden
+  // button and a pop-up appears"; re-asked 2026-11-24): a new video that
+  // starts a paid pack (lib/pricing videoStartsNewPack) is said before the
+  // picker, never found out at checkout. "Not now" closes; the yes goes on to
+  // choose the video. An event album's booking pays for its videos: no offer.
+  const usedVideos = countQrMemories(albumPages);
+  const [packOk, setPackOk] = useState(false);
+  const packOffer = !initial && !fromEvent && !packOk && videoStartsNewPack(usedVideos, FREE_QR_MEMORIES);
 
   // Preview the PICKED file (object URL), revoked on change/unmount.
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
@@ -207,6 +216,25 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
 
   const legacyLink = initial && initial.kind !== 'clip' ? initial.destination : null;
   const mb = file ? (file.size / 1024 / 1024).toFixed(1) : null;
+
+  if (packOffer) {
+    return (
+      <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+        <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="pack-offer-title" tabIndex={-1} data-testid="qr-pack-offer"
+          className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+          <p id="pack-offer-title" className="text-base font-bold text-dark flex items-center gap-2">
+            <Video size={18} className="text-blush-pink" /> {packOfferTitle(usedVideos, FREE_QR_MEMORIES)}
+          </p>
+          <p className="text-sm text-medium mt-2 leading-snug" data-testid="qr-pack-body">{PACK_OFFER_BODY}</p>
+          <div className="mt-5 flex items-center justify-between gap-3">
+            <button onClick={onClose} className="text-sm font-semibold text-medium px-3 py-2" data-testid="qr-pack-no">{PACK_OFFER_NO}</button>
+            <button onClick={() => setPackOk(true)} data-testid="qr-pack-yes"
+              className="px-5 py-2 rounded-lg bg-peach text-white text-sm font-semibold hover:brightness-105">{PACK_OFFER_YES}</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
