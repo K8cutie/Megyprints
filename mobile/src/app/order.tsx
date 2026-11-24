@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
-import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, QR_PACK_SENTENCE } from '@web/lib/pricing';
+import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, launchLine, launchOff, QR_PACK_SENTENCE } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
@@ -750,6 +750,7 @@ export default function OrderScreen() {
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
             {!eventLink && price.ready && price.payTotal < price.total && (tester || affiliate) && <Text style={styles.was}>{peso(price.total)}  </Text>}
+            {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && price.launch && <Text style={styles.off} testID="order-launch-off">{`${launchOff(price.launch)}  `}</Text>}
             {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
             {eventLink ? '₱0' : price.ready ? peso(price.payTotal) : '—'}
           </Text>
@@ -757,7 +758,9 @@ export default function OrderScreen() {
         {coveredByBooking && <Text style={styles.savings} testID="order-covered">{EV.COVERED_LINE}</Text>}
         {!!eventLink && !coveredByBooking && <Text style={styles.small} testID="order-covered-later">{EV.COVERED_LATER}</Text>}
         {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && (
-          <Text style={styles.savings} testID="order-savings">New lower price: you save {peso(price.wasTotal - price.total)}</Text>
+          <Text style={styles.savings} testID="order-savings">
+            {price.launch ? launchLine(price.launch) : `New lower price: you save ${peso(price.wasTotal - price.total)}`}
+          </Text>
         )}
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
@@ -955,6 +958,7 @@ const styles = StyleSheet.create({
   total: { fontSize: 24, fontWeight: '800', color: colors.accent },
   was: { fontSize: 15, fontWeight: '500', color: colors.muted, textDecorationLine: 'line-through' },
   savings: { fontSize: 13, fontWeight: '700', color: colors.good, textAlign: 'right' },
+  off: { fontSize: 14, fontWeight: '800', color: colors.good },
   included: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 2 },
   qrNote: { borderWidth: 1, borderColor: '#E9B8A0', backgroundColor: '#FBF0EA', borderRadius: 12, padding: 12 },
   dealOk: { borderColor: '#BFE3C8', backgroundColor: '#EEF8F1' },

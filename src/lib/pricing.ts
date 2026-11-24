@@ -124,6 +124,9 @@ export interface PriceSchedule {
   free_shipping_value?: number;
   /** The crossed-out "was" prices, while they run (0041). */
   compare_at?: CompareAt | null;
+  /** The launch price (0072), put here by the loaders from
+   *  public_launch_price(); absent or null = none. Read it through launchOf(). */
+  launch?: LaunchPrice | null;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
   /** Megy Mini while it is on sale (0062); null or absent otherwise. Read it
@@ -310,6 +313,97 @@ export function compareAtPriceOf(
   const sheets = sheetsFor(schedule.sizes[size].pps, schedule.min_pages, pages);
   const was = Math.round(sheets * sheetRate + rate);
   return was > priceOf(schedule, size, binding, pages) ? was : null;
+}
+
+/* ── LAUNCH PRICE (owner, 2026-11-24: "Yes, 40% to Mar 31") ──────────────────
+   Megy Prints is a premium product. Today's album prices are its LAUNCH
+   price: N% off a regular price we really start charging the day after
+   `until`. The crossed-out number is that regular price, so the "% off" is
+   true for the album it sits on. Honest only while it ends: the database
+   (0072 set_launch_price) refuses an end date more than 6 months out, and
+   public_launch_price() stops sending it after `until` (Manila date).
+   Albums only: the Megy Mini keeps its own price with no % off, and the
+   add-ons (videos, HD, hosting years) are never discounted. While a launch
+   price runs it replaces the old "was" price (0041). */
+
+/** What public_launch_price() sends while a launch price runs. */
+export interface LaunchPrice {
+  /** Whole percent off the regular price, 1–90. */
+  pct: number;
+  /** The last day (Asia/Manila, YYYY-MM-DD) it runs. */
+  until: string;
+}
+
+/** A launch price as the database sent it, or null when it isn't one that
+ *  can be shown honestly (a whole % from 1 to 90 and a real end date). */
+export function parseLaunchPrice(data: unknown): LaunchPrice | null {
+  if (!data || typeof data !== 'object') return null;
+  const { pct, until } = data as { pct?: unknown; until?: unknown };
+  const p = Number(pct);
+  if (!Number.isInteger(p) || p < 1 || p > 90) return null;
+  if (typeof until !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(until)) return null;
+  return { pct: p, until };
+}
+
+/** The launch price running on `today` (Manila), or null. */
+export function launchOf(
+  schedule: Pick<PriceSchedule, 'launch'> | null | undefined,
+  today: string = manilaToday(),
+): LaunchPrice | null {
+  const l = parseLaunchPrice(schedule?.launch);
+  return l && today <= l.until ? l : null;
+}
+
+/** The regular price of the print (album + extra pages) while a launch price
+ *  runs: today's price is `pct`% off it, so regular = today ÷ (1 − pct/100).
+ *  Null when none runs, or the size isn't an album on the price list (the
+ *  Megy Mini never is). */
+export function launchRegularOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  const l = launchOf(schedule, today);
+  if (!l || !schedule.sizes?.[size]) return null;
+  const now = priceOf(schedule, size, binding, pages);
+  if (!Number.isFinite(now) || now <= 0) return null;
+  return Math.round(now / (1 - l.pct / 100));
+}
+
+/** The crossed-out price of the print: the launch price's regular price while
+ *  it runs, else the old "was" price (0041), else null. */
+export function crossedOutPrintOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  return launchRegularOf(schedule, size, binding, pages, today)
+    ?? compareAtPriceOf(schedule, size, binding, pages, today);
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "March 31, 2027" from "2027-03-31" (written out: phones differ in the
+ *  date words they carry). */
+export function longDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return MONTHS[m - 1] ? `${MONTHS[m - 1]} ${d}, ${y}` : ymd;
+}
+
+/** The short tag beside an album price while the launch runs (owner,
+ *  2026-11-24: "show on the album pricing the % discount"): "40% off". */
+export function launchOff(l: LaunchPrice): string {
+  return `${l.pct}% off`;
+}
+
+/** The line under the total, the same in the app and on the website. */
+export function launchLine(l: LaunchPrice): string {
+  return `Launch price: ${l.pct}% off the album until ${longDate(l.until)}`;
 }
 
 /** What the pages past the included minimum add to the price. Pages print
