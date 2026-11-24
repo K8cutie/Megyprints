@@ -19,7 +19,11 @@
    photos-are-local architecture). Terms: a tester (2026-10-31): "restrict it
    to adults only ... ensure your terms of service state that all users
    declare themselves to be of legal age"; plain words, every promise one
-   the shop already keeps.
+   the shop already keeps. "You answer for what is in your album" (owner,
+   2026-11-22: "at 300 printouts a day we are no longer capable of checking
+   each page"): the customer confirms the rights, we say we don't check
+   every page, and a claim over an album's content is theirs to answer and
+   pay for.
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { LEGAL_CONTACT, MIN_AGE } from './legal';
@@ -132,7 +136,7 @@ export const PRIVACY_POLICY: LegalDocument = {
 
 export const TERMS_OF_SERVICE: LegalDocument = {
   title: 'Terms of Service',
-  updated: 'October 2026',
+  updated: 'November 2026',
   sections: [
     section('About these terms',
       p('Megyprints designs and prints photo albums in the Philippines. These terms are the rules for using our app and website. By making an account or placing an order, you agree to them. Questions? Email us at ', mail, '.'),
@@ -142,7 +146,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
     ),
     section('Your photos',
       p('Your photos stay yours. You let us use them only to make, print and deliver your album, and to play a QR memory video you add.'),
-      p('Only use photos you took yourself or have permission to use. If a photo shows other people, make sure they are okay with it being printed.'),
+      p('Only use photos you took yourself or have permission to use. This goes for everything you put in your album: pictures, artwork, logos and words. If a photo shows other people, make sure they are okay with it being printed.'),
     ),
     section("What we won't print",
       p("Don't add, and we won't print:"),
@@ -154,6 +158,12 @@ export const TERMS_OF_SERVICE: LegalDocument = {
         ["other people's photos or artwork that you don't have the right to use"],
       ),
       p('We may cancel an order, or close an account, that breaks these rules.'),
+    ),
+    section('You answer for what is in your album',
+      pId('terms-rights', 'When you place an order, you confirm that ', b('everything in your album is yours, or its owner lets you print it'), '.'),
+      p('We print what you send us. We print many albums a day, and we do not check every page. We cannot know who owns a photo. Printing your album does not mean we checked it, or agreed that you may use what is in it.'),
+      p("If someone makes a claim against Megyprints because of something in your album, for example that a photo is theirs, you agree to answer for it and to pay back what it costs us, including lawyers' fees."),
+      p('Is your photo or artwork in an album without your permission? Email ', mail, '. We will look into it, and we may stop the order and take down its QR memory video.'),
     ),
     section('Ordering and paying',
       list(
