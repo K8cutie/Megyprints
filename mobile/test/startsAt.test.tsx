@@ -80,7 +80,9 @@ describe('the size step', () => {
     }
     // The sizes the owner switched off aren't shown, so neither is their price.
     expect(screen.queryByTestId('size-price-8.5x11')).toBeNull();
-    expect(mockRpc.asked).toEqual(['public_price_schedule']);
+    expect([...mockRpc.asked].sort()).toEqual(['public_price_schedule', 'public_video_offer']);
+    // No video offer on this list (it answers every call the same): no worth line.
+    expect(screen.queryByTestId('size-videos-8x8')).toBeNull();
   });
 
   it('the list could not be read: no prices, never a guess; the sizes are still there to pick', async () => {

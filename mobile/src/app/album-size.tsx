@@ -28,8 +28,10 @@ import { offerableSizes, pagesHoldPhotos, resizeMadeAlbum, saveStep, SIZE_LINE, 
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
-import type { PriceSchedule } from '@web/lib/pricing';
+import { FREE_QR_MEMORIES, includedVideosValue, videoOfferOf, type PriceSchedule } from '@web/lib/pricing';
 import { startsAt, startsAtLine } from '../lib/checkout/startsAt';
+import { loadVideoOffer } from '../lib/checkout/priceSchedule';
+import { peso } from '../lib/checkout/price';
 
 /** From the price list (public_price_schedule): the sizes the owner switched
  *  off, or none; the Megy Mini while it is on sale (0062), or null; and the
@@ -37,8 +39,12 @@ import { startsAt, startsAtLine } from '../lib/checkout/startsAt';
 async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null; schedule: PriceSchedule | null }> {
   if (!supabaseConfigured) return { off: [], mini: null, schedule: null };
   try {
-    const { data, error } = await supabase.rpc('public_price_schedule');
-    const schedule = !error && data && typeof data === 'object' ? (data as { disabled_sizes?: unknown; mini?: unknown }) : null;
+    const [{ data, error }, video] = await Promise.all([supabase.rpc('public_price_schedule'), loadVideoOffer(supabase)]);
+    // The free videos' worth (0073) is only words here: an offer that didn't
+    // load just leaves the line out.
+    const schedule = !error && data && typeof data === 'object'
+      ? ({ ...(data as object), video_offer: video.ok ? video.offer : null } as { disabled_sizes?: unknown; mini?: unknown })
+      : null;
     const list = schedule?.disabled_sizes;
     return {
       off: Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [],
@@ -110,6 +116,9 @@ export default function AlbumSize() {
     router.push('/photos');
   });
 
+  // The free videos and what they are worth at the single price (0073): one line under each "Starts at".
+  const videosValue = prices ? includedVideosValue(FREE_QR_MEMORIES, videoOfferOf(prices)) : null;
+
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.body}>
@@ -129,6 +138,9 @@ export default function AlbumSize() {
                   <Text style={styles.name}>{s.name}</Text>
                   <Text style={styles.perPage}>{sizePhotosPerPage(s.preset)}</Text>
                   {from !== null && <Text style={styles.price} testID={`size-price-${s.preset}`}>{startsAtLine(from)}</Text>}
+                  {from !== null && videosValue !== null && (
+                    <Text style={styles.videos} testID={`size-videos-${s.preset}`}>{FREE_QR_MEMORIES} free videos ({peso(videosValue)} value)</Text>
+                  )}
                 </View>
                 {resizing === s.preset ? <ActivityIndicator color={colors.accent} />
                   : on && <Text style={styles.tick} accessibilityLabel="Picked">✓</Text>}
@@ -191,6 +203,7 @@ const styles = StyleSheet.create({
   name: { fontSize: 18, fontWeight: '700', color: colors.text },
   perPage: { fontSize: 14, color: colors.muted },
   price: { fontSize: 15, fontWeight: '700', color: colors.accent, marginTop: 2 },
+  videos: { fontSize: 13, fontWeight: '700', color: colors.good, marginTop: 1 },
   tick: { fontSize: 22, fontWeight: '800', color: colors.accent },
   line: { fontSize: 15, color: colors.text },
   said: { fontSize: 15, lineHeight: 21, color: colors.text, backgroundColor: '#FFF5F0', borderRadius: 10, padding: space.sm },

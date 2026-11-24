@@ -57,10 +57,16 @@ jest.mock('../src/lib/memories/clipStore', () => ({
   setClipQuality: async (q: string) => { mockQuality.value = q; },
 }));
 const mockSchedule = { value: { hosting_tiers: [{ years: 5, price: 0 }, { years: 10, price: 300 }], hd_memories_price: 150 } as Record<string, unknown> };
+// public_video_offer (0073): null = a price list with no offer (the 0066 packs).
+const mockVideo = { value: null as unknown };
 jest.mock('../src/lib/supabase', () => ({
   supabaseConfigured: true,
   supabaseUrl: 'https://example.supabase.co',
-  supabase: { rpc: async (name: string) => (name === 'public_price_schedule' ? { data: mockSchedule.value, error: null } : { data: null, error: { message: 'no' } }) },
+  supabase: {
+    rpc: async (name: string) => (name === 'public_price_schedule' ? { data: mockSchedule.value, error: null }
+      : name === 'public_video_offer' ? { data: mockVideo.value, error: null }
+        : { data: null, error: { message: 'no' } }),
+  },
 }));
 
 useEditorBench();
@@ -373,7 +379,11 @@ describe('longer videos (owner, 2026-11-20; 0067)', () => {
   });
 });
 
-describe('the pack offer (owner\'s design 2026-10-26, re-asked 2026-11-24): a video that starts a paid pack is said first', () => {
+describe("the pop-up (owner's design 2026-10-26, re-asked 2026-11-24; the Christmas sale approved the same day)", () => {
+  const XMAS = { single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2099-12-31' } };
+  beforeEach(() => { mockVideo.value = XMAS; });
+  afterEach(() => { mockVideo.value = null; });
+
   /** Places one video memory on the next single-photo page, through the sheet. */
   async function placeOne(platform: AppPlatform) {
     await singlePhotoPage();
@@ -385,36 +395,49 @@ describe('the pack offer (owner\'s design 2026-10-26, re-asked 2026-11-24): a vi
     await act(async () => { sheetRoot?.unmount(); });
   }
 
-  it('the 2 free videos go in with no word; the 3rd tap says what it costs, and "Not now" closes', async () => {
+  it('the 2 free videos go in with no word; the box says how more are sold', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    expect(textOf()).toContain('2 memories included · more ₱50 each, or 3 for ₱100 until December 31');
+  });
+
+  it('the 3rd tap: the drawing (sale tag, ₱150 crossed out, ₱100, 33% off, "Get 3 for ₱100", "Get 1 for ₱50"); "Not now" closes', async () => {
     const platform = await madeAlbum(SCENARIOS[0]);
     await placeOne(platform);
     await placeOne(platform);
     await singlePhotoPage();
     const log = await show(platform, { mode: 'add' });
     expect(has('memory-pack-offer')).toBe(true);
-    expect(textOf()).toContain("You've used your 2 free videos");
-    expect(textOf()).toContain('Add 3 more video memories for ₱100. You pay it with your album at checkout.');
-    expect(textOf()).toContain('Add 3 more · ₱100');
-    // Nothing to pick until they say yes.
+    expect(textOf()).toContain('CHRISTMAS SALE');
+    expect(textOf()).toContain('Get 3 more video memories');
+    expect(textOf()).toContain('₱150₱10033% off');
+    expect(textOf()).toContain("You've used your 2 free videos. Each extra video is ₱50, but until December 31 you get 3 for ₱100. You pay with your album at checkout.");
+    expect(textOf()).toContain('Get 3 for ₱100');
+    expect(textOf()).toContain('Get 1 for ₱50');
+    // Nothing to pick until they choose.
     expect(has('memory-pick')).toBe(false);
     await press('memory-pack-no');
     expect(log.closed).toBe(1);
   });
 
-  it('"Add 3 more · ₱100" goes on to pick the video; the 3rd memory is placed', async () => {
-    const platform = await madeAlbum(SCENARIOS[0]);
-    await placeOne(platform);
-    await placeOne(platform);
-    await singlePhotoPage();
-    await show(platform, { mode: 'add' });
-    await press('memory-pack-yes');
-    expect(has('memory-pack-offer')).toBe(false);
-    expect(has('memory-pick')).toBe(true);
-    mockPicks.push(video());
-    await press('memory-pick');
-    await press('memory-save');
-    const qrs = builder().albumPages.reduce((n, p) => n + (p.qrFills ?? []).filter(Boolean).length, 0);
-    expect(qrs).toBe(3);
+  it('both "Get" buttons go on to pick the video; the 3rd memory is placed', async () => {
+    for (const id of ['memory-pack-yes', 'memory-pack-single']) {
+      const platform = await madeAlbum(SCENARIOS[0]);
+      await placeOne(platform);
+      await placeOne(platform);
+      await singlePhotoPage();
+      await show(platform, { mode: 'add' });
+      await press(id);
+      expect(has('memory-pack-offer')).toBe(false);
+      expect(has('memory-pick')).toBe(true);
+      mockPicks.push(video());
+      await press('memory-pick');
+      await press('memory-save');
+      const qrs = builder().albumPages.reduce((n, p) => n + (p.qrFills ?? []).filter(Boolean).length, 0);
+      expect(qrs).toBe(3);
+      await act(async () => { sheetRoot?.unmount(); });
+    }
   });
 
   it('changing a video already placed never asks', async () => {
@@ -426,5 +449,16 @@ describe('the pack offer (owner\'s design 2026-10-26, re-asked 2026-11-24): a vi
     await show(platform, { mode: 'slot', slot: builder().albumPages[i].qrFills!.findIndex(Boolean) });
     expect(has('memory-pack-offer')).toBe(false);
     expect(textOf()).toContain(W.TITLE_CHANGE);
+  });
+
+  it('a price list from before 0073: the 0066 pop-up ("Add 3 more · ₱100")', async () => {
+    mockVideo.value = null;
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await placeOne(platform);
+    await placeOne(platform);
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    expect(textOf()).toContain('Add 3 more · ₱100');
+    expect(has('memory-pack-single')).toBe(false);
   });
 });

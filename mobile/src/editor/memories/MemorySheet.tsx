@@ -25,7 +25,7 @@ import { bindingEdge } from '@web/pages/builder/binding';
 import { qrBadgeCornerOf, type QrCorner } from '@web/pages/builder/pageTemplates';
 import {
   countQrMemories, FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears, longVideoPricesOf, maxVideoSecondsOf,
-  PACK_OFFER_BODY, PACK_OFFER_NO, PACK_OFFER_YES, packOfferTitle, QR_PACK_OFFER, videoMinutesFor, videoStartsNewPack,
+  videoMinutesFor, videoOfferOf, videoOfferShort, videoPopupFor,
 } from '@web/lib/pricing';
 import { isMiniSize, MINI_FREE_QR, miniOfferOf } from '@web/lib/megyMini';
 import { Button } from '../../components/Button';
@@ -85,12 +85,15 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
   const maxSeconds = maxVideoSecondsOf(schedule ?? {});
   // The free videos: an album's FREE_QR_MEMORIES, a Megy Mini its own offer's.
   const free = isMiniSize(builder.albumSize) ? (miniOfferOf(schedule)?.free_qr ?? MINI_FREE_QR) : FREE_QR_MEMORIES;
-  // THE PACK OFFER (owner's design 2026-10-26, re-asked 2026-11-24): a new
-  // video that starts a paid pack is said before the picker, never found out
-  // at checkout. "Not now" closes; the yes goes on to pick the video.
+  // THE POP-UP (owner's design 2026-10-26, re-asked 2026-11-24; the
+  // Christmas sale drawn and approved the same day): when the next video is
+  // the moment it costs money (lib/pricing videoPopupFor), it is said before
+  // the picker, never found out at checkout. Both "Get" buttons go on to pick
+  // the video; "Not now" closes.
+  const videoOffer = videoOfferOf(schedule);
   const used = countQrMemories(builder.albumPages);
   const [packOk, setPackOk] = useState(false);
-  const packOffer = !editing && !packOk && videoStartsNewPack(used, free);
+  const popup = !editing && !packOk && schedule ? videoPopupFor(used, free, videoOffer) : null;
 
   // The quality: offered with the album's first memory, then locked.
   const [quality, setQuality] = useState<ClipQuality>('standard');
@@ -190,17 +193,26 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
     close();
   };
 
-  if (packOffer) {
+  if (popup) {
     return (
       <EditorSheet title={W.TITLE_ADD} onClose={close} testID="memory-sheet">
         <View style={styles.invite} testID="memory-pack-offer">
-          <Text style={styles.inviteTitle} testID="memory-pack-title">{packOfferTitle(used, free)}</Text>
-          <Text style={styles.small} testID="memory-pack-body">{PACK_OFFER_BODY}</Text>
+          {popup.tag && <Text style={styles.saleTag} testID="memory-pack-tag">{popup.tag.toUpperCase()}</Text>}
+          <Text style={styles.saleTitle} testID="memory-pack-title">{popup.title}</Text>
+          {popup.now !== null && (
+            <View style={styles.saleRow} testID="memory-pack-price">
+              {popup.was !== null && <Text style={styles.saleWas}>₱{popup.was}</Text>}
+              <Text style={styles.saleNow}>₱{popup.now}</Text>
+              {popup.pct !== null && <Text style={styles.saleOff}>{popup.pct}% off</Text>}
+            </View>
+          )}
+          <Text style={styles.small} testID="memory-pack-body">{popup.line}</Text>
         </View>
-        <View style={styles.foot}>
-          <Button label={PACK_OFFER_NO} kind="plain" onPress={close} testID="memory-pack-no" />
-          <Button label={PACK_OFFER_YES} onPress={() => setPackOk(true)} testID="memory-pack-yes" />
-        </View>
+        <Button label={popup.main} onPress={() => setPackOk(true)} testID="memory-pack-yes" style={styles.saleButton} />
+        {popup.second && <Button label={popup.second} kind="plain" onPress={() => setPackOk(true)} testID="memory-pack-single" style={styles.saleButton} />}
+        <Pressable accessibilityRole="button" onPress={close} testID="memory-pack-no" style={styles.saleNo}>
+          <Text style={styles.saleNoText}>{popup.no}</Text>
+        </Pressable>
       </EditorSheet>
     );
   }
@@ -211,7 +223,7 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
         <View style={styles.invite}>
           <Text style={styles.inviteTitle}>{W.INVITE}</Text>
           <Text style={styles.small}>{W.INVITE_BODY}</Text>
-          <Text style={styles.tiny} testID="memory-included">{W.included(free, QR_PACK_OFFER, includedYears)}</Text>
+          <Text style={styles.tiny} testID="memory-included">{W.included(free, videoOfferShort(videoOffer), includedYears)}</Text>
           {longPrices && <Text style={styles.tiny} testID="memory-longer-offer">{W.longerOffer(longPrices)}</Text>}
         </View>
       )}
@@ -305,6 +317,15 @@ const CORNER_POS: Record<QrCorner, object> = {
 const styles = StyleSheet.create({
   invite: { borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background, padding: space.md, gap: 4 },
   inviteTitle: { fontSize: 15, fontWeight: '800', color: colors.text },
+  saleTag: { alignSelf: 'flex-start', backgroundColor: colors.accent, color: '#fff', fontSize: 11, fontWeight: '800', letterSpacing: 0.5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, overflow: 'hidden' },
+  saleTitle: { fontSize: 19, fontWeight: '800', color: colors.text, marginTop: 4 },
+  saleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 2 },
+  saleWas: { fontSize: 15, color: colors.muted, textDecorationLine: 'line-through' },
+  saleNow: { fontSize: 26, fontWeight: '800', color: colors.accent },
+  saleOff: { fontSize: 13, fontWeight: '800', color: '#fff', backgroundColor: colors.good, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, overflow: 'hidden' },
+  saleButton: { marginTop: space.sm },
+  saleNo: { alignItems: 'center', paddingVertical: space.sm },
+  saleNoText: { fontSize: 15, fontWeight: '700', color: colors.muted },
   small: { fontSize: 13, lineHeight: 18, color: colors.muted },
   tiny: { fontSize: 12, lineHeight: 16, color: colors.muted },
   tinyCenter: { fontSize: 12, color: colors.muted, textAlign: 'center', marginTop: space.xs },
