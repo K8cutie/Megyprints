@@ -105,6 +105,16 @@ export class CoverDrawer {
           if (img) this.photo(canvas, img, step.rect);
           break;
         }
+        case 'qr': {
+          // printPipeline drawOrderTagQr: white, then black, on whole pixels.
+          const p = this.Skia.Paint();
+          p.setAntiAlias(true);
+          p.setColor(this.Skia.Color('#FFFFFF'));
+          canvas.drawRect(this.Skia.XYWHRect(step.box.x, step.box.y, step.box.w, step.box.h), p);
+          p.setColor(this.Skia.Color('#000000'));
+          for (const r of step.dark) canvas.drawRect(this.Skia.XYWHRect(r.x, r.y, r.w, r.h), p);
+          break;
+        }
       }
     }
   }

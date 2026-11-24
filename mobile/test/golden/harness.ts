@@ -143,6 +143,7 @@ export function coverNamed(name: string): Loaded & { c: GoldenCover; plan: Cover
   const plan = planCover({
     albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material,
     coverFront: c.coverFront, coverDesign: c.coverDesign, photoCount: G.set.photos.length, photoIds: photoIds(),
+    orderNumber: c.orderNumber,
   }, coverMeasure);
   return { ...webPictures(name, web), c, plan };
 }

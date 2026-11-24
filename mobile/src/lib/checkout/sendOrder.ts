@@ -10,7 +10,8 @@
      1. the order row, ONCE: Place order again reuses it (`placed`), so a
         retry never makes a second order;
      2. the cover file, made on the phone and sent first (the phone has the
-        most memory free then), tried 3 times, waiting 1.5 s then 4 s
+        most memory free then), the order's number and its QR code printed
+        on the back (so it is made only now the order exists), tried 3 times, waiting 1.5 s then 4 s
         (orders.ts COVER_RETRY_WAITS_MS);
      3. the pages file, made page by page (progress), then sent, tried 3
         times like the cover (the same file: it is not made again);
@@ -97,8 +98,9 @@ export const MEMORY_ROWS_FAILED = 'Could not save your memory videos to your acc
 export interface SendDeps {
   db: SendDb;
   upload: CreateOnlyUpload;
-  /** "<order>-cover.pdf", made on the phone. */
-  makeCover: () => Promise<Uint8Array>;
+  /** "<order>-cover.pdf", made on the phone, with the order's number on the
+   *  back (the order tag: its QR code opens the order). */
+  makeCover: (orderNumber: string) => Promise<Uint8Array>;
   /** "<order>.pdf", made page by page. */
   makePages: (onPage: (done: number, total: number, smaller: boolean) => void) => Promise<Uint8Array>;
   onStep?: (s: SendStep) => void;
@@ -201,7 +203,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
   for (const step of plan.steps) {
     if (step.kind === 'upload' && step.path === `${ORDER_ID}-cover.pdf`) {
       const path = named(step.path);
-      if (!deps.sent?.has(path)) { await sendCover(step, path, deps, onStep, wait); deps.sent?.add(path); }
+      if (!deps.sent?.has(path)) { await sendCover(step, path, order.order_number, deps, onStep, wait); deps.sent?.add(path); }
     } else if (step.kind === 'upload' && step.bucket === 'memory-clips') {
       // 2b. Every memory video, once (the plan lists one step per video).
       if (!videosSent) { replaced = (await sendVideos()).replaced; videosSent = true; }
@@ -262,14 +264,14 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
 }
 
 /** The cover: made, then sent, 3 tries; the website's words after the last. */
-async function sendCover(step: Extract<PlanStep, { kind: 'upload' }>, path: string, deps: SendDeps, onStep: (s: SendStep) => void, wait: (ms: number) => Promise<void>): Promise<void> {
+async function sendCover(step: Extract<PlanStep, { kind: 'upload' }>, path: string, orderNumber: string, deps: SendDeps, onStep: (s: SendStep) => void, wait: (ms: number) => Promise<void>): Promise<void> {
   onStep({ step: 'cover' });
   let bytes: Uint8Array | null = null;
   for (let attempt = 1; ; attempt++) {
     let sending = false;
     try {
       // Made again only if it wasn't made (a failed send keeps the file).
-      bytes = bytes ?? await deps.makeCover();
+      bytes = bytes ?? await deps.makeCover(orderNumber);
       sending = true;
       const error = await deps.upload(step.bucket, path, bytes, { contentType: step.contentType });
       if (error) throw new Error(`Cover file upload failed: ${error.message}`);
