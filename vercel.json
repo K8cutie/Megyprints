@@ -16,6 +16,7 @@
   "rewrites": [
     { "source": "/m/:code", "destination": "/api/m?code=:code" },
     { "source": "/o/:number", "destination": "/o.html" },
+    { "source": "/o/assets/:file", "destination": "/o.js" },
     { "source": "/((?!api/|m/|o/|o.html|o.js|.well-known/|delete-account.html|auth-native.html|auth-native.js).*)", "destination": "/index.html" }
   ],
   "headers": [
