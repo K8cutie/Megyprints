@@ -10,7 +10,9 @@ import { priceOf, type PriceSchedule } from '@web/lib/pricing';
 import { checkoutPrice } from '../src/lib/checkout/price';
 import { startsAt, startsAtLine } from '../src/lib/checkout/startsAt';
 
-const mockRpc: { answer: { data: unknown; error: unknown } | 'throw'; asked: string[] } = { answer: { data: null, error: null }, asked: [] };
+const mockRpc: { answer: { data: unknown; error: unknown } | 'throw'; launch: { data: unknown; error: unknown }; asked: string[] } = {
+  answer: { data: null, error: null }, launch: { data: null, error: null }, asked: [],
+};
 jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: () => {} }));
 jest.mock('../src/builder/BuilderProvider', () => {
   const builder = { albumTitle: 'Our trip', albumSize: '8x8', albumPages: [], coverFront: null, setAlbumTitle: () => {}, setAlbumSize: () => {} };
@@ -23,7 +25,7 @@ jest.mock('../src/lib/supabase', () => ({
     rpc: async (name: string) => {
       mockRpc.asked.push(name);
       if (mockRpc.answer === 'throw') throw new Error('Network request failed');
-      return mockRpc.answer;
+      return name === 'public_launch_price' ? mockRpc.launch : mockRpc.answer;
     },
   },
 }));
@@ -43,7 +45,12 @@ const LIVE = {
 } as unknown as PriceSchedule;
 const SIZES = ['6x6', '8x8', '6x4', '8x6', '6x8'] as const;
 
-beforeEach(() => { mockRpc.answer = { data: LIVE, error: null }; mockRpc.asked = []; });
+// A database before 0072 has no public_launch_price: no launch price.
+beforeEach(() => {
+  mockRpc.answer = { data: LIVE, error: null };
+  mockRpc.launch = { data: null, error: { message: 'Could not find the function public.public_launch_price' } };
+  mockRpc.asked = [];
+});
 
 describe('the number', () => {
   it.each(SIZES)("%s: checkout's own total for a 40-page soft-cover album, nothing added", (size) => {
@@ -80,7 +87,36 @@ describe('the size step', () => {
     }
     // The sizes the owner switched off aren't shown, so neither is their price.
     expect(screen.queryByTestId('size-price-8.5x11')).toBeNull();
-    expect(mockRpc.asked).toEqual(['public_price_schedule']);
+    expect([...mockRpc.asked].sort()).toEqual(['public_launch_price', 'public_price_schedule']);
+    // No launch price on this database: no launch line, nothing crossed out.
+    expect(screen.queryByTestId('size-launch')).toBeNull();
+    expect(screen.queryByTestId('size-regular-8x8')).toBeNull();
+  });
+
+  it('during the launch price: one line on top, and each size its regular price crossed out with its "% off"', async () => {
+    mockRpc.launch = { data: { pct: 40, until: '2099-12-31' }, error: null };
+    await render(<AlbumSize />);
+    expect(await screen.findByTestId('size-launch')).toHaveTextContent('Launch price: 40% off the album until December 31, 2099');
+    // The price paid doesn't change; the regular price is that price ÷ 0.6.
+    expect(screen.getByTestId('size-price-8x8')).toHaveTextContent('Starts at ₱1,288 for 40 pages, soft cover');
+    expect(screen.getByTestId('size-regular-8x8')).toHaveTextContent(/^Regular price ₱2,147\s+40% off$/);
+    for (const size of SIZES) {
+      const now = startsAt(LIVE, size)!;
+      expect(screen.getByTestId(`size-regular-${size}`)).toHaveTextContent(new RegExp(`^Regular price ₱${Math.round(now / 0.6).toLocaleString('en-US')}\\s+40% off$`));
+      // The owner, 2026-11-24: "show on the album pricing the % discount they're getting".
+      expect(screen.getByTestId(`size-off-${size}`)).toHaveTextContent('40% off');
+    }
+  });
+
+  it('a launch price that ended, or one that is not honest (over 90%), shows nothing', async () => {
+    for (const launch of [{ pct: 40, until: '2020-01-31' }, { pct: 95, until: '2099-12-31' }, { pct: 40.5, until: '2099-12-31' }]) {
+      mockRpc.launch = { data: launch, error: null };
+      const view = await render(<AlbumSize />);
+      expect(await screen.findByTestId('size-price-8x8')).toBeTruthy();
+      expect(screen.queryByTestId('size-launch')).toBeNull();
+      expect(screen.queryByTestId('size-regular-8x8')).toBeNull();
+      await view.unmount();
+    }
   });
 
   it('the list could not be read: no prices, never a guess; the sizes are still there to pick', async () => {
