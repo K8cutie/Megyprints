@@ -121,7 +121,8 @@ describe('the words around it', () => {
 });
 
 describe("the database's fee is this one (0073)", () => {
-  const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0073_video_singles_and_sale.sql'), 'utf8');
+  // Line endings as checked out (Windows may give \r\n).
+  const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0073_video_singles_and_sale.sql'), 'utf8').replace(/\r\n/g, '\n');
   it('order_quote charges video_memory_fee for albums (2 free) and the Mini (its own free)', () => {
     expect(sql).toContain('vf     := public.video_memory_fee(greatest(0, qr - 2), vo);');
     expect(sql).toContain('vf     := public.video_memory_fee(greatest(0, qr - free_qr), vo);');
