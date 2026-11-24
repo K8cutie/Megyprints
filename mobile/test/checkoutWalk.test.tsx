@@ -108,6 +108,13 @@ async function playBar() {
 }
 
 describe('the checkout screen, walked', () => {
+  it('in the Christmas sale (0073): what the free videos are worth, and how more are sold', async () => {
+    fake.rpc.public_video_offer = { data: { single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2099-12-31' } }, error: null };
+    await openScreen();
+    expect(screen.getByText('✓ 2 living-memory QRs (₱100 value)')).toBeOnTheScreen();
+    expect(screen.getByText(/Add more for ₱50 each, or 3 for ₱100 in the Christmas sale until December 31\./)).toBeOnTheScreen();
+  });
+
   it('shows the album, the live price, and the boxes, in the website\'s words', async () => {
     await openScreen();
     expect(screen.getByText('Finalize Your Order')).toBeOnTheScreen();

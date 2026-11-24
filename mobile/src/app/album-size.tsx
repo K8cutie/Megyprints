@@ -28,10 +28,10 @@ import { offerableSizes, pagesHoldPhotos, resizeMadeAlbum, saveStep, SIZE_LINE, 
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { colors, space } from '../lib/theme';
 import { useOncePerVisit } from '../lib/useOncePerVisit';
-import { launchLine, launchOf, launchOff, type PriceSchedule } from '@web/lib/pricing';
+import { FREE_QR_MEMORIES, includedVideosValue, launchLine, launchOf, launchOff, videoOfferOf, type PriceSchedule } from '@web/lib/pricing';
 import { startsAt, startsAtLine, startsAtRegular } from '../lib/checkout/startsAt';
 import { peso } from '../lib/checkout/price';
-import { loadLaunchPrice } from '../lib/checkout/priceSchedule';
+import { loadLaunchPrice, loadVideoOffer } from '../lib/checkout/priceSchedule';
 
 /** From the price list (public_price_schedule): the sizes the owner switched
  *  off, or none; the Megy Mini while it is on sale (0062), or null; and the
@@ -39,9 +39,11 @@ import { loadLaunchPrice } from '../lib/checkout/priceSchedule';
 async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null; schedule: PriceSchedule | null }> {
   if (!supabaseConfigured) return { off: [], mini: null, schedule: null };
   try {
-    const [{ data, error }, launch] = await Promise.all([supabase.rpc('public_price_schedule'), loadLaunchPrice(supabase)]);
+    const [{ data, error }, launch, video] = await Promise.all([supabase.rpc('public_price_schedule'), loadLaunchPrice(supabase), loadVideoOffer(supabase)]);
+    // The free videos' worth (0073) is only words here: an offer that didn't
+    // load just leaves the line out.
     const schedule = !error && data && typeof data === 'object'
-      ? ({ ...(data as object), launch } as { disabled_sizes?: unknown; mini?: unknown })
+      ? ({ ...(data as object), launch, video_offer: video.ok ? video.offer : null } as { disabled_sizes?: unknown; mini?: unknown })
       : null;
     const list = schedule?.disabled_sizes;
     return {
@@ -116,6 +118,9 @@ export default function AlbumSize() {
     router.push('/photos');
   });
 
+  // The free videos and what they are worth at the single price (0073): one line under each "Starts at".
+  const videosValue = prices ? includedVideosValue(FREE_QR_MEMORIES, videoOfferOf(prices)) : null;
+
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.body}>
@@ -142,6 +147,9 @@ export default function AlbumSize() {
                       Regular price <Text style={styles.regularWas}>{peso(regular)}</Text>
                       {launch && <Text style={styles.off} testID={`size-off-${s.preset}`}>{`  ${launchOff(launch)}`}</Text>}
                     </Text>
+                  )}
+                  {from !== null && videosValue !== null && (
+                    <Text style={styles.videos} testID={`size-videos-${s.preset}`}>{FREE_QR_MEMORIES} free videos ({peso(videosValue)} value)</Text>
                   )}
                 </View>
                 {resizing === s.preset ? <ActivityIndicator color={colors.accent} />
@@ -209,6 +217,7 @@ const styles = StyleSheet.create({
   regularWas: { textDecorationLine: 'line-through' },
   off: { fontSize: 13, fontWeight: '800', color: colors.good },
   launch: { fontSize: 15, lineHeight: 21, fontWeight: '700', color: colors.accent, backgroundColor: '#FFF5F0', borderRadius: 10, padding: space.sm },
+  videos: { fontSize: 13, fontWeight: '700', color: colors.good, marginTop: 1 },
   tick: { fontSize: 22, fontWeight: '800', color: colors.accent },
   line: { fontSize: 15, color: colors.text },
   said: { fontSize: 15, lineHeight: 21, color: colors.text, backgroundColor: '#FFF5F0', borderRadius: 10, padding: space.sm },

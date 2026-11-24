@@ -87,7 +87,7 @@ describe('the size step', () => {
     }
     // The sizes the owner switched off aren't shown, so neither is their price.
     expect(screen.queryByTestId('size-price-8.5x11')).toBeNull();
-    expect([...mockRpc.asked].sort()).toEqual(['public_launch_price', 'public_price_schedule']);
+    expect([...mockRpc.asked].sort()).toEqual(['public_launch_price', 'public_price_schedule', 'public_video_offer']);
     // No launch price on this database: no launch line, nothing crossed out.
     expect(screen.queryByTestId('size-launch')).toBeNull();
     expect(screen.queryByTestId('size-regular-8x8')).toBeNull();

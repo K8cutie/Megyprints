@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
-import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, launchLine, launchOff, QR_PACK_SENTENCE } from '@web/lib/pricing';
+import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, includedVideosValue, launchLine, launchOff, videoOfferOf, videoOfferSentence } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
@@ -150,6 +150,8 @@ export default function OrderScreen() {
     : fixture!), [ordersOwn, b, b?.albumPages, b?.coverFront, b?.albumTitle, ownRow, ownId, fixture]);
   const loadSchedule = useCallback(() => loadPriceSchedule(supabase, supabaseConfigured), []);
   const prices = usePriceSchedule(loadSchedule);
+  // How extra videos are sold (0073), and what the free ones are worth at the single price.
+  const videoOffer = videoOfferOf(prices.schedule);
 
   const [step, setStep] = useState<Step>('form');
   // The form as typed the last time checkout was open for this album
@@ -773,7 +775,7 @@ export default function OrderScreen() {
           {!mini && <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>}
           {mini
             ? <Text style={styles.small}>✓ {price.freeVideos} video memories</Text>
-            : <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs</Text>}
+            : <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs{includedVideosValue(FREE_QR_MEMORIES, videoOffer) ? ` (${peso(includedVideosValue(FREE_QR_MEMORIES, videoOffer) as number)} value)` : ''}</Text>}
           {price.includedYears !== null && <Text style={styles.small}>✓ {includedHostingLine(price.includedYears, price.effectiveYears)}</Text>}
         </View>
         {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
@@ -800,8 +802,8 @@ export default function OrderScreen() {
             {eventLink
               ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
               : mini
-                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. {QR_PACK_SENTENCE}</>
-                : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. {QR_PACK_SENTENCE}</>}
+                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. {videoOfferSentence(videoOffer)}</>
+                : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. {videoOfferSentence(videoOffer)}</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
         </View>

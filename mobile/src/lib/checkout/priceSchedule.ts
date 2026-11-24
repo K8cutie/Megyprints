@@ -9,7 +9,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 import type { RpcClient } from './rpcClient';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { parseLaunchPrice, type LaunchPrice, type PriceSchedule } from '@web/lib/pricing';
+import { parseLaunchPrice, parseVideoOffer, type LaunchPrice, type PriceSchedule, type VideoOffer } from '@web/lib/pricing';
 
 export const RETRY_FIRST_MS = 3000;
 export const RETRY_MAX_MS = 60_000;
@@ -26,14 +26,34 @@ export async function loadLaunchPrice(client: RpcClient): Promise<LaunchPrice | 
   }
 }
 
-/** One read of the schedule, with the launch price on it. Null when the
- *  schedule could not be read (never throws). */
+/** A database that doesn't have the function asked for, as opposed to one
+ *  that couldn't be reached. */
+export function isMissingFunction(e: { code?: string; message?: string } | null | undefined): boolean {
+  return !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function/i.test(e.message ?? ''));
+}
+
+/** How extra videos are sold (public_video_offer, 0073). It sets what videos
+ *  cost, so it is part of the prices: a failed read is a failed load (no
+ *  price, tried again); only a database before 0073 (no such function) means
+ *  the 0066 packs (video_offer null → videoOfferOf's legacy rule). */
+export async function loadVideoOffer(client: RpcClient): Promise<{ ok: true; offer: VideoOffer | null } | { ok: false }> {
+  try {
+    const { data, error } = await client.rpc('public_video_offer');
+    if (!error) return { ok: true, offer: parseVideoOffer(data) };
+    return isMissingFunction(error) ? { ok: true, offer: null } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** One read of the schedule, with the launch price and the video offer on
+ *  it. Null when it could not be read (never throws). */
 export async function loadPriceSchedule(client: RpcClient, configured: boolean): Promise<PriceSchedule | null> {
   if (!configured) return null;
   try {
-    const [{ data, error }, launch] = await Promise.all([client.rpc('public_price_schedule'), loadLaunchPrice(client)]);
-    if (error || !data || typeof data !== 'object') return null;
-    return { ...(data as PriceSchedule), launch };
+    const [{ data, error }, launch, video] = await Promise.all([client.rpc('public_price_schedule'), loadLaunchPrice(client), loadVideoOffer(client)]);
+    if (error || !data || typeof data !== 'object' || !video.ok) return null;
+    return { ...(data as PriceSchedule), launch, video_offer: video.offer };
   } catch {
     return null;
   }
