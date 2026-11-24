@@ -224,6 +224,7 @@ async function coverFile(c: FileContext, orderNumber: string | null): Promise<Ui
  *  the words in the pictures (generateAlbumPdf's rule). */
 async function interiorFile(
   c: FileContext, onPage: (done: number, total: number, smaller: boolean) => void, budgetBytes = PRINT_FILE_BUDGET_BYTES,
+  between: () => Promise<void> = breathe,
 ): Promise<{ bytes: Uint8Array; bakedWords: boolean }> {
   const { album } = c;
   const bindingIn = bindingInchesFor(c.order.cover);
@@ -238,7 +239,7 @@ async function interiorFile(
       anyWords = anyWords || pic.words.length > 0;
       await pdf.addPage(pic, wIn, hIn);
       onPage(i + 1, album.pages.length, bake);
-      await breathe();
+      await between();
     }
     return { bytes: await pdf.save(), anyWords };
   };
@@ -254,7 +255,13 @@ async function interiorFile(
  *  the pictures pages name go. */
 export function checkoutFiles(
   album: PrintAlbum, order: Pick<PrintOrderSpecs, 'cover' | 'material'>, open: OpenPhoto, tools: DrawTools,
-): { makeCover: (orderNumber: string) => Promise<Uint8Array>; makePages: (onPage: (done: number, total: number, smaller: boolean) => void) => Promise<Uint8Array>; dispose: () => void } {
+): {
+  makeCover: (orderNumber: string) => Promise<Uint8Array>;
+  /** `between` runs after each page (default: a breath); the pages made while
+   *  checkout is open wait there for the keyboard (lib/checkout/earlyPages.ts). */
+  makePages: (onPage: (done: number, total: number, smaller: boolean) => void, between?: () => Promise<void>) => Promise<Uint8Array>;
+  dispose: () => void;
+} {
   const c = fileContext(album, order, open, tools);
   return {
     makeCover: async (orderNumber) => {
@@ -262,7 +269,7 @@ export function checkoutFiles(
       if (!bytes) throw new Error('This album has no front cover page.');
       return bytes;
     },
-    makePages: async (onPage) => (await interiorFile(c, onPage)).bytes,
+    makePages: async (onPage, between) => (await interiorFile(c, onPage, PRINT_FILE_BUDGET_BYTES, between)).bytes,
     dispose: () => c.assets.dispose(),
   };
 }

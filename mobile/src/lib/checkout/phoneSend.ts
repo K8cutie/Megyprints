@@ -20,6 +20,8 @@ import type { PageText } from '../../render/pageText';
 import { checkoutFiles, NotDrawnError } from '../../print/printFiles';
 import { fontStore } from '../../editor/text/fonts/appFonts';
 import { ensureAlbumFonts } from '../../editor/text/fonts/fontStore';
+import { Keyboard } from 'react-native';
+import { earlyPagesKey, startEarlyPages, takeEarlyPages } from './earlyPages';
 import { siteFile } from '../../builder/siteFiles';
 import { phoneOpenPhoto } from '../../print/phonePhotos';
 import { supabase, supabaseUrl } from '../supabase';
@@ -51,6 +53,32 @@ const clips: ClipSender = {
 export const FONT_OFFLINE = 'A font in your album is not on this phone yet. Connect to the internet, then try again.';
 export const FONT_FAILED = 'A font in your album could not be downloaded just now. Wait a minute, then try again.';
 
+/** The album as the print-file code takes it. */
+const printAlbum = (a: CheckoutAlbum) => ({ albumSize: a.albumSize, pages: a.pages, photoCount: a.photoUris.length, photoIds: a.photoIds, coverFront: a.coverFront });
+
+/** Checkout is open: make the pages file now, while the customer fills in the
+ *  form (lib/checkout/earlyPages.ts says why and how it stays out of the way).
+ *  Place order (sendFromPhone) takes it if the album and cover type are still
+ *  the same. Never throws. */
+export function startEarlyPagesOnPhone(o: { album: CheckoutAlbum; cover: CoverType; material: MaterialType; text: PageText }): void {
+  try {
+    startEarlyPages(earlyPagesKey(o.album, o.cover), async (onPage, between) => {
+      await ensureAlbumFonts(fontStore, [...o.album.pages, o.album.coverFront]);
+      const drawer = new PageDrawer(Skia, o.text);
+      try {
+        const files = checkoutFiles(printAlbum(o.album), { cover: o.cover, material: o.material }, phoneOpenPhoto(Skia, o.album.photoUris), { Skia, drawer, text: o.text, files: siteFile });
+        try {
+          return await files.makePages(onPage, between);
+        } finally {
+          files.dispose();
+        }
+      } finally {
+        drawer.dispose();
+      }
+    }, { quiet: () => !Keyboard.isVisible() });
+  } catch { /* Place order makes them, as before */ }
+}
+
 /** Place order: the files made on this phone, the order sent. `placed`: the
  *  order a failed try already made (reused, never a second one). */
 export async function sendFromPhone(o: {
@@ -73,7 +101,7 @@ export async function sendFromPhone(o: {
   let files: ReturnType<typeof checkoutFiles>;
   try {
     files = checkoutFiles(
-      { albumSize: o.album.albumSize, pages: o.album.pages, photoCount: o.album.photoUris.length, photoIds: o.album.photoIds, coverFront: o.album.coverFront },
+      printAlbum(o.album),
       { cover: o.cover, material: o.material },
       phoneOpenPhoto(Skia, o.album.photoUris),
       { Skia, drawer, text: o.text, files: siteFile },
@@ -83,8 +111,21 @@ export async function sendFromPhone(o: {
     if (e instanceof NotDrawnError && !fonts.ok) throw new Error(fonts.reason === 'offline' ? FONT_OFFLINE : FONT_FAILED);
     throw e;
   }
+  // The pages made while checkout was open, if they are this album's; else
+  // (or if that work failed) made here, as before.
+  const early = takeEarlyPages(earlyPagesKey(o.album, o.cover));
+  const made = files;
+  const makePages: typeof made.makePages = early
+    ? async (onPage) => {
+      try {
+        return await early.wait(onPage);
+      } catch {
+        return made.makePages(onPage);
+      }
+    }
+    : made.makePages;
   try {
-    return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips, sent: o.sent }, o.placed);
+    return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages, onStep: o.onStep, onOrder: o.onOrder, clips, sent: o.sent }, o.placed);
   } finally {
     files.dispose();
     drawer.dispose();

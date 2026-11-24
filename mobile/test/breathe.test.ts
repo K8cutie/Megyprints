@@ -46,8 +46,14 @@ describe('the print files use it between pages', () => {
     for (const f of ['src/print/printFiles.ts', 'src/print/sheetRaster.ts']) {
       const src = read(f);
       expect(src).toContain("import { breathe } from '../lib/breathe';");
-      expect(src).toContain('await breathe();');
       expect(src).not.toMatch(/new Promise\(\(r\) => setTimeout\(r, 0\)\)/);
     }
+    // sheetRaster breathes between sheets; printFiles between pages, through
+    // a pause it can be handed (checkout's early pages wait for the keyboard
+    // there, lib/checkout/earlyPages.ts), which is the breath unless handed one.
+    expect(read('src/print/sheetRaster.ts')).toContain('await breathe();');
+    const files = read('src/print/printFiles.ts');
+    expect(files).toContain('between: () => Promise<void> = breathe,');
+    expect(files).toContain('await between();');
   });
 });
