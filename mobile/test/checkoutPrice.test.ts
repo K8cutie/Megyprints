@@ -48,6 +48,9 @@ const WITH_WAS = {
   },
 } as unknown as PriceSchedule;
 
+/** The same list in the Christmas sale (0073): ₱50 a video, any 3 for ₱100. */
+const WITH_SALE = { ...LIVE, video_offer: { single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2099-12-31' } } } as unknown as PriceSchedule;
+
 const TODAY = '2026-10-29';
 
 /* ── The website's own checkout arithmetic, cut out of Order.tsx ── */
@@ -110,7 +113,7 @@ describe("the phone's price is the website's, number for number", () => {
   let compared = 0;
   let withWas = 0;
 
-  it.each([['the live list', LIVE], ['a list with a "was" price', WITH_WAS]] as const)('%s', (_l, schedule) => {
+  it.each([['the live list', LIVE], ['a list with a "was" price', WITH_WAS], ['a list in the Christmas sale', WITH_SALE]] as const)('%s', (_l, schedule) => {
     for (const albumSize of sizes) for (const cover of covers) for (const pageCount of pageCounts) {
       for (const [qrCount, hostingYears, hdMemories] of memories) for (const [t, affiliate] of codes) {
         const input = { schedule, albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester: t, affiliate, today: TODAY };
