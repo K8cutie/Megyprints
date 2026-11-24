@@ -15,6 +15,7 @@ import type { AlbumBackground, AlbumPage, CoverDesign, TextStyle } from './types
 import type { CoverWrapGeometry, Rect, CoverPanel } from './coverGeometry';
 import { insetRect } from './coverGeometry';
 import { contrastOutline } from './wordArt';
+import { orderTagLayout, type OrderTag } from './orderTag';
 
 export interface PositionedText {
   style: TextStyle;
@@ -416,8 +417,11 @@ function perceivedLuminance(color: string): number {
 
 /** Derive the reserved back panel from the FRONT cover page: its solid colour
  *  (same rule as the spine) + a centred brand lockup (wordmark over tagline) in
- *  an ink that stays legible on light AND dark covers. Rects are wrap-px. */
-export function deriveBrandedBack(front: AlbumPage, g: CoverWrapGeometry): { bg: string; texts: PositionedText[] } {
+ *  an ink that stays legible on light AND dark covers. Rects are wrap-px.
+ *  With the order's number (the cover file, made once the order exists), the
+ *  order tag too (orderTag.ts): its QR code at the bottom of the panel, and
+ *  the number under it as the last of `texts`. */
+export function deriveBrandedBack(front: AlbumPage, g: CoverWrapGeometry, orderNumber?: string | null): { bg: string; texts: PositionedText[]; tag: OrderTag | null } {
   const bg = solidOf(front.background);
   const lightBg = perceivedLuminance(bg) > 0.55;
   const ink = lightBg ? 'rgba(45,45,45,0.66)' : 'rgba(255,251,247,0.92)';
@@ -433,8 +437,10 @@ export function deriveBrandedBack(front: AlbumPage, g: CoverWrapGeometry): { bg:
   const top = Math.round(panel.y + panel.height / 2 - (wordH + gap + subH) / 2);
 
   const base = { fontFamily: 'Cinzel, Georgia, serif', bold: false, italic: false, underline: false, alignment: 'center' as const };
+  const tag = orderTagLayout(g, orderNumber, ink);
   return {
     bg,
+    tag,
     texts: [
       {
         style: { ...base, text: BRAND_BACK_WORDMARK, fontSize: wordPx, color: ink },
@@ -448,6 +454,7 @@ export function deriveBrandedBack(front: AlbumPage, g: CoverWrapGeometry): { bg:
         rotateDeg: 0,
         valign: 'middle',
       },
+      ...(tag ? [tag.text] : []),
     ],
   };
 }

@@ -6,7 +6,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { BarChart3, Images, ClipboardList, CalendarHeart, LayoutGrid, Users, Calculator, Mail, ArrowLeft, LogOut, Loader2, TriangleAlert, BadgePercent, type LucideIcon } from 'lucide-react';
 import { useAuth } from '../lib/authContext';
 import { ADMIN_EMAILS } from '../lib/templateSettings';
@@ -15,6 +15,8 @@ import { fetchAllOrders, fetchOrdersCount, fetchUnsentOrders, ORDERS_PAGE_SIZE, 
 import { fetchOwnerBookings } from '../lib/adminBookings';
 import { needsOwner } from '../lib/eventBookings';
 import { supabase } from '../lib/supabase';
+import { scannedOrders } from '../lib/orderScan';
+import { isOrderNumber } from './builder/orderTag';
 import OverviewPanel from './admin/OverviewPanel';
 import OrdersPanel from './admin/OrdersPanel';
 import TemplatesPanel from './admin/TemplatesPanel';
@@ -51,6 +53,11 @@ export default function Admin() {
   /** Total orders on the server — the list shows a page of these. */
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  // Opened from an album's order tag (the QR on its back cover, /o/<number>):
+  // that one order, on the Orders tab.
+  const [params, setParams] = useSearchParams();
+  const scannedParam = (params.get('order') ?? '').toUpperCase();
+  const scanned = isOrderNumber(scannedParam) ? scannedParam : null;
 
   /** Append the next page. Kept explicit (a button, not infinite scroll) so an
    *  operator always knows whether they are looking at everything. */
@@ -83,10 +90,11 @@ export default function Admin() {
     void resolveRole(user?.email).then((r) => {
       if (!active) return;
       setRole(r);
-      setTab(r === 'owner' ? 'overview' : 'orders');
+      setTab(r === 'owner' && !scanned ? 'overview' : 'orders');
       setRoleLoading(false);
     });
     return () => { active = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the tab is chosen once, when the role is known
   }, [user?.email]);
 
   const loadOrders = useCallback(async () => {
@@ -138,6 +146,14 @@ export default function Admin() {
   }, []);
 
   useEffect(() => { if (role) void loadOrders(); }, [role, loadOrders]);
+
+  // A scanned order not on the page loaded yet: load the next page, until it
+  // is found or every order is loaded.
+  const scan = scannedOrders(orders, ordersTotal, scanned);
+  useEffect(() => {
+    if (scan.keepLooking && !ordersLoading && !loadingMore && !ordersErr) void loadMoreOrders();
+  }, [scan.keepLooking, ordersLoading, loadingMore, ordersErr, loadMoreOrders]);
+  const showAllOrders = () => setParams((p) => { p.delete('order'); return p; }, { replace: true });
 
   // How many bookings wait on the owner (a request to price, a payment to
   // match), on the Bookings tab. Re-read on every tab change, so acting in
@@ -214,9 +230,21 @@ export default function Admin() {
         {tab === 'overview' && isOwner && (ordersLoading ? <Spinner /> : <OverviewPanel orders={orders} />)}
         {tab === 'orders' && (ordersLoading ? <Spinner /> : (
           <>
-            <OrdersPanel orders={orders} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} coverReadyIds={coverReadyIds} unsent={unsent} />
+            {scanned && (
+              <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-line bg-white px-4 py-3 text-sm" data-testid="scanned-order">
+                <span className="text-dark">
+                  {scan.keepLooking ? <>Looking for order <b className="font-mono">{scanned}</b>…</>
+                    : scan.notFound ? <>No order <b className="font-mono">{scanned}</b> was found.</>
+                    : <>Scanned order <b className="font-mono">{scanned}</b></>}
+                </span>
+                <button onClick={showAllOrders} className="ml-auto text-[#C98A5E] underline">Show all orders</button>
+              </div>
+            )}
+            {scanned && !scan.shown.length ? null : (
+              <OrdersPanel orders={scan.shown} onChanged={loadOrders} canSeeFinancials={isOwner} printReadyIds={printReadyIds} coverReadyIds={coverReadyIds} unsent={unsent} />
+            )}
             {/* Never let the list imply it is showing everything. */}
-            {ordersTotal > orders.length && (
+            {!scanned && ordersTotal > orders.length && (
               <div className="mt-4 flex items-center justify-center gap-3 text-sm">
                 <span className="text-light">
                   Showing {orders.length} of {ordersTotal} orders
