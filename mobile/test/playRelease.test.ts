@@ -98,7 +98,7 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.5', () => {
+  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.7', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
     // 100 (2.0.0) was built 2026-11-03 but never uploaded; 101 (2.0.1) went to Alpha 2026-11-04;
@@ -126,8 +126,11 @@ describe('the Play build is the 1.x app, a newer version', () => {
     //             "i want starts at and affiliates to be part of 2.1.4"; "Yes, merge and build").
     // 115 (2.1.5) longer memory videos, up to 3 or 5 minutes once per album, and the upright
     //             screen declared not required (Play's 2.1.4 warning) (owner: "go").
-    expect(play.android.versionCode).toBe(115);
-    expect(play.version).toBe('2.1.5');
+    // 116 (2.1.6) a bold or italic the font has no file for (Shrikhand bold on a Mini cover) no
+    //             longer stops Place order; the album's fonts are got before the print files
+    //             (owner: "Leave what its a bug", then "go ahead", PR #319).
+    expect(play.android.versionCode).toBe(117);
+    expect(play.version).toBe('2.1.7');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {
