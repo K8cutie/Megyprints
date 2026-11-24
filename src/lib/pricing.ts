@@ -366,6 +366,34 @@ export const QR_PACK_OFFER = `${QR_PACK_SIZE} more for ₱${QR_PACK_PRICE}`;
 /** The same as a sentence, after "2 … included": "Add more in packs of 3 for ₱100." */
 export const QR_PACK_SENTENCE = `Add more in packs of ${QR_PACK_SIZE} for ₱${QR_PACK_PRICE}.`;
 
+/* ── THE PACK OFFER (owner's design 2026-10-26: "they click on the golden
+   button and a pop-up appears"; re-asked 2026-11-24 after a Mini took a 3rd
+   video with no word) ────────────────────────────────────────────────────
+   Adding a video when `used` are already on the album: does THIS one start a
+   new paid pack? Yes right after the free videos are used up, and again each
+   time a pack of QR_PACK_SIZE fills. Then the customer is told before they
+   pick: what it costs and that it is paid with the album at checkout. Between
+   those points the next video fits in a pack already counted: nothing to say. */
+export function videoStartsNewPack(used: number, free: number = FREE_QR_MEMORIES): boolean {
+  const u = Math.max(0, Math.floor(used));
+  const f = Math.max(0, Math.floor(free));
+  return u >= f && (u - f) % QR_PACK_SIZE === 0;
+}
+
+/** The pop-up's title: the free videos used up, or the extra ones. */
+export function packOfferTitle(used: number, free: number = FREE_QR_MEMORIES): string {
+  const extra = Math.max(0, Math.floor(used) - Math.floor(free));
+  return extra === 0
+    ? `You've used your ${free} free videos`
+    : `Your ${extra} extra videos are used`;
+}
+/** The pop-up's line under the title. */
+export const PACK_OFFER_BODY = `Add ${QR_PACK_SIZE} more video memories for ₱${QR_PACK_PRICE}. You pay it with your album at checkout.`;
+/** The pop-up's one filled button. */
+export const PACK_OFFER_YES = `Add ${QR_PACK_SIZE} more · ₱${QR_PACK_PRICE}`;
+/** The pop-up's way out. */
+export const PACK_OFFER_NO = 'Not now';
+
 /** Structural view of a page for counting — both QR homes: a QR slot on a
  *  photo layout (`qrFills`) and a QR in a combo/caption box (`textSlotQr`). */
 export interface QrCountablePage {

@@ -372,3 +372,59 @@ describe('longer videos (owner, 2026-11-20; 0067)', () => {
     expect(textOf()).toContain('That video is 170 seconds — memories are up to 2 minutes. Trim it to the best moment.');
   });
 });
+
+describe('the pack offer (owner\'s design 2026-10-26, re-asked 2026-11-24): a video that starts a paid pack is said first', () => {
+  /** Places one video memory on the next single-photo page, through the sheet. */
+  async function placeOne(platform: AppPlatform) {
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    expect(has('memory-pack-offer')).toBe(false);
+    mockPicks.push(video());
+    await press('memory-pick');
+    await press('memory-save');
+    await act(async () => { sheetRoot?.unmount(); });
+  }
+
+  it('the 2 free videos go in with no word; the 3rd tap says what it costs, and "Not now" closes', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await placeOne(platform);
+    await placeOne(platform);
+    await singlePhotoPage();
+    const log = await show(platform, { mode: 'add' });
+    expect(has('memory-pack-offer')).toBe(true);
+    expect(textOf()).toContain("You've used your 2 free videos");
+    expect(textOf()).toContain('Add 3 more video memories for ₱100. You pay it with your album at checkout.');
+    expect(textOf()).toContain('Add 3 more · ₱100');
+    // Nothing to pick until they say yes.
+    expect(has('memory-pick')).toBe(false);
+    await press('memory-pack-no');
+    expect(log.closed).toBe(1);
+  });
+
+  it('"Add 3 more · ₱100" goes on to pick the video; the 3rd memory is placed', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await placeOne(platform);
+    await placeOne(platform);
+    await singlePhotoPage();
+    await show(platform, { mode: 'add' });
+    await press('memory-pack-yes');
+    expect(has('memory-pack-offer')).toBe(false);
+    expect(has('memory-pick')).toBe(true);
+    mockPicks.push(video());
+    await press('memory-pick');
+    await press('memory-save');
+    const qrs = builder().albumPages.reduce((n, p) => n + (p.qrFills ?? []).filter(Boolean).length, 0);
+    expect(qrs).toBe(3);
+  });
+
+  it('changing a video already placed never asks', async () => {
+    const platform = await madeAlbum(SCENARIOS[0]);
+    await placeOne(platform);
+    await placeOne(platform);
+    const i = builder().albumPages.findIndex((p) => (p.qrFills ?? []).some(Boolean));
+    await act(async () => { builder().goToPage(i); });
+    await show(platform, { mode: 'slot', slot: builder().albumPages[i].qrFills!.findIndex(Boolean) });
+    expect(has('memory-pack-offer')).toBe(false);
+    expect(textOf()).toContain(W.TITLE_CHANGE);
+  });
+});

@@ -23,7 +23,11 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'rea
 import type { QrFill } from '@web/pages/builder/types';
 import { bindingEdge } from '@web/pages/builder/binding';
 import { qrBadgeCornerOf, type QrCorner } from '@web/pages/builder/pageTemplates';
-import { FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears, longVideoPricesOf, maxVideoSecondsOf, QR_PACK_OFFER, videoMinutesFor } from '@web/lib/pricing';
+import {
+  countQrMemories, FREE_QR_MEMORIES, hdMemoriesPriceOf, includedHostingYears, longVideoPricesOf, maxVideoSecondsOf,
+  PACK_OFFER_BODY, PACK_OFFER_NO, PACK_OFFER_YES, packOfferTitle, QR_PACK_OFFER, videoMinutesFor, videoStartsNewPack,
+} from '@web/lib/pricing';
+import { isMiniSize, MINI_FREE_QR, miniOfferOf } from '@web/lib/megyMini';
 import { Button } from '../../components/Button';
 import { loadPriceSchedule, usePriceSchedule } from '../../lib/checkout/priceSchedule';
 import { clipStore, currentClipQuality, setClipQuality } from '../../lib/memories/clipStore';
@@ -79,6 +83,14 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
   // Longer videos (0067): up to 5 minutes when the price list sells them.
   const longPrices = longVideoPricesOf(schedule ?? {});
   const maxSeconds = maxVideoSecondsOf(schedule ?? {});
+  // The free videos: an album's FREE_QR_MEMORIES, a Megy Mini its own offer's.
+  const free = isMiniSize(builder.albumSize) ? (miniOfferOf(schedule)?.free_qr ?? MINI_FREE_QR) : FREE_QR_MEMORIES;
+  // THE PACK OFFER (owner's design 2026-10-26, re-asked 2026-11-24): a new
+  // video that starts a paid pack is said before the picker, never found out
+  // at checkout. "Not now" closes; the yes goes on to pick the video.
+  const used = countQrMemories(builder.albumPages);
+  const [packOk, setPackOk] = useState(false);
+  const packOffer = !editing && !packOk && videoStartsNewPack(used, free);
 
   // The quality: offered with the album's first memory, then locked.
   const [quality, setQuality] = useState<ClipQuality>('standard');
@@ -178,13 +190,28 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
     close();
   };
 
+  if (packOffer) {
+    return (
+      <EditorSheet title={W.TITLE_ADD} onClose={close} testID="memory-sheet">
+        <View style={styles.invite} testID="memory-pack-offer">
+          <Text style={styles.inviteTitle} testID="memory-pack-title">{packOfferTitle(used, free)}</Text>
+          <Text style={styles.small} testID="memory-pack-body">{PACK_OFFER_BODY}</Text>
+        </View>
+        <View style={styles.foot}>
+          <Button label={PACK_OFFER_NO} kind="plain" onPress={close} testID="memory-pack-no" />
+          <Button label={PACK_OFFER_YES} onPress={() => setPackOk(true)} testID="memory-pack-yes" />
+        </View>
+      </EditorSheet>
+    );
+  }
+
   return (
     <EditorSheet title={editing ? W.TITLE_CHANGE : W.TITLE_ADD} onClose={close} testID="memory-sheet" scroll>
       {!editing && (
         <View style={styles.invite}>
           <Text style={styles.inviteTitle}>{W.INVITE}</Text>
           <Text style={styles.small}>{W.INVITE_BODY}</Text>
-          <Text style={styles.tiny} testID="memory-included">{W.included(FREE_QR_MEMORIES, QR_PACK_OFFER, includedYears)}</Text>
+          <Text style={styles.tiny} testID="memory-included">{W.included(free, QR_PACK_OFFER, includedYears)}</Text>
           {longPrices && <Text style={styles.tiny} testID="memory-longer-offer">{W.longerOffer(longPrices)}</Text>}
         </View>
       )}
