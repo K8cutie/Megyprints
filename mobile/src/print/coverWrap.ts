@@ -13,7 +13,8 @@
    The words go on top as see-through 300 DPI patches (wordPatches.ts, the
    website's own code), lifted the way the website lifts them:
      • each text of the wrap (the Megy Prints mark and megyprints.com on the
-       back, the spine's title) on its own, from the wrap with that text
+       back, the order number under the order tag's QR code, the spine's
+       title) on its own, from the wrap with that text
        drawn and without it, in the text's box and a margin round it
        (printPipeline liftWords);
      • the front cover page's words from the page drawn with and without
@@ -46,6 +47,9 @@ export interface CoverInput {
   photoCount: number;
   /** The album's photo ids, in order (a picture background names its photo by id). */
   photoIds?: readonly string[];
+  /** The order's number: printed on the back with a QR code that opens the
+   *  order (the order tag). Missing: no tag. */
+  orderNumber?: string | null;
 }
 
 export interface CoverTools {
@@ -66,6 +70,7 @@ export function coverPlanFor(input: CoverInput, text: PageText): CoverPlan {
   return planCover({
     albumSize: input.albumSize, pageCount: input.pageCount, cover: input.cover, material: input.material,
     coverFront: input.coverFront, photoCount: input.photoCount, photoIds: input.photoIds,
+    orderNumber: input.orderNumber,
   }, coverMeasure(text));
 }
 

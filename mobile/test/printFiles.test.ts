@@ -143,8 +143,9 @@ describe('the print files the app makes', () => {
     expect(doc.getPageCount()).toBe(1);
     expect(doc.getPage(0).getWidth()).toBeCloseTo(g.wrap.wIn * 72, 3);
     expect(doc.getPage(0).getHeight()).toBeCloseTo(g.wrap.hIn * 72, 3);
-    // "Megy Prints", "megyprints.com", the front title, the spine title.
-    expect(await seeThrough(made.coverPdf!)).toBe(4);
+    // "Megy Prints", "megyprints.com", the order number under its QR code
+    // (the order tag), the front title, the spine title.
+    expect(await seeThrough(made.coverPdf!)).toBe(5);
   });
 
   it('no file has a font in it (the shop’s printer refuses those)', async () => {

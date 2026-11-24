@@ -15,7 +15,8 @@
 
    Two kinds of cover, as on the website:
      • the cover page (every album and order today): the back's colour left
-       of the spine and the front's right, the back's lockup, the front page
+       of the spine and the front's right, the back's lockup (and, in an
+       order's cover file, the order tag: its QR code and number), the front page
        drawn into its panel and carried on past its trim, mirrored (top,
        bottom, outer edge), the spine's colour and its line turned up it;
      • the old cover form (drafts from before cover pages): each panel's
@@ -58,7 +59,10 @@ export type CoverStep =
    *  then carried on past its trim by `mirror` px each side (drawMirroredEdges). */
   | { kind: 'front'; plan: PagePlan; rect: Rect; mirror: Margins }
   /** The old form's panel photo: cover-fitted, centred, clipped to the panel. */
-  | { kind: 'photo'; image: ImageRef; rect: Rect };
+  | { kind: 'photo'; image: ImageRef; rect: Rect }
+  /** The order tag's QR code on the back (orderTag.ts): its white square,
+   *  then its dark squares, on whole pixels. Its number is a 'line'. */
+  | { kind: 'qr'; box: Rect; dark: Rect[] };
 
 export interface CoverPlan {
   albumSize: AlbumSizePreset;
@@ -96,6 +100,9 @@ export interface CoverInput {
   photoCount: number;
   /** The album's photo ids, in order (a picture background or a panel photo names its photo by id). */
   photoIds?: readonly string[];
+  /** The order's number: printed on the back with a QR code that opens the
+   *  order (deriveBrandedBack's order tag). Missing: no tag (a preview). */
+  orderNumber?: string | null;
 }
 
 const rect = (r: WrapRect): Rect => ({ x: r.x, y: r.y, w: r.width, h: r.height });
@@ -136,11 +143,13 @@ export function planCover(input: CoverInput, measure: CoverMeasure): CoverPlan {
 
   if (coverFront) {
     const spine = deriveSpine(coverFront, g, measure);
-    const branded = deriveBrandedBack(coverFront, g);
+    const branded = deriveBrandedBack(coverFront, g, input.orderNumber);
     const frontBg = solidOf(coverFront.background);
     const splitX = g.foldXPx[0];
     steps.push({ kind: 'fill', rect: { x: 0, y: 0, w: splitX, h: H }, color: branded.bg });
     steps.push({ kind: 'fill', rect: { x: splitX, y: 0, w: W - splitX, h: H }, color: frontBg });
+    // The order tag's code, before the words (printPipeline drawOrderTagQr).
+    if (branded.tag) steps.push({ kind: 'qr', box: rect(branded.tag.qrBox), dark: branded.tag.dark.map(rect) });
     for (const t of branded.texts) words(t);
     const plan = planPage({ page: coverFront, albumSize, pageIndex: 0, photoCount, photoIds, coverMode: true });
     plan.assets.forEach((a) => assets.add(a));

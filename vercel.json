@@ -15,7 +15,8 @@
   },
   "rewrites": [
     { "source": "/m/:code", "destination": "/api/m?code=:code" },
-    { "source": "/((?!api/|m/|.well-known/|delete-account.html|auth-native.html|auth-native.js).*)", "destination": "/index.html" }
+    { "source": "/o/:number", "destination": "/o.html" },
+    { "source": "/((?!api/|m/|o/|o.html|o.js|.well-known/|delete-account.html|auth-native.html|auth-native.js).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

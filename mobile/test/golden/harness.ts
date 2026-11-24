@@ -36,7 +36,7 @@ export interface WebCase { name: string; file: string; bare: string | null; widt
 export interface WebTile { name: string; color: string | null; px: number; file: string }
 export interface Manifest { fingerprint: Fingerprint; chromium: string; photos: { file: string }[]; assets: { url: string; file: string }[]; cases: WebCase[]; covers: WebCase[]; tiles: WebTile[] }
 export interface GoldenCase { name: string; albumSize: AlbumSizePreset; pageIndex: number; kind: 'photos' | 'text'; checks: string; page: AlbumPage }
-export interface GoldenCover { name: string; albumSize: AlbumSizePreset; pageCount: number; cover: CoverType; material: MaterialType; checks: string; coverFront?: AlbumPage; coverDesign?: CoverDesign }
+export interface GoldenCover { name: string; albumSize: AlbumSizePreset; pageCount: number; cover: CoverType; material: MaterialType; checks: string; coverFront?: AlbumPage; coverDesign?: CoverDesign; orderNumber?: string }
 export interface GoldenSet { photos: { id: string; image: number; width: number; height: number }[]; cases: GoldenCase[]; covers: GoldenCover[] }
 
 export const WEB = path.join(REPO_ROOT, 'tools', 'golden', 'web');
@@ -143,6 +143,7 @@ export function coverNamed(name: string): Loaded & { c: GoldenCover; plan: Cover
   const plan = planCover({
     albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material,
     coverFront: c.coverFront, coverDesign: c.coverDesign, photoCount: G.set.photos.length, photoIds: photoIds(),
+    orderNumber: c.orderNumber,
   }, coverMeasure);
   return { ...webPictures(name, web), c, plan };
 }

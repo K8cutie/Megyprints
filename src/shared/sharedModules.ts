@@ -127,6 +127,7 @@ export const SHARED_MODULES = [
   'src/pages/builder/miniSpread.ts',
   'src/pages/builder/miniTemplates.ts',
   'src/pages/builder/orderReadiness.ts',
+  'src/pages/builder/orderTag.ts',
   'src/pages/builder/ornamentFit.ts',
   'src/pages/builder/pageColors.ts',
   'src/pages/builder/pageNormalize.ts',
@@ -185,8 +186,13 @@ export const SHARED_MODULES = [
  *    canvas; pako and its own PNG reader inside). The console lays the
  *    print files out on press sheets with it (printSheetPdf.ts), and the
  *    2.0 app makes the same sheets on the phone with the same file (Phase 5).
- *    The app's package.json pins the website's exact version. */
-export const SHARED_NPM_PACKAGES = ['react', 'pdf-lib'] as const;
+ *    The app's package.json pins the website's exact version.
+ *  - qrcode: plain JavaScript that works out a QR code's squares
+ *    (QRCode.create; no canvas). The back cover's order tag (orderTag.ts)
+ *    is drawn from those squares by the website's print canvas and the
+ *    app's Skia alike. Both package.json files are on 1.5.4 (the app's
+ *    memory QR picture, lib/memories/qrPicture.ts, already uses it). */
+export const SHARED_NPM_PACKAGES = ['react', 'pdf-lib', 'qrcode'] as const;
 
 /** npm packages a shared file may import TYPES from (`import type`), and
  *  nothing else. A type import is erased when the code is built, so nothing

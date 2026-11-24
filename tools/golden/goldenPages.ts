@@ -73,6 +73,8 @@ export interface GoldenCover {
   /** The front cover page; without it the old cover form (coverDesign) prints. */
   coverFront?: AlbumPage;
   coverDesign?: CoverDesign;
+  /** The order's number: the order tag (its QR code and the number) on the back. */
+  orderNumber?: string;
 }
 
 export interface GoldenSet {
@@ -691,6 +693,25 @@ export function buildGoldenSet(): GoldenSet {
           blurb: { text: 'Made with love for the people in these pages', fontSize: 55, fontFamily: DM_SANS, color: '#2D2D2D', bold: false, italic: false, underline: false, alignment: 'center' },
         },
       } as CoverDesign,
+    },
+    // The order tag (owner, 2026-11-24): the order's number and a QR code that
+    // opens it, at the bottom of the back. websiteSame.mjs skips these: print
+    // code from before draws no tag.
+    {
+      name: 'cover-order-tag-a5-soft-dark', albumSize: '5.8x8.3', pageCount: 120, cover: 'softcover', material: 'matte', orderNumber: 'MP-2026-9M5572U',
+      checks: 'the order tag on a navy A5 softcover: the white QR square with its black squares on whole pixels, and the order number in light ink, under the back lockup',
+      coverFront: coverPage('5.8x8.3', 'cover-plain', {
+        background: { type: 'solid', solid: '#1F3A5F' },
+        textElements: [title('Class of 2027', { color: '#FFFBF7', fontSize: 34 })],
+      }),
+    },
+    {
+      name: 'cover-order-tag-88-hard-light', albumSize: '8x8', pageCount: 60, cover: 'hardboundLeather', material: 'matte', orderNumber: 'MP-2026-KGCFSQN',
+      checks: 'the order tag on a cream 8x8 hardcover: the QR code and the order number in dark ink, inside the safe area above the turn-in',
+      coverFront: coverPage('8x8', 'cover-plain', {
+        background: { type: 'solid', solid: '#F4EDE4' },
+        textElements: [title('Lola Nena at 80', { color: '#2D2D2D' })],
+      }),
     },
   ];
 

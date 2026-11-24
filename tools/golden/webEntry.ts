@@ -36,6 +36,8 @@ interface RenderIn { page: AlbumPage; albumSize: AlbumSizePreset; pageIndex: num
 interface CoverIn {
   albumSize: AlbumSizePreset; pageCount: number; cover: CoverType; material: MaterialType;
   coverFront?: AlbumPage; coverDesign?: CoverDesign; photos: PhotoIn[];
+  /** The order tag on the back (orderTag.ts). */
+  orderNumber?: string;
 }
 
 const toBase64 = (bytes: Uint8Array): string => {
@@ -177,6 +179,7 @@ const api = {
       const { result, lines } = await recordingWords(() => renderCoverWrapForPrint({
         albumSize: input.albumSize, pageCount: input.pageCount, cover: input.cover, material: input.material,
         coverDesign: input.coverDesign ?? DEFAULT_COVER_DESIGN, coverFront: input.coverFront, photos: photosOf(input.photos),
+        orderNumber: input.orderNumber,
       }));
       if (bare == null) throw new Error(`the ${W}x${H} wrap was never handed to toBlob (scaled down? MAX_COVER_SIDE)`);
       const patches = result.words.map((w) => ({ png: toBase64(w.png), x: Math.round(w.x * W), y: Math.round(w.y * H), w: Math.round(w.w * W), h: Math.round(w.h * H) }));

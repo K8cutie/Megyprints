@@ -202,13 +202,14 @@ function drawnOn<T>(page: string, draw: (onMissing: (src: string) => void) => T)
   return out;
 }
 
-/** "<order>-cover.pdf", or null with no front cover page. */
-async function coverFile(c: FileContext): Promise<Uint8Array | null> {
+/** "<order>-cover.pdf", or null with no front cover page. `orderNumber`:
+ *  printed on the back with its QR code (the order tag). */
+async function coverFile(c: FileContext, orderNumber: string | null): Promise<Uint8Array | null> {
   const { album, order, tools } = c;
   if (!album.coverFront) return null;
   const input: CoverInput = {
     albumSize: album.albumSize, pageCount: album.pages.length, cover: order.cover, material: order.material,
-    coverFront: album.coverFront, photoCount: album.photoCount, photoIds: album.photoIds,
+    coverFront: album.coverFront, photoCount: album.photoCount, photoIds: album.photoIds, orderNumber,
   };
   const plan = coverPlanFor(input, tools.text);
   return withPhotos(coverPhotos(plan), c.open, 'the cover', async (photos) => {
@@ -253,11 +254,11 @@ async function interiorFile(
  *  the pictures pages name go. */
 export function checkoutFiles(
   album: PrintAlbum, order: Pick<PrintOrderSpecs, 'cover' | 'material'>, open: OpenPhoto, tools: DrawTools,
-): { makeCover: () => Promise<Uint8Array>; makePages: (onPage: (done: number, total: number, smaller: boolean) => void) => Promise<Uint8Array>; dispose: () => void } {
+): { makeCover: (orderNumber: string) => Promise<Uint8Array>; makePages: (onPage: (done: number, total: number, smaller: boolean) => void) => Promise<Uint8Array>; dispose: () => void } {
   const c = fileContext(album, order, open, tools);
   return {
-    makeCover: async () => {
-      const bytes = await coverFile(c);
+    makeCover: async (orderNumber) => {
+      const bytes = await coverFile(c, orderNumber);
       if (!bytes) throw new Error('This album has no front cover page.');
       return bytes;
     },
@@ -281,7 +282,7 @@ export async function makePrintFiles(
 
     // 1. The cover first, as at checkout: while the phone has the most memory free.
     onStep({ step: 'cover' });
-    const coverPdf = await coverFile(c);
+    const coverPdf = await coverFile(c, order.orderNumber);
     const coverMissing: string | null = coverPdf ? null : 'This album has no front cover page.';
     const tCover = Date.now();
 
