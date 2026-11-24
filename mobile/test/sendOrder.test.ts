@@ -168,6 +168,15 @@ describe('a retry, and files already sent', () => {
     expect(asked[0]).toEqual({ bucket: 'print-pdfs', path: 'o-cover.pdf', bytes: 3, opts: { contentType: 'application/pdf', upsert: false } });
   });
 
+  it("the cover is made with the order's number, printed on the back with its QR code (the order tag)", async () => {
+    const numbers: string[] = [];
+    await sendOrder(placeOrderPlan(input()), deps({ makeCover: async (n) => { numbers.push(n); return COVER; } }));
+    // Finish sending / Place order again: the order already made, its own number.
+    await sendOrder(placeOrderPlan(input()), deps({ makeCover: async (n) => { numbers.push(n); return COVER; } }),
+      { id: 'order-2', order_number: 'MP-2026-9M5572U', status: 'pending_payment' });
+    expect(numbers).toEqual(['MP-2026-TEST01', 'MP-2026-9M5572U']);
+  });
+
   it('Place order again reuses the order: no second order row', async () => {
     const plan = placeOrderPlan(input());
     const placed: PlacedOrder = { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' };

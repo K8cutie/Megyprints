@@ -8,7 +8,7 @@
 export const DESIGN_YOUR_COVER = 'Design your cover';
 export const ONE_PHOTO = 'Pick 1 photo for the front cover';
 /** CoverEditor.tsx: the line under the cover (the back is Megy's). */
-export const BACK_NOTE = 'The back cover carries the Megy Prints mark in your cover colour.';
+export const BACK_NOTE = 'The back cover carries the Megy Prints mark in your cover colour. At the bottom we print your order number and a small QR code, so we can keep track of your album.';
 /** BuilderPreview.tsx: the caption under the closed book. */
 export const FRONT_COVER = 'Front cover';
 

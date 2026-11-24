@@ -212,7 +212,7 @@ async function main() {
     const t0 = Date.now();
     const r = await page.evaluate((input) => globalThis.golden.renderCover(input), {
       albumSize: c.albumSize, pageCount: c.pageCount, cover: c.cover, material: c.material,
-      coverFront: c.coverFront, coverDesign: c.coverDesign, photos: set.photos,
+      coverFront: c.coverFront, coverDesign: c.coverDesign, photos: set.photos, orderNumber: c.orderNumber,
     });
     const bareBytes = Buffer.from(r.bare.slice(r.bare.indexOf(',') + 1), 'base64');
     const full = PNG.sync.read(bareBytes);
