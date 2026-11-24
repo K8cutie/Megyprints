@@ -7,6 +7,7 @@ import { initSentry } from './lib/sentry'
 import { reportError } from './lib/report'
 import { bootTheme } from './lib/theme'
 import { installNativeAuth } from './lib/nativeAuth'
+import { orderScanHash } from './lib/orderScan'
 
 // Initialize Sentry before anything renders. No-op unless VITE_SENTRY_DSN is set.
 initSentry()
@@ -24,6 +25,11 @@ window.addEventListener('error', (e) => {
 })
 
 installNativeAuth()
+
+// A scanned order tag (the QR on an album's back cover) opens /o/<number>;
+// this HashRouter site shows that page at #/o/<number>.
+const scannedOrder = orderScanHash(window.location.pathname, window.location.hash)
+if (scannedOrder) window.history.replaceState(null, '', scannedOrder)
 
 createRoot(document.getElementById('root')!).render(
   <ErrorBoundary>
