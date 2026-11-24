@@ -106,6 +106,26 @@ describe('free shipping and the real was price at checkout', () => {
     expect(host.querySelector('[data-testid="order-shipping"]')?.textContent).toBe('Free');
   });
 
+  it('during the launch price: "40% off" beside the total, the regular price crossed out, the launch line under it', async () => {
+    const s = schedule({ free_shipping_value: 200, compare_at: compareAt('2099-12-31'), launch: { pct: 40, until: '2099-12-31' } });
+    h.schedule = s;
+    await render(); await settle();
+    const now = peso('[data-testid="order-total"]');
+    expect(now).toBe(priceOf(s, '8x8', 'hard', 41));
+    // The owner, 2026-11-24: "show on the album pricing the % discount they're getting".
+    expect(host.querySelector('[data-testid="order-launch-off"]')?.textContent).toBe('40% off');
+    // The crossed-out number is the regular price (now ÷ 0.6), not the old was price.
+    expect(peso('[data-testid="order-was"]')).toBe(Math.round(now / 0.6));
+    expect(host.querySelector('[data-testid="order-savings"]')?.textContent).toBe('Launch price: 40% off the album until December 31, 2099');
+  });
+
+  it('no launch price: no "% off" tag', async () => {
+    h.schedule = schedule({ free_shipping_value: 200, compare_at: compareAt('2099-12-31') });
+    await render(); await settle();
+    expect(host.querySelector('[data-testid="order-launch-off"]')).toBeNull();
+    expect(host.querySelector('[data-testid="order-launch-off-summary"]')).toBeNull();
+  });
+
   it('a schedule from before 0041 claims no shipping value and no was price', async () => {
     h.schedule = schedule({});
     await render(); await settle();

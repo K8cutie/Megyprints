@@ -14,7 +14,7 @@ import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, Albu
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, priceOf, crossedOutPrintOf, launchOf, launchLine, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, QR_PACK_SENTENCE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, priceOf, crossedOutPrintOf, launchOf, launchLine, launchOff, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, QR_PACK_SENTENCE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -1068,6 +1068,7 @@ export default function Order() {
               <div className="flex justify-between items-baseline pt-1 border-t border-line-soft">
                 <span className="font-semibold text-dark">Total</span>
                 <span className="text-right">
+                  {wasTotal !== null && launch && <span className="mr-2 text-sm font-bold text-success" data-testid="order-launch-off-summary">{launchOff(launch)}</span>}
                   {wasTotal !== null && <s className="mr-2 text-sm font-medium text-light">₱{wasTotal.toLocaleString('en-PH')}</s>}
                   <span className="font-display text-2xl font-bold text-blush-pink">₱{totalPrice.toLocaleString('en-PH')}</span>
                 </span>
@@ -1291,6 +1292,9 @@ export default function Order() {
                     <span className="text-right">
                       {!eventLink && priceReady && (tester || affiliate) && (
                         <s className="mr-2 text-sm font-medium text-light" data-testid="order-real-price">₱{totalPrice.toLocaleString('en-PH')}</s>
+                      )}
+                      {!eventLink && priceReady && !tester && !affiliate && wasTotal !== null && launch && (
+                        <span className="mr-2 text-sm font-bold text-success" data-testid="order-launch-off">{launchOff(launch)}</span>
                       )}
                       {!eventLink && priceReady && !tester && !affiliate && wasTotal !== null && (
                         <s className="mr-2 text-sm font-medium text-light" data-testid="order-was">₱{wasTotal.toLocaleString('en-PH')}</s>
