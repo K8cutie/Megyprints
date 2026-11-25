@@ -121,11 +121,14 @@ describe('the Return and Refund Policy page', () => {
 
   it('what is refunded, what is printed again, and what is not', async () => {
     await page(createElement(Refund));
-    expect(sectionText('Before we print')).toContain('An unpaid order: cancel it yourself in Your orders. You pay nothing.');
-    expect(sectionText('Before we print')).toContain("If we haven't started printing it, we refund the full amount.");
+    expect(sectionText('Cancelling an order')).toContain('An unpaid order: cancel it yourself in Your orders. You pay nothing.');
+    // Owner, 2026-11-25: no change-of-mind refund once paid ("There is no
+    // change of mind law in PH"; "it will kill us").
+    expect(sectionText('Cancelling an order')).toContain("A paid order: we can't cancel it or refund it because you changed your mind.");
+    expect(text(host)).not.toMatch(/refund the full amount|haven't started printing/);
     expect(sectionText('If something is wrong with your album')).toContain('We print it again for free, and send it to you for free, when:');
     expect(text(q('refund-when-refund'))).toBe("If we can't print it again, or the new album is wrong too, we refund what you paid for that album.");
-    expect(sectionText("What we can't refund")).toContain('A change of mind after printing has started.');
+    expect(sectionText("What we can't refund")).toContain('A change of mind, once you have paid.');
     expect(sectionText('How to ask')).toContain(`within ${REPORT_DAYS} days after your album arrives`);
     expect(text(q('refund-how-paid'))).toContain(`within ${REFUND_WORKING_DAYS} working days`);
     expect(sectionText('Your rights by law')).toContain('Consumer Act of the Philippines (Republic Act 7394)');
@@ -183,7 +186,7 @@ describe('the Contact page', () => {
     await page(createElement(Contact));
     const faq = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('refund policy'))!;
     await act(async () => { faq.click(); });
-    expect(text(host)).toContain("Albums are made to order, so we can't refund a change of mind once printing has started.");
+    expect(text(host)).toContain("Albums are made to order, so we can't cancel or refund a paid order because you changed your mind.");
     expect(text(host)).toContain('If your album arrives damaged or wrong, we print it again for free.');
     expect(text(host)).not.toContain("we don't offer refunds");
   });
