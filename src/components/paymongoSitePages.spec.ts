@@ -31,7 +31,7 @@ import Refund from '../pages/Refund';
 import Terms from '../pages/Terms';
 import Privacy from '../pages/Privacy';
 import { BRAND_OF_LINE, BUSINESS_ADDRESS, COURTS_CITY } from '../lib/business';
-import { REFUND_POLICY, REFUND_WORKING_DAYS, REPORT_DAYS } from '../lib/legalPages';
+import { FAULT_REPORT_DAYS, FIX_DAYS, REFUND_POLICY, REFUND_WORKING_DAYS } from '../lib/legalPages';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let host: HTMLDivElement;
@@ -125,13 +125,52 @@ describe('the Return and Refund Policy page', () => {
     // Owner, 2026-11-25: no change-of-mind refund once paid ("There is no
     // change of mind law in PH"; "it will kill us").
     expect(sectionText('Cancelling an order')).toContain("A paid order: we can't cancel it or refund it because you changed your mind.");
-    expect(text(host)).not.toMatch(/refund the full amount|haven't started printing/);
-    expect(sectionText('If something is wrong with your album')).toContain('We print it again for free, and send it to you for free, when:');
-    expect(text(q('refund-when-refund'))).toBe("If we can't print it again, or the new album is wrong too, we refund what you paid for that album.");
+    expect(text(host)).not.toMatch(/haven't started printing/);
     expect(sectionText("What we can't refund")).toContain('A change of mind, once you have paid.');
-    expect(sectionText('How to ask')).toContain(`within ${REPORT_DAYS} days after your album arrives`);
-    expect(text(q('refund-how-paid'))).toContain(`within ${REFUND_WORKING_DAYS} working days`);
     expect(sectionText('Your rights by law')).toContain('Consumer Act of the Philippines (Republic Act 7394)');
+  });
+
+  /* The cases Philippine law makes a must (checked 2026-11-25; the comment
+     above REFUND_POLICY in src/lib/legalPages.ts lists the articles). */
+  it('a fault: a new album within 30 days; if not, the BUYER chooses (RA 7394 Art. 100)', async () => {
+    await page(createElement(Refund));
+    expect(FIX_DAYS).toBe(30);
+    const wrong = sectionText('If something is wrong with your album');
+    expect(wrong).toContain('We print you a new album for free, and send it to you for free, when:');
+    expect(wrong).toContain("or someone else's album");
+    expect(wrong).toContain('it comes apart with normal use');
+    expect(text(q('refund-fix-days'))).toBe('We send the new album within 30 days after you tell us.');
+    expect(text(q('refund-when-refund'))).toBe("If we can't, or the new album is wrong too, you choose: another new album, your money back, or a lower price.");
+  });
+
+  it('faults are covered 60 days, never fewer (Art. 68(e); a shorter limit has no effect)', async () => {
+    await page(createElement(Refund));
+    expect(FAULT_REPORT_DAYS).toBeGreaterThanOrEqual(60);
+    expect(sectionText('How to tell us')).toContain(`within ${FAULT_REPORT_DAYS} days after your album arrives.`);
+    expect(text(host)).not.toMatch(/within 7 days/);
+  });
+
+  it('photos are asked for, never required (DTI: "no video, no refund" is illegal)', async () => {
+    await page(createElement(Refund));
+    expect(sectionText('How to tell us')).toContain('Photos help us fix it faster, but they are not required.');
+    await page(createElement(Terms));
+    expect(sectionText('If something is wrong')).not.toMatch(/photos/);
+  });
+
+  it('a return costs the buyer nothing (RA 11967); a refund is everything paid, shipping included', async () => {
+    await page(createElement(Refund));
+    expect(text(q('refund-send-back'))).toContain("You don't need to send the album back unless we ask. If we ask, we pay for the shipping.");
+    expect(text(q('refund-how-paid'))).toContain('A refund for an album is everything you paid for it, shipping included.');
+    expect(text(q('refund-how-paid'))).toContain(`within ${REFUND_WORKING_DAYS} working days`);
+  });
+
+  it('not delivered, cancelled by us, paid too much, the QR video stopped early: the money goes back', async () => {
+    await page(createElement(Refund));
+    const refunds = sectionText('When we refund you');
+    expect(refunds).toContain('Your album never arrives (for example, it is lost in delivery): we refund you in full');
+    expect(refunds).toContain('We cancel your paid order');
+    expect(refunds).toContain('You paid more than your order total: we send back the extra.');
+    expect(refunds).toContain("we refund the video years you didn't get.");
   });
 
   it('every link goes somewhere real', async () => {
@@ -145,7 +184,7 @@ describe('the Terms', () => {
   it('say who sells, and link the refund policy', async () => {
     await page(createElement(Terms));
     expect(text(q('terms-who-sells'))).toContain('Megyprints is a brand of Bridgemedia, a business registered in the Philippines');
-    expect(sectionText('If something is wrong')).toContain("We print it again for free, or refund you if we can't.");
+    expect(sectionText('If something is wrong')).toContain("We print you a new album for free. If we can't, you can choose your money back.");
     expect(hrefs()).toContain('/refund');
     expect(sectionText('Ordering and paying')).toContain('Prices are in Philippine pesos.');
   });
@@ -187,7 +226,7 @@ describe('the Contact page', () => {
     const faq = [...host.querySelectorAll('button')].find((b) => b.textContent?.includes('refund policy'))!;
     await act(async () => { faq.click(); });
     expect(text(host)).toContain("Albums are made to order, so we can't cancel or refund a paid order because you changed your mind.");
-    expect(text(host)).toContain('If your album arrives damaged or wrong, we print it again for free.');
+    expect(text(host)).toContain("If your album arrives damaged or wrong, we print a new one for free. If we can't, you can choose your money back.");
     expect(text(host)).not.toContain("we don't offer refunds");
   });
 });
