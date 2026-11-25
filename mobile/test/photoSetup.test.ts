@@ -13,10 +13,14 @@ const appJson = JSON.parse(readFileSync(path.join(root, 'app.json'), 'utf8')) as
 describe('photo access set-up', () => {
   const mediaPlugin = appJson.expo.plugins.find((p) => Array.isArray(p) && p[0] === 'expo-media-library') as [string, Record<string, unknown>] | undefined;
 
-  it('asks for photos only: no videos, no music, no photo locations', () => {
+  it('asks for photos only (no videos, no music), and where they were taken', () => {
     expect(mediaPlugin).toBeDefined();
     expect(mediaPlugin![1].granularPermissions).toEqual(['photo']);
-    expect(mediaPlugin![1].isAccessMediaLocationEnabled).toBe(false);
+    // Owner, 2026-11-26 ("using Geo tracking and time taken"): the album keeps
+    // photos from the same place together, as the website does, so the app
+    // reads where photos were taken (ACCESS_MEDIA_LOCATION; lib/photoPlace).
+    expect(mediaPlugin![1].isAccessMediaLocationEnabled).toBe(true);
+    expect(appJson.expo.android.blockedPermissions).not.toContain('android.permission.ACCESS_MEDIA_LOCATION');
   });
 
   it('keeps permissions the app does not need out of the Android manifest', () => {
@@ -24,7 +28,6 @@ describe('photo access set-up', () => {
       'android.permission.WRITE_EXTERNAL_STORAGE',
       'android.permission.READ_MEDIA_VIDEO',
       'android.permission.READ_MEDIA_AUDIO',
-      'android.permission.ACCESS_MEDIA_LOCATION',
     ]));
     // READ_MEDIA_IMAGES (all photos) and READ_MEDIA_VISUAL_USER_SELECTED
     // (Android 14 "Allow limited access") must stay.
@@ -48,6 +51,10 @@ describe('photo access set-up', () => {
     expect(kt).toMatch(/Name\("MegyPhotoFiles"\)/);
     expect(kt).toMatch(/takePersistableUriPermission/);
     expect(kt).toMatch(/inJustDecodeBounds = true/); // reads the size without loading the picture
+    // Places: the original bytes (Android zeroes the GPS otherwise), and the
+    // location permission asked for on its own, never photos again.
+    expect(kt).toMatch(/MediaStore\.setRequireOriginal\(uri\)/);
+    expect(kt).toMatch(/askForPermissionsWithPermissionsManager\(appContext\.permissions, promise, Manifest\.permission\.ACCESS_MEDIA_LOCATION\)/);
     const js = readFileSync(path.join(root, 'modules', 'photo-files', 'index.ts'), 'utf8');
     expect(js).toMatch(/requireOptionalNativeModule<PhotoFilesNative>\('MegyPhotoFiles'\)/);
   });
