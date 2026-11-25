@@ -4635,6 +4635,14 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.
 
+### Release notes 2.1.8 (code 118: 2.1.7 + where each photo was taken; draft, check against the app on upload day)
+
+    <en-US>
+    • Megy keeps photos from the same place together on your pages
+    </en-US>
+
+Lines: #336 (the app reads each photo's location, as the website does; owner 2026-11-26: "Yes, add it", "put it on 2.1.8"). Only photos that carry a location are grouped by place; others go by time, as before. 2.1.7 was uploaded when 2.1.8 was started (owner: "2.1.7 is already up"), so its lines are not repeated. Add any other 2.1.8 lines here on upload day.
+
 ### Release notes 2.1.7 (code 117: 2.1.6 + the launch price + the Christmas video sale + the order tag + the placing notice; check against the app on upload day)
 
     <en-US>
