@@ -28,10 +28,13 @@ export { MIN_AGE };
 /** The website's link words (Footer.tsx and Navbar.tsx). */
 export const PRIVACY_LABEL = 'Privacy Policy';
 export const TERMS_LABEL = 'Terms of Service';
+/** PayMongo asks for a return and refund policy (owner's handoff, 2026-11-25). */
+export const REFUND_LABEL = 'Return and Refund Policy';
 
 /** The app's own screens. */
 export const PRIVACY_SCREEN = '/privacy';
 export const TERMS_SCREEN = '/terms';
+export const REFUND_SCREEN = '/refund';
 
 /** The agree line around its link: "By placing an order you agree to our
  *  Terms of Service and confirm you're 18 or older." */
@@ -49,6 +52,7 @@ export function legalTarget(to: LegalLinkTo): LegalTarget {
   switch (to) {
     case 'privacy': return { screen: PRIVACY_SCREEN };
     case 'terms': return { screen: TERMS_SCREEN };
+    case 'refund': return { screen: REFUND_SCREEN };
     case 'orders': return { screen: '/orders' };
     case 'memories': return { screen: '/memories' };
     case 'email': return { url: `mailto:${LEGAL_CONTACT}` };

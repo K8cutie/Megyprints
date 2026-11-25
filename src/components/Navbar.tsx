@@ -159,7 +159,8 @@ export default function Navbar() {
                 Get Started
               </Link>
             </motion.div>
-            {/* The privacy policy and the terms, one tap from the app's menu (Google Play). */}
+            {/* The privacy policy and the terms, one tap from the app's menu
+                (Google Play); the refund policy beside them (PayMongo). */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -172,6 +173,9 @@ export default function Navbar() {
                 </Link>
                 <Link to="/terms" className="font-body text-sm text-medium underline underline-offset-2" data-testid="menu-terms">
                   Terms of Service
+                </Link>
+                <Link to="/refund" className="font-body text-sm text-medium underline underline-offset-2" data-testid="menu-refund">
+                  Return and Refund Policy
                 </Link>
               </span>
             </motion.div>

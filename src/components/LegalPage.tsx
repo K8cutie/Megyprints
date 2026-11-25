@@ -34,6 +34,7 @@ const LINK = 'text-rust underline';
 const ROUTES: Record<Exclude<LegalLinkTo, 'email' | 'deletion-page'>, string> = {
   privacy: '/privacy',
   terms: '/terms',
+  refund: '/refund',
   orders: '/orders',
   memories: '/memories',
   contact: '/contact',

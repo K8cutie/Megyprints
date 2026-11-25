@@ -22,12 +22,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Linking } from 'react-native';
-import { PRIVACY_POLICY, runsText, TERMS_OF_SERVICE, type LegalDocument } from '@web/lib/legalPages';
+import { PRIVACY_POLICY, REFUND_POLICY, runsText, TERMS_OF_SERVICE, type LegalDocument } from '@web/lib/legalPages';
 import Start from '../src/app/index';
 import PrivacyScreen from '../src/app/privacy';
+import RefundScreen from '../src/app/refund';
 import SignIn from '../src/app/sign-in';
 import TermsScreen from '../src/app/terms';
-import { agreeWords, legalTarget, MIN_AGE, PRIVACY_LABEL, PRIVACY_SCREEN, TERMS_LABEL, TERMS_SCREEN } from '../src/lib/legal';
+import { agreeWords, legalTarget, MIN_AGE, PRIVACY_LABEL, PRIVACY_SCREEN, REFUND_LABEL, REFUND_SCREEN, TERMS_LABEL, TERMS_SCREEN } from '../src/lib/legal';
 
 const REPO = path.resolve(__dirname, '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(REPO, rel), 'utf8');
@@ -74,18 +75,25 @@ describe('the screens and the words', () => {
     expect(layout).toContain(`<Stack.Screen name="terms" options={{ title: '${TERMS_LABEL}' }} />`);
     expect(PRIVACY_POLICY.title).toBe(PRIVACY_LABEL);
     expect(TERMS_OF_SERVICE.title).toBe(TERMS_LABEL);
+    // The Return and Refund Policy (PayMongo asks for one, owner's handoff 2026-11-25).
+    expect(REFUND_SCREEN).toBe('/refund');
+    expect(layout).toContain(`<Stack.Screen name="refund" options={{ title: '${REFUND_LABEL}' }} />`);
+    expect(REFUND_POLICY.title).toBe(REFUND_LABEL);
   });
 
   it('the website draws its pages from the same words (one copy), and keeps them for Play Console', () => {
     expect(read('src/pages/Privacy.tsx')).toContain('<LegalDocumentPage doc={PRIVACY_POLICY} />');
     expect(read('src/pages/Terms.tsx')).toContain('<LegalDocumentPage doc={TERMS_OF_SERVICE} />');
+    expect(read('src/pages/Refund.tsx')).toContain('<LegalDocumentPage doc={REFUND_POLICY} />');
     const routes = read('src/App.tsx');
     expect(routes).toContain('<Route path="/privacy" element={<Privacy />} />');
     expect(routes).toContain('<Route path="/terms" element={<Terms />} />');
+    expect(routes).toContain('<Route path="/refund" element={<Refund />} />');
     for (const f of ['src/components/Footer.tsx', 'src/components/Navbar.tsx']) {
       const src = read(f).replace(/\s+/g, ' ');
       expect(src).toMatch(new RegExp(`<Link to="/privacy"[^>]*> ${PRIVACY_LABEL} </Link>`));
       expect(src).toMatch(new RegExp(`<Link to="/terms"[^>]*> ${TERMS_LABEL} </Link>`));
+      expect(src).toMatch(new RegExp(`<Link to="/refund"[^>]*> ${REFUND_LABEL} </Link>`));
     }
   });
 
@@ -104,7 +112,7 @@ describe('the start screen', () => {
   it.each([
     ['signed out', null],
     ['signed in', { user: { id: 'u1', email: 'maria@example.test' } }],
-  ])('%s: Privacy Policy and Terms of Service under everything open the app\'s screens', async (_n, session) => {
+  ])('%s: Privacy Policy, Terms of Service and the refund policy under everything open the app\'s screens', async (_n, session) => {
     mockAuth.session = session;
     await render(<Start />);
     expect(screen.getByTestId('home-legal-privacy')).toHaveTextContent(PRIVACY_LABEL);
@@ -113,12 +121,16 @@ describe('the start screen', () => {
     expect(mockRouter.push).toHaveBeenLastCalledWith('/privacy');
     await fireEvent.press(screen.getByTestId('home-legal-terms'));
     expect(mockRouter.push).toHaveBeenLastCalledWith('/terms');
+    expect(screen.getByTestId('home-legal-refund')).toHaveTextContent(REFUND_LABEL);
+    await fireEvent.press(screen.getByTestId('home-legal-refund'));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/refund');
     expect(openUrl).not.toHaveBeenCalled();
   });
 
   it.each([
     ['Privacy Policy', 'menu-legal-privacy', '/privacy'],
     ['Terms of Service', 'menu-legal-terms', '/terms'],
+    ['Return and Refund Policy', 'menu-legal-refund', '/refund'],
   ])('the menu: %s closes the menu and opens the screen', async (_n, id, screenPath) => {
     mockAuth.session = null;
     await render(<Start />);
@@ -149,7 +161,8 @@ function everyLine(doc: LegalDocument): string[] {
 
 describe.each([
   ['Privacy Policy', PrivacyScreen, PRIVACY_POLICY, 'privacy', 'November 2026'],
-  ['Terms of Service', TermsScreen, TERMS_OF_SERVICE, 'terms', 'October 2026'],
+  ['Terms of Service', TermsScreen, TERMS_OF_SERVICE, 'terms', 'November 2026'],
+  ['Return and Refund Policy', RefundScreen, REFUND_POLICY, 'refund', 'November 2026'],
 ] as const)('the %s screen', (_name, Screen, doc, id, updated) => {
   it('shows every word of the website\'s page, in its order', async () => {
     await render(<Screen />);
@@ -198,7 +211,7 @@ describe('the links inside the words', () => {
   it('Privacy Policy: the email opens the email app, the Terms open the Terms screen, the deletion form opens on the website', async () => {
     await render(<PrivacyScreen />);
     const mails = screen.getAllByTestId('legal-link-email');
-    expect(mails.length).toBe(4);
+    expect(mails.length).toBe(5);
     expect(mails[0]).toHaveTextContent('megyprintsph@gmail.com');
     await fireEvent.press(mails[0]);
     expect(openUrl).toHaveBeenLastCalledWith('mailto:megyprintsph@gmail.com');
@@ -223,6 +236,23 @@ describe('the links inside the words', () => {
     expect(openUrl).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByTestId('legal-link-contact'));
     expect(openUrl).toHaveBeenLastCalledWith('https://megyprints.vercel.app/#/contact');
-    expect(screen.getAllByTestId('legal-link-email').length).toBe(3);
+    expect(screen.getAllByTestId('legal-link-email').length).toBe(4);
+    // Who sells, and the way to the refund policy (PayMongo, 2026-11-25).
+    expect(screen.getByTestId('terms-who-sells')).toHaveTextContent('Megyprints is a brand of Bridgemedia', { exact: false });
+    await fireEvent.press(screen.getByTestId('legal-link-refund'));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/refund');
+  });
+
+  it('Return and Refund Policy: Your orders and the Terms open the app\'s screens; the email opens the email app', async () => {
+    await render(<RefundScreen />);
+    expect(screen.getByTestId('refund-who-sells')).toHaveTextContent('Megyprints is a brand of Bridgemedia', { exact: false });
+    await fireEvent.press(screen.getByTestId('legal-link-orders'));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/orders');
+    await fireEvent.press(screen.getByTestId('legal-link-terms'));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/terms');
+    expect(openUrl).not.toHaveBeenCalled();
+    const mails = screen.getAllByTestId('legal-link-email');
+    await fireEvent.press(mails[0]);
+    expect(openUrl).toHaveBeenLastCalledWith('mailto:megyprintsph@gmail.com');
   });
 });

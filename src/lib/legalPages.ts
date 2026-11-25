@@ -1,9 +1,11 @@
 /* ══════════════════════════════════════════════════════════════════════════
-   THE PRIVACY POLICY AND THE TERMS OF SERVICE, WORD FOR WORD, IN ONE PLACE.
+   THE PRIVACY POLICY, THE TERMS OF SERVICE AND THE RETURN AND REFUND
+   POLICY, WORD FOR WORD, IN ONE PLACE.
 
-   The website shows them as pages (src/pages/Privacy.tsx, Terms.tsx through
-   components/LegalPage.tsx) and the 2.0 app shows them as its own screens
-   (mobile/src/app/privacy.tsx, terms.tsx), both from these words (owner,
+   The website shows them as pages (src/pages/Privacy.tsx, Terms.tsx,
+   Refund.tsx through components/LegalPage.tsx) and the 2.0 app shows them as
+   its own screens (mobile/src/app/privacy.tsx, terms.tsx, refund.tsx), both
+   from these words (owner,
    2026-11-09: "i want for TOS and privacy to be part of the native app and
    not a redirect"). Change a word here and both change; there is no other
    copy. Shared with the app (src/shared/sharedModules.ts): plain data, no
@@ -22,6 +24,7 @@
    the shop already keeps.
    ══════════════════════════════════════════════════════════════════════════ */
 
+import { BUSINESS_ADDRESS, BRAND_NAME, COURTS_CITY, REGISTERED_BUSINESS } from './business';
 import { LEGAL_CONTACT, MIN_AGE } from './legal';
 import { UNPAID_ORDER_DAYS } from './orderExpiry';
 
@@ -30,6 +33,7 @@ export type LegalLinkTo =
   | 'email' // write to LEGAL_CONTACT
   | 'privacy' // the Privacy Policy
   | 'terms' // the Terms of Service
+  | 'refund' // the Return and Refund Policy
   | 'orders' // Your orders
   | 'memories' // My Memories
   | 'contact' // the Contact page (the app's "Message us")
@@ -59,12 +63,19 @@ const pId = (testId: string, ...runs: LegalRun[]): LegalBlock => ({ kind: 'parag
 const list = (...items: LegalRun[][]): LegalBlock => ({ kind: 'list', items });
 const section = (title: string, ...blocks: LegalBlock[]): LegalSection => ({ title, blocks });
 
+/** Who sells (src/lib/business.ts): "Megyprints is a brand of Bridgemedia, a
+ *  business registered in the Philippines" and, once the owner gives it, its
+ *  address. PayMongo checks the pages match its documents. */
+const WHO_SELLS = `${BRAND_NAME} is a brand of ${REGISTERED_BUSINESS}, a business registered in the Philippines`
+  + (BUSINESS_ADDRESS ? `, at ${BUSINESS_ADDRESS}.` : '.');
+
 export const PRIVACY_POLICY: LegalDocument = {
   title: 'Privacy Policy',
   updated: 'November 2026',
   sections: [
     section('Who we are',
       p('Megyprints is a photo-album design and printing service. This policy explains what information we collect when you use our app and website, how we use it, and the choices you have. Questions? Email us at ', mail, '.'),
+      pId('privacy-who-sells', WHO_SELLS, ` "We" and "us" in this policy mean ${BRAND_NAME} and ${REGISTERED_BUSINESS}.`),
     ),
     section('Where your photos go',
       p('While you design an album, ', b('your photos are stored only on your own device'), ' (in your browser, or inside the Megy Prints app on your phone). They are ', b('not'), ' uploaded to our servers during design, with one exception that happens only when you ask for it:'),
@@ -115,6 +126,18 @@ export const PRIVACY_POLICY: LegalDocument = {
       p("One exception: if an order is paid but not yet delivered, we still need your delivery details to finish it, so the account can't be deleted until it arrives — or until you ask us to cancel the order."),
       p('Otherwise we keep your account and order information for as long as your account is active or as needed to fulfill and support your orders.'),
     ),
+    section('Your rights',
+      p('The Data Privacy Act of 2012 (Republic Act 10173) gives you these rights over your personal information:'),
+      list(
+        [b('To know'), ' what we collect, why, and who we share it with. This policy tells you.'],
+        [b('To see it:'), ' ask us for a copy of the personal information we keep about you.'],
+        [b('To correct it'), ' if it is wrong or out of date.'],
+        [b('To have it deleted, or to stop us using it.'), ' Deleting your account (above) does this.'],
+        [b('To be paid for harm'), ' caused by wrong use of your information.'],
+        [b('To complain'), ' to the National Privacy Commission (privacy.gov.ph) if you think we handled your information wrongly.'],
+      ),
+      p('To use any of these rights, email ', mail, '. We may first ask you to show that the account is yours.'),
+    ),
     section('Children',
       pId('privacy-age', `Megyprints is for people ${MIN_AGE} and older: you must be ${MIN_AGE} or older to make an account or place an order (see our `, link('terms', 'Terms of Service'), `). We don't knowingly collect personal information from anyone under ${MIN_AGE}. If you think a child has given us their information, email us at `, mail, " and we'll delete it."),
     ),
@@ -132,10 +155,11 @@ export const PRIVACY_POLICY: LegalDocument = {
 
 export const TERMS_OF_SERVICE: LegalDocument = {
   title: 'Terms of Service',
-  updated: 'October 2026',
+  updated: 'November 2026',
   sections: [
     section('About these terms',
       p('Megyprints designs and prints photo albums in the Philippines. These terms are the rules for using our app and website. By making an account or placing an order, you agree to them. Questions? Email us at ', mail, '.'),
+      pId('terms-who-sells', WHO_SELLS),
     ),
     section(`You must be ${MIN_AGE} or older`,
       pId('terms-age', 'To make an account or place an order, you must be ', b(`${MIN_AGE} years old or older`), '. When you make an account or place an order, you confirm that you are.'),
@@ -166,7 +190,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
       p(b('Check your album before you order.'), ' We print it the way you made it: the photos, how they are cropped, and every word and its spelling.'),
     ),
     section('If something is wrong',
-      p("If your album arrives damaged, or it isn't the album you ordered, email ", mail, " with your order number and photos of the problem. We'll work it out with you."),
+      p("If your album arrives damaged, or it isn't the album you ordered, email ", mail, " with your order number and photos of the problem. We print it again for free, or refund you if we can't. Our ", link('refund', 'Return and Refund Policy'), ' says how, and by when to tell us.'),
     ),
     section('QR memory videos',
       p('Anyone who scans the printed QR code can watch its video, so only add videos you are happy to share. The same rules as for photos apply. The video stays up for the number of years you choose when you order. You can change it or remove it at any time in ', link('memories', 'My Memories'), '.'),
@@ -180,10 +204,79 @@ export const TERMS_OF_SERVICE: LegalDocument = {
     section('Changes to these terms',
       p('We may update these terms. When we do, we change the "Last updated" date above. If you keep using Megyprints after that, the new terms apply.'),
     ),
+    section('If we disagree',
+      pId('terms-disputes', 'Tell us first. Email ', mail, " with your order number and what went wrong. We reply within a day, Monday to Saturday, and we'll try to fix it with you."),
+      p("If we can't settle it together, you can file a complaint with the Department of Trade and Industry (DTI). The DTI helps buyers and sellers settle it through mediation."),
+      p(COURTS_CITY
+        ? `If it is still not settled, the case goes to the proper courts of ${COURTS_CITY}.`
+        : 'If it is still not settled, the case goes to the proper courts of the Philippines.'),
+    ),
     section('Law',
       p('These terms follow the laws of the Philippines.'),
     ),
     section('Contact',
+      p('Email ', mail, ' or reach us through the ', link('contact', 'Contact page'), '.'),
+    ),
+  ],
+};
+
+/* The Return and Refund Policy (PayMongo asks for one before it turns
+   payments on, owner's handoff 2026-11-25). Built on what the shop already
+   said: albums are made to order, and a defect is printed again for free
+   (the Contact page's FAQ). The numbers are the owner's to confirm:
+   REPORT_DAYS and REFUND_WORKING_DAYS. */
+
+/** Days after delivery to tell us an album is damaged or wrong. */
+export const REPORT_DAYS = 7;
+/** Working days to send a refund once we agree to it. */
+export const REFUND_WORKING_DAYS = 7;
+
+export const REFUND_POLICY: LegalDocument = {
+  title: 'Return and Refund Policy',
+  updated: 'November 2026',
+  sections: [
+    section('Albums are made to order',
+      p('We print every album from the pages you made, just for you. So once printing has started, we can\'t take an album back because you changed your mind. But if we make a mistake, we make it right.'),
+      pId('refund-who-sells', WHO_SELLS),
+    ),
+    section('Before we print',
+      list(
+        ['An unpaid order: cancel it yourself in ', link('orders', 'Your orders'), '. You pay nothing.'],
+        ['A paid order: email ', mail, " with your order number as soon as you can. If we haven't started printing it, we refund the full amount. Once printing has started, we can't cancel it."],
+      ),
+    ),
+    section('If something is wrong with your album',
+      p('We print it again for free, and send it to you for free, when:'),
+      list(
+        ['it arrives damaged (torn, bent, wet, or coming apart)'],
+        ["it isn't the album you ordered (the wrong size, cover or pages)"],
+        ['a page is printed wrong by our mistake (missing, out of order, smudged or cut off)'],
+      ),
+      pId('refund-when-refund', "If we can't print it again, or the new album is wrong too, we refund what you paid for that album."),
+    ),
+    section("What we can't refund",
+      list(
+        ['A change of mind after printing has started.'],
+        ['Something that was in the album you made: spelling and words, how photos are cropped, or photos that were blurry or small to begin with. We print the album the way you made it, so check every page before you order.'],
+        ['Small colour differences between your screen and the paper. A screen gives off light and paper doesn\'t, so colours on paper can look a little different.'],
+        ['Wear or damage after delivery, from use, water or sun.'],
+      ),
+    ),
+    section('How to ask',
+      list(
+        [`Email `, mail, ` within ${REPORT_DAYS} days after your album arrives.`],
+        ['Write your order number and what is wrong.'],
+        ['Add clear photos of the problem, and of the box if it arrived damaged.'],
+      ),
+      p("You don't need to send the album back unless we ask. We reply within a day, Monday to Saturday."),
+    ),
+    section('How we pay you back',
+      pId('refund-how-paid', `We send the refund by InstaPay to the bank or e-wallet account you tell us, within ${REFUND_WORKING_DAYS} working days after we agree to it. We pay the transfer fee.`),
+    ),
+    section('Your rights by law',
+      p('This policy does not take away any right you have under the Consumer Act of the Philippines (Republic Act 7394). Our ', link('terms', 'Terms of Service'), ' say what happens if we disagree.'),
+    ),
+    section('Questions',
       p('Email ', mail, ' or reach us through the ', link('contact', 'Contact page'), '.'),
     ),
   ],
