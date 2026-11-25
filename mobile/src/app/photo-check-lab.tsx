@@ -168,7 +168,9 @@ export default function PhotoCheckLab() {
         },
       };
       const stored = (p: (typeof photos)[number]) => ({ id: p.key, name: p.name, type: 'image/jpeg', size: 0, width: p.width, height: p.height, url: p.uri });
-      const rows: Record<string, unknown>[] = photos.map((p) => ({ file: p.name, uri: p.uri, width: p.width, height: p.height }));
+      // Where each was taken, as the album gets it (lib/photoPlace): shows on a
+      // real phone that the place is read, and not zeroed by Android.
+      const rows: Record<string, unknown>[] = photos.map((p) => ({ file: p.name, uri: p.uri, width: p.width, height: p.height, location: p.location ?? null }));
 
       const warm = createPhoneChecks(device);
       await warm.faces.init();
