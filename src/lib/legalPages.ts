@@ -236,13 +236,16 @@ export const REFUND_POLICY: LegalDocument = {
   updated: 'November 2026',
   sections: [
     section('Albums are made to order',
-      p('We print every album from the pages you made, just for you. So once printing has started, we can\'t take an album back because you changed your mind. But if we make a mistake, we make it right.'),
+      p("We print every album from the pages you made, just for you. So we can't cancel or refund an order because you changed your mind. But if we make a mistake, we make it right."),
       pId('refund-who-sells', WHO_SELLS),
     ),
-    section('Before we print',
+    // Owner, 2026-11-25: "There is no change of mind law in PH": no
+    // change-of-mind refund once an order is paid (the draft offered one
+    // until printing started).
+    section('Cancelling an order',
       list(
         ['An unpaid order: cancel it yourself in ', link('orders', 'Your orders'), '. You pay nothing.'],
-        ['A paid order: email ', mail, " with your order number as soon as you can. If we haven't started printing it, we refund the full amount. Once printing has started, we can't cancel it."],
+        ["A paid order: we can't cancel it or refund it because you changed your mind."],
       ),
     ),
     section('If something is wrong with your album',
@@ -256,7 +259,7 @@ export const REFUND_POLICY: LegalDocument = {
     ),
     section("What we can't refund",
       list(
-        ['A change of mind after printing has started.'],
+        ['A change of mind, once you have paid.'],
         ['Something that was in the album you made: spelling and words, how photos are cropped, or photos that were blurry or small to begin with. We print the album the way you made it, so check every page before you order.'],
         ['Small colour differences between your screen and the paper. A screen gives off light and paper doesn\'t, so colours on paper can look a little different.'],
         ['Wear or damage after delivery, from use, water or sun.'],
