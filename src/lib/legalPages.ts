@@ -190,7 +190,7 @@ export const TERMS_OF_SERVICE: LegalDocument = {
       p(b('Check your album before you order.'), ' We print it the way you made it: the photos, how they are cropped, and every word and its spelling.'),
     ),
     section('If something is wrong',
-      p("If your album arrives damaged, or it isn't the album you ordered, email ", mail, " with your order number and photos of the problem. We print it again for free, or refund you if we can't. Our ", link('refund', 'Return and Refund Policy'), ' says how, and by when to tell us.'),
+      p("If your album arrives damaged, or it isn't the album you ordered, email ", mail, " with your order number. We print you a new album for free. If we can't, you can choose your money back. Our ", link('refund', 'Return and Refund Policy'), ' says how, and by when to tell us.'),
     ),
     section('QR memory videos',
       p('Anyone who scans the printed QR code can watch its video, so only add videos you are happy to share. The same rules as for photos apply. The video stays up for the number of years you choose when you order. You can change it or remove it at any time in ', link('memories', 'My Memories'), '.'),
@@ -220,15 +220,29 @@ export const TERMS_OF_SERVICE: LegalDocument = {
   ],
 };
 
-/* The Return and Refund Policy (PayMongo asks for one before it turns
-   payments on, owner's handoff 2026-11-25). Built on what the shop already
-   said: albums are made to order, and a defect is printed again for free
-   (the Contact page's FAQ). The numbers are the owner's to confirm:
-   REPORT_DAYS and REFUND_WORKING_DAYS. */
+/* The Return and Refund Policy (PayMongo asks for a "Return & Refund
+   Policy" before it turns payments on, owner's handoff 2026-11-25). Built on
+   what the shop already said (albums are made to order; a defect is printed
+   again for free) and on Philippine law, checked 2026-11-25:
+   - no refund for a change of mind (DTI: buyers are not entitled to one;
+     owner: "There is no change of mind law in PH", "it will kill us");
+   - a fault: the seller may fix it within 30 days (RA 7394 Art. 100); if not
+     fixed, the BUYER chooses a replacement, the money back, or a lower price;
+   - faults are covered at least 60 days after the sale (Art. 68(e)); a
+     shorter limit has no legal effect (Art. 68(b)(6), Art. 106);
+   - "no video, no refund" is illegal (DTI): photos are asked for, never
+     required;
+   - if the seller asks for the item back, the return costs the buyer
+     nothing (Internet Transactions Act, RA 11967);
+   - not delivered, cancelled by us, or paid too much: the money goes back.
+   Not legal advice: a lawyer should read it before production. */
 
-/** Days after delivery to tell us an album is damaged or wrong. */
-export const REPORT_DAYS = 7;
-/** Working days to send a refund once we agree to it. */
+/** Days after delivery to tell us an album has a fault (the law's minimum
+ *  cover for a fault in a new product: RA 7394 Art. 68(e)). */
+export const FAULT_REPORT_DAYS = 60;
+/** Days we have to send a good album once told of a fault (Art. 100). */
+export const FIX_DAYS = 30;
+/** Working days to send a refund once we agree to it (owner to confirm). */
 export const REFUND_WORKING_DAYS = 7;
 
 export const REFUND_POLICY: LegalDocument = {
@@ -249,32 +263,42 @@ export const REFUND_POLICY: LegalDocument = {
       ),
     ),
     section('If something is wrong with your album',
-      p('We print it again for free, and send it to you for free, when:'),
+      p('We print you a new album for free, and send it to you for free, when:'),
       list(
         ['it arrives damaged (torn, bent, wet, or coming apart)'],
-        ["it isn't the album you ordered (the wrong size, cover or pages)"],
+        ["it isn't the album you ordered (the wrong size, cover or pages, or someone else's album)"],
         ['a page is printed wrong by our mistake (missing, out of order, smudged or cut off)'],
+        ['it comes apart with normal use (for example, the binding comes loose)'],
       ),
-      pId('refund-when-refund', "If we can't print it again, or the new album is wrong too, we refund what you paid for that album."),
+      pId('refund-fix-days', `We send the new album within ${FIX_DAYS} days after you tell us.`),
+      pId('refund-when-refund', "If we can't, or the new album is wrong too, you choose: another new album, your money back, or a lower price."),
+    ),
+    section('When we refund you',
+      list(
+        ["Your album never arrives (for example, it is lost in delivery): we refund you in full, or send a new one if you'd rather."],
+        ["We cancel your paid order (for example, if we can't print it): we refund you in full."],
+        ['You paid more than your order total: we send back the extra.'],
+        ["Your QR video stops playing before the years you paid for are over, because of a problem on our side: we fix it. If we can't, we refund the video years you didn't get."],
+      ),
     ),
     section("What we can't refund",
       list(
         ['A change of mind, once you have paid.'],
         ['Something that was in the album you made: spelling and words, how photos are cropped, or photos that were blurry or small to begin with. We print the album the way you made it, so check every page before you order.'],
         ['Small colour differences between your screen and the paper. A screen gives off light and paper doesn\'t, so colours on paper can look a little different.'],
-        ['Wear or damage after delivery, from use, water or sun.'],
+        ['Damage after delivery from water, sun or rough handling.'],
       ),
     ),
-    section('How to ask',
+    section('How to tell us',
       list(
-        [`Email `, mail, ` within ${REPORT_DAYS} days after your album arrives.`],
+        [`Email `, mail, ` within ${FAULT_REPORT_DAYS} days after your album arrives. If it arrived damaged, please tell us as soon as you can.`],
         ['Write your order number and what is wrong.'],
-        ['Add clear photos of the problem, and of the box if it arrived damaged.'],
+        ['If you can, add photos of the problem, and of the box if it arrived damaged. Photos help us fix it faster, but they are not required.'],
       ),
-      p("You don't need to send the album back unless we ask. We reply within a day, Monday to Saturday."),
+      pId('refund-send-back', "You don't need to send the album back unless we ask. If we ask, we pay for the shipping. We reply within a day, Monday to Saturday."),
     ),
     section('How we pay you back',
-      pId('refund-how-paid', `We send the refund by InstaPay to the bank or e-wallet account you tell us, within ${REFUND_WORKING_DAYS} working days after we agree to it. We pay the transfer fee.`),
+      pId('refund-how-paid', `A refund for an album is everything you paid for it, shipping included. We send it by InstaPay to the bank or e-wallet account you tell us, within ${REFUND_WORKING_DAYS} working days after we agree to it. We pay the transfer fee.`),
     ),
     section('Your rights by law',
       p('This policy does not take away any right you have under the Consumer Act of the Philippines (Republic Act 7394). Our ', link('terms', 'Terms of Service'), ' say what happens if we disagree.'),

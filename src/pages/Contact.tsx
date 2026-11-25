@@ -12,7 +12,7 @@ const faqs = [
   { q: 'What file formats do you accept?', a: 'We accept JPG and PNG files. Photos should be at least 1MB for best print quality.' },
   { q: 'Can I edit my album after submitting?', a: 'Contact us within 2 hours of submission and we\'ll help you make changes.' },
   // The same rule as the Return and Refund Policy (src/lib/legalPages.ts), linked under this list.
-  { q: 'What is your refund policy?', a: 'Albums are made to order, so we can\'t cancel or refund a paid order because you changed your mind. If your album arrives damaged or wrong, we print it again for free. If we can\'t, we refund you.' },
+  { q: 'What is your refund policy?', a: 'Albums are made to order, so we can\'t cancel or refund a paid order because you changed your mind. If your album arrives damaged or wrong, we print a new one for free. If we can\'t, you can choose your money back.' },
   { q: 'Do you offer bulk discounts?', a: 'Yes! Schools and events ordering 10+ albums receive special pricing. Contact us for details.' },
   { q: 'Can I see a preview before printing?', a: 'Yes! Our preview feature shows exactly how your album will look.' },
   { q: 'How do I pay?', a: 'By bank transfer: at checkout, scan our InstaPay QR with any PH bank or e-wallet app (GCash, Maya, BPI, BDO…) and send the amount shown. We confirm it, then print.' },
