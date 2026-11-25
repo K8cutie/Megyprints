@@ -12,6 +12,15 @@
      • 'limited'  Android 14+ "Allow limited access": only photos the person
                   chose. "Choose more photos" opens Android's own chooser again;
      • 'ask'      not allowed (yet). "Choose from Files" needs no permission.
+   Which of these it is comes from the photo permissions themselves
+   (modules/photo-files photoPermissions) when the build can read them:
+   expo-media-library also counts "access media location" in its answer, so a
+   person who allowed all photos before the app read photo places would look
+   refused (or limited) to it.
+
+   WHERE PHOTOS WERE TAKEN (photoPlace.ts): read for the picked photos only,
+   once, when they go into the album. The first time, the app asks for
+   "access media location" on its own (never for photos again).
    ══════════════════════════════════════════════════════════════════════════ */
 import {
   Asset,
@@ -24,7 +33,9 @@ import {
   type AssetMetadata,
   type PermissionResponse,
 } from 'expo-media-library';
+import { askPlaceAccess, photoPermissions, photoPlaces, type PhotoPermissions } from '../../modules/photo-files';
 import { photoKey, type DraftPhoto } from './photoDraft';
+import { toPlace, type PhotoPlace } from './photoPlace';
 import { parseExifDateTime } from './photoTime';
 
 /** One photo in the grid. */
@@ -56,18 +67,30 @@ export const FIRST_PAGE = 120;
 export const NEXT_PAGE = 1000;
 
 /** What a permission answer means for the grid. `asked`: this answer came
- *  from asking just now (so a no is a real "no", not "not asked yet"). */
-export function accessFrom(resp: Pick<PermissionResponse, 'granted' | 'canAskAgain' | 'status'> & { accessPrivileges?: string }, asked: boolean): PhotoAccess {
+ *  from asking just now (so a no is a real "no", not "not asked yet").
+ *  `held`: the photo permissions the app holds, one by one, when the build
+ *  can read them; they decide all / limited, so a missing "access media
+ *  location" never hides photos the person allowed. */
+export function accessFrom(
+  resp: Pick<PermissionResponse, 'granted' | 'canAskAgain' | 'status'> & { accessPrivileges?: string },
+  asked: boolean,
+  held?: PhotoPermissions | null,
+): PhotoAccess {
+  if (held) {
+    if (held.images) return { state: 'all' };
+    if (held.selected) return { state: 'limited' };
+    return { state: 'ask', canAskAgain: resp.canAskAgain, refused: asked || resp.status === 'denied' };
+  }
   if (resp.granted) return resp.accessPrivileges === 'limited' ? { state: 'limited' } : { state: 'all' };
   return { state: 'ask', canAskAgain: resp.canAskAgain, refused: asked || resp.status === 'denied' };
 }
 
 export async function checkPhotoAccess(): Promise<PhotoAccess> {
-  return accessFrom(await getPermissionsAsync(false, [...PHOTOS_ONLY]), false);
+  return accessFrom(await getPermissionsAsync(false, [...PHOTOS_ONLY]), false, photoPermissions());
 }
 
 export async function askPhotoAccess(): Promise<PhotoAccess> {
-  return accessFrom(await requestPermissionsAsync(false, [...PHOTOS_ONLY]), true);
+  return accessFrom(await requestPermissionsAsync(false, [...PHOTOS_ONLY]), true, photoPermissions());
 }
 
 /** Android 14+, limited access: Android's own chooser, to add more photos. */
@@ -127,6 +150,30 @@ export interface PhotoLookups {
   shape: (id: string) => Promise<{ width: number; height: number } | null>;
   /** EXIF DateTimeOriginal (or DateTimeDigitized) text, or null. */
   exifTaken: (id: string) => Promise<string | null>;
+  /** Where each photo was taken (same order), null for a photo with none.
+   *  Absent: places are not read. */
+  places?: (ids: string[]) => Promise<(PhotoPlace | null)[]>;
+}
+
+/** Asked for "access media location" this time the app is open: asked once. */
+let placeAsked = false;
+
+/** Where the picked photos were taken. Asks for "access media location"
+ *  first if photos are allowed but places are not (once per app start; the
+ *  photos go in anyway, grouped by time only, if the answer is no). */
+async function readPlaces(ids: string[]): Promise<(PhotoPlace | null)[]> {
+  const held = photoPermissions();
+  if (held && !held.place && (held.images || held.selected) && !placeAsked) {
+    placeAsked = true;
+    await askPlaceAccess().catch(() => false);
+  }
+  const read = await photoPlaces(ids).catch(() => null);
+  if (read) return read.map((r) => toPlace(r.lat, r.lon));
+  // No native half for it (not Android): the photo library's own reader.
+  return mapLimited(ids, 4, async (id) => {
+    const at = await new Asset(id).getLocation().catch(() => null);
+    return at ? toPlace(at.latitude, at.longitude) : null;
+  });
 }
 
 export const nativeLookups: PhotoLookups = {
@@ -136,6 +183,7 @@ export const nativeLookups: PhotoLookups = {
     const v = exif?.DateTimeOriginal ?? exif?.DateTimeDigitized;
     return typeof v === 'string' ? v : null;
   },
+  places: readPlaces,
 };
 
 /** No EXIF to read: PNG screenshots and the like. */
@@ -147,9 +195,22 @@ const NO_EXIF = /\.(png|gif|bmp)$/i;
  *   • no width/height in the index: read from the file;
  *   • no taken time in the index: read the EXIF (Android leaves DATE_TAKEN
  *     empty for EXIF times without a time zone when the file's date is more
- *     than a day off, as with old photos copied to a new phone).
+ *     than a day off, as with old photos copied to a new phone);
+ *   • where each was taken (the index never has it): read for all of them in
+ *     one call. A photo with no place, or a failed read, just has none.
  */
 export async function photosForAlbum(picked: readonly GalleryPhoto[], now = Date.now(), lookups: PhotoLookups = nativeLookups): Promise<DraftPhoto[]> {
+  const [photos, places] = await Promise.all([
+    photosWithFacts(picked, now, lookups),
+    lookups.places ? lookups.places(picked.map((p) => p.id)).catch(() => null) : Promise.resolve(null),
+  ]);
+  return photos.map((photo, i) => {
+    const location = places?.[i] ?? null;
+    return location ? { ...photo, location } : photo;
+  });
+}
+
+async function photosWithFacts(picked: readonly GalleryPhoto[], now: number, lookups: PhotoLookups): Promise<DraftPhoto[]> {
   return mapLimited(picked, 4, async (p): Promise<DraftPhoto> => {
     let { width, height } = p;
     let capturedAt = p.capturedAt;

@@ -15,6 +15,7 @@ import { addMoreLabel, MIN_ALBUM_PHOTOS, photosGoingIn, photosOverBy, photosShor
 import { isMiniSize, miniSuggestion, MINI_MAX_PHOTOS, MINI_MIN_PHOTOS, MINI_NAME, MINI_PAGES, MINI_SIZE } from '@web/lib/megyMini';
 import type { PhotoCheck } from '@web/lib/photoCheck';
 import { formatCount } from './photoDays';
+import { readPlace, type PhotoPlace } from './photoPlace';
 import { orderTime } from './photoTime';
 
 export type PhotoSource = 'gallery' | 'files';
@@ -36,6 +37,9 @@ export interface DraftPhoto {
   modifiedAt: number | null;
   /** When it was added to the album, ms: keeps undated photos in pick order. */
   addedAt: number;
+  /** Where it was taken (EXIF GPS), when the photo has a place (photoPlace.ts).
+   *  Kept on the phone only. */
+  location?: PhotoPlace;
   mimeType?: string;
   /** Bytes, when known. */
   size?: number;
@@ -219,6 +223,8 @@ function readPhoto(raw: unknown): DraftPhoto | null {
     modifiedAt: num(r.modifiedAt),
     addedAt: num(r.addedAt) ?? 0,
   };
+  const location = readPlace(r.location);
+  if (location) photo.location = location;
   if (typeof r.mimeType === 'string') photo.mimeType = r.mimeType;
   const size = num(r.size);
   if (size != null) photo.size = size;
