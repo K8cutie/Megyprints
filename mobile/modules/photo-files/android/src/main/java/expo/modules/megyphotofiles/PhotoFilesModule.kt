@@ -1,7 +1,9 @@
 package expo.modules.megyphotofiles
 
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ColorSpace
@@ -9,8 +11,10 @@ import android.graphics.ImageDecoder
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.exifinterface.media.ExifInterface
+import expo.modules.interfaces.permissions.Permissions
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
@@ -41,6 +45,18 @@ import kotlinx.coroutines.withContext
  * It decodes the photo with Android's ImageDecoder, turned into sRGB
  * (setTargetColorSpace), and writes that as a PNG file the page renderer can
  * read. Proven on the golden page photo-display-p3 (src/dev/goldenRun.ts).
+ *
+ * `places` reads where each photo was taken (EXIF GPS), so the album can keep
+ * photos from the same place together (owner, 2026-11-26). Android hides a
+ * photo's place from apps (it zeroes the GPS in the bytes it hands over)
+ * unless the app holds ACCESS_MEDIA_LOCATION AND asks for the original bytes
+ * (MediaStore.setRequireOriginal), so both are done here. `photoPermissions`
+ * says which photo permissions the app holds, one by one: expo-media-library
+ * folds ACCESS_MEDIA_LOCATION into its own "granted", which would make a
+ * person who allowed all photos before this update look refused (or limited),
+ * so the app reads the photo permissions itself (src/lib/gallery.ts).
+ * `askPlaceAccess` asks for ACCESS_MEDIA_LOCATION alone, never for photos
+ * again (asking for photos again opens Android 14's photo chooser).
  */
 private const val PICK_PHOTOS_CODE = 4211
 
@@ -48,6 +64,11 @@ private const val PICK_PHOTOS_CODE = 4211
  *  (owner, 2026-11-02: "make the phone's photo folder the default"). A phone
  *  without it: the picker opens where it would anyway. */
 private const val CAMERA_FOLDER_ID = "primary:DCIM/Camera"
+
+/** Android 13+ "Photos" and Android 14+ "Allow limited access" (by name, so
+ *  this reads the same on every Android the app runs on). */
+private const val READ_MEDIA_IMAGES = "android.permission.READ_MEDIA_IMAGES"
+private const val READ_MEDIA_VISUAL_USER_SELECTED = "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
 
 class PhotoFilesModule : Module() {
   private val resolver
@@ -81,6 +102,31 @@ class PhotoFilesModule : Module() {
 
     AsyncFunction("drawableCopy") Coroutine { source: String, target: String, maxSide: Int ->
       withContext(Dispatchers.IO) { drawableCopy(source, target, maxSide) }
+    }
+
+    // Which photo permissions the app holds, each on its own.
+    Function("photoPermissions") {
+      mapOf(
+        "images" to hasAllPhotos(),
+        "selected" to (Build.VERSION.SDK_INT >= 34 && holds(READ_MEDIA_VISUAL_USER_SELECTED)),
+        "place" to hasPlaceAccess()
+      )
+    }
+
+    // Asks for ACCESS_MEDIA_LOCATION only (photos are asked for elsewhere).
+    // Resolves with Expo's permission answer; the app reads photoPermissions after.
+    AsyncFunction("askPlaceAccess") { promise: Promise ->
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        promise.resolve(mapOf("granted" to true))
+        return@AsyncFunction
+      }
+      Permissions.askForPermissionsWithPermissionsManager(appContext.permissions, promise, Manifest.permission.ACCESS_MEDIA_LOCATION)
+    }
+
+    // Where each photo was taken: { uri, lat, lon }, lat and lon null when
+    // the photo has no place (or the app may not read it).
+    AsyncFunction("places") Coroutine { uris: List<String> ->
+      withContext(Dispatchers.IO) { uris.map { placeOf(it) } }
     }
 
     // "Choose from Files": Android's document picker for photos, many at
@@ -125,6 +171,44 @@ class PhotoFilesModule : Module() {
         promise.reject("ERR_PICKED", e.message ?: "Could not read the picked photos", e)
       }
     }
+  }
+
+  private fun holds(permission: String): Boolean {
+    val context = appContext.reactContext ?: return false
+    return context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+  }
+
+  /** "Allow all": Android 13+ READ_MEDIA_IMAGES, older Android READ_EXTERNAL_STORAGE. */
+  private fun hasAllPhotos(): Boolean =
+    if (Build.VERSION.SDK_INT >= 33) holds(READ_MEDIA_IMAGES) else holds(Manifest.permission.READ_EXTERNAL_STORAGE)
+
+  /** Android 9 and older never hid photo places. */
+  private fun hasPlaceAccess(): Boolean =
+    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || holds(Manifest.permission.ACCESS_MEDIA_LOCATION)
+
+  /**
+   * Where the photo was taken (EXIF GPS), from its header only. A gallery
+   * photo (MediaStore) is read as its ORIGINAL bytes when the app may
+   * (otherwise Android hands over the bytes with the place zeroed); if the
+   * phone refuses the original, the photo is read as usual. A photo with no
+   * place, or that can't be opened, gives nulls (it is grouped by time only).
+   */
+  private fun placeOf(address: String): Map<String, Any?> {
+    val uri = Uri.parse(address)
+    val original = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && uri.authority == MediaStore.AUTHORITY && hasPlaceAccess()
+    val tries = if (original) listOf(MediaStore.setRequireOriginal(uri), uri) else listOf(uri)
+    var lat: Double? = null
+    var lon: Double? = null
+    for (source in tries) {
+      try {
+        resolver.openInputStream(source)?.use { stream ->
+          ExifInterface(stream).latLong?.let { lat = it[0]; lon = it[1] }
+        }
+        break
+      } catch (_: Exception) {
+      }
+    }
+    return mapOf("uri" to address, "lat" to lat, "lon" to lon)
   }
 
   /** A picked file's address, name, type, bytes and last change, from the
@@ -315,6 +399,8 @@ class PhotoFilesModule : Module() {
     var rotation = 0
     var taken: String? = null
     var offset: String? = null
+    var lat: Double? = null
+    var lon: Double? = null
     if (readable) {
       try {
         resolver.openInputStream(uri)?.use { stream ->
@@ -324,6 +410,8 @@ class PhotoFilesModule : Module() {
             ?: exif.getAttribute(ExifInterface.TAG_DATETIME_DIGITIZED)
           offset = exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL)
             ?: exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED)
+          // Where it was taken (zeroes when Android hid it: the app checks).
+          exif.latLong?.let { lat = it[0]; lon = it[1] }
         }
       } catch (_: Exception) {
       }
@@ -338,7 +426,9 @@ class PhotoFilesModule : Module() {
       "height" to if (turned) width else height,
       "rotation" to rotation,
       "takenAt" to taken,
-      "takenOffset" to offset
+      "takenOffset" to offset,
+      "latitude" to lat,
+      "longitude" to lon
     )
   }
 

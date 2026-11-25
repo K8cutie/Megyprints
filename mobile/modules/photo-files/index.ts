@@ -3,7 +3,9 @@
    It keeps the app's access to each picked photo, so the album can point at
    the photo where it is instead of copying it, and reads each photo's size
    and EXIF time without loading the picture. It also turns a photo into
-   sRGB for a print page (srgbCopy). */
+   sRGB for a print page (srgbCopy), and reads where gallery photos were taken
+   (photoPlaces, with the photo permissions it needs: photoPermissions,
+   askPlaceAccess). */
 import { requireOptionalNativeModule } from 'expo';
 
 /** What the module says about one picked photo. */
@@ -21,6 +23,27 @@ export interface PickedFileInfo {
   takenAt: string | null;
   /** EXIF OffsetTimeOriginal ("+08:00"), or null. */
   takenOffset: string | null;
+  /** Where it was taken (EXIF GPS), or null. Zeroes when Android hid it:
+   *  read it through toPlace (src/lib/photoPlace.ts). Absent in older builds. */
+  latitude?: number | null;
+  longitude?: number | null;
+}
+
+/** The photo permissions the app holds, each on its own. */
+export interface PhotoPermissions {
+  /** "Allow all" (Android 13+ READ_MEDIA_IMAGES; older: READ_EXTERNAL_STORAGE). */
+  images: boolean;
+  /** Android 14+ "Allow limited access" (READ_MEDIA_VISUAL_USER_SELECTED). */
+  selected: boolean;
+  /** May read where photos were taken (ACCESS_MEDIA_LOCATION; always true before Android 10). */
+  place: boolean;
+}
+
+/** Where one photo was taken, as the module read it (nulls: no place). */
+export interface PhotoPlaceRead {
+  uri: string;
+  lat: number | null;
+  lon: number | null;
 }
 
 /** What srgbCopy did with one photo. */
@@ -79,6 +102,9 @@ interface PhotoFilesNative {
   inspect?(uris: string[]): Promise<PhotoInspection[]>;
   drawableCopy?(source: string, target: string, maxSide: number): Promise<DrawableCopyResult>;
   pickPhotos?(): Promise<{ canceled: boolean; assets: PickedPhotoFile[] }>;
+  photoPermissions?(): PhotoPermissions;
+  askPlaceAccess?(): Promise<unknown>;
+  places?(uris: string[]): Promise<PhotoPlaceRead[]>;
 }
 
 const native = requireOptionalNativeModule<PhotoFilesNative>('MegyPhotoFiles');
@@ -133,4 +159,35 @@ export async function drawableCopy(source: string, target: string, maxSide: numb
 export async function pickPhotoFiles(): Promise<{ canceled: boolean; assets: PickedPhotoFile[] } | null> {
   if (!native || typeof native.pickPhotos !== 'function') return null;
   return native.pickPhotos();
+}
+
+/** Which photo permissions the app holds, each on its own. Null when the
+ *  build has no native half for it (jest, an older APK, not Android). */
+export function photoPermissions(): PhotoPermissions | null {
+  if (!native || typeof native.photoPermissions !== 'function') return null;
+  try {
+    return native.photoPermissions();
+  } catch {
+    return null;
+  }
+}
+
+/** Asks for "access media location" only (never for photos again). True when
+ *  the app may now read where photos were taken. */
+export async function askPlaceAccess(): Promise<boolean> {
+  if (!native || typeof native.askPlaceAccess !== 'function') return false;
+  try {
+    await native.askPlaceAccess();
+  } catch {
+    return false;
+  }
+  return photoPermissions()?.place === true;
+}
+
+/** Where each photo was taken (in the same order). Null when the build has
+ *  no native half for it. */
+export async function photoPlaces(uris: string[]): Promise<PhotoPlaceRead[] | null> {
+  if (!native || typeof native.places !== 'function') return null;
+  if (uris.length === 0) return [];
+  return native.places(uris);
 }

@@ -16,6 +16,7 @@
 import { useEffect, useRef } from 'react';
 import type { UploadedPhoto } from '@web/pages/builder/types';
 import { photoKey, type DraftPhoto } from './photoDraft';
+import { readPlace } from './photoPlace';
 
 const GALLERY_ITEM = /^content:\/\/media\/external(?:_primary)?\/images\/media\/\d+$/;
 
@@ -29,10 +30,12 @@ export function draftFromAlbum(photos: readonly UploadedPhoto[], keptAt: (id: st
     const uri = p.previewUrl || keptAt(p.id);
     if (!uri) return;
     const source = GALLERY_ITEM.test(uri) ? 'gallery' : 'files';
+    const location = readPlace(p.location);
     out.push({
       key: photoKey(source, uri), source, uri, name: p.name,
       width: p.width, height: p.height, capturedAt: p.capturedAt ?? null, modifiedAt: null, addedAt: i,
       mimeType: p.type, size: p.size,
+      ...(location ? { location } : {}),
       ...(p.leftOut ? { leftOut: true } : {}),
       // Megy's photo check, as the album holds it: not done again, not asked again.
       ...(p.check ? { check: p.check } : {}),

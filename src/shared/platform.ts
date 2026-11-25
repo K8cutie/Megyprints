@@ -135,9 +135,10 @@ export interface PhotoIntake {
    *  it was: whichever merges second widens this to { capturedAt, timeSource }.) */
   captureTime(this: void, photo: PickedPhoto): Promise<number | null>;
   /** Where it was taken (EXIF GPS), or null when that isn't known. Optional:
-   *  the website reads the photo's EXIF; the app leaves it out (Android keeps
-   *  a photo's place behind ACCESS_MEDIA_LOCATION, which the app does not ask
-   *  for). With the capture time it splits a moment into scenes. */
+   *  the website reads the photo's EXIF; the app reads it when the photo is
+   *  picked (mobile/src/lib/photoPlace.ts: Android keeps a photo's place
+   *  behind ACCESS_MEDIA_LOCATION, which the app asks for). With the capture
+   *  time it splits a moment into scenes. */
   captureLocation?(this: void, photo: PickedPhoto): Promise<{ lat: number; lon: number } | null>;
   /** A URL that shows this photo right now (website: a new blob: URL). It may
    *  stop working once the app is closed: see urlNeedsReload. */

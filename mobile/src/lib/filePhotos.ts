@@ -13,6 +13,7 @@ import { getDocumentAsync, type DocumentPickerAsset } from 'expo-document-picker
 import { kindOfPick, leftOutNote } from '@web/lib/pickedFiles';
 import { describePickedFiles, pickPhotoFiles, type PickedFileInfo } from '../../modules/photo-files';
 import { photoKey, type DraftPhoto } from './photoDraft';
+import { toPlace } from './photoPlace';
 import { parseExifDateTime } from './photoTime';
 
 export interface FilesPick {
@@ -48,6 +49,9 @@ export function filesToPhotos(assets: readonly DocumentPickerAsset[], infos: rea
       modifiedAt: typeof a.lastModified === 'number' && a.lastModified > 0 ? a.lastModified : null,
       addedAt: now,
     };
+    // Where it was taken, when the file says (zeroes = hidden: none).
+    const location = toPlace(info?.latitude, info?.longitude);
+    if (location) photo.location = location;
     if (a.mimeType) photo.mimeType = a.mimeType;
     if (typeof a.size === 'number') photo.size = a.size;
     photos.push(photo);
