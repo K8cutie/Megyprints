@@ -66,6 +66,7 @@ export const SHARED_MODULES = [
   'src/lib/albumName.ts',
   'src/lib/albumSyncRecord.ts',
   'src/lib/albumThemeRules.ts',
+  'src/lib/business.ts',
   'src/lib/contact.ts',
   'src/lib/defaultBuilderPlatform.native.ts',
   'src/lib/draftAlbumRow.ts',

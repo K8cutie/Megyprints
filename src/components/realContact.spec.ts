@@ -42,10 +42,14 @@ describe('the footer', () => {
     expect(h.querySelectorAll('a[href="#"]').length).toBe(0);
     expect([...h.querySelectorAll('button')].map((b) => b.textContent)).not.toContain('Subscribe');
   });
-  it('the real ways: a message, and your order', async () => {
+  it('the real ways: a message, your order, and the email we read (PayMongo wants a customer-service contact)', async () => {
     const h = await render(createElement(Footer));
     const links = [...h.querySelectorAll('[data-testid="footer-contact"] a')].map((a) => [a.textContent, a.getAttribute('href')]);
-    expect(links).toEqual([['Send us a message', '/contact'], ['Check on your order', '/orders']]);
+    expect(links).toEqual([
+      ['Send us a message', '/contact'],
+      ['Check on your order', '/orders'],
+      ['megyprintsph@gmail.com', 'mailto:megyprintsph@gmail.com'],
+    ]);
     expect(h.textContent).toContain(`© ${new Date().getFullYear()} Megy Prints`);
   });
 });

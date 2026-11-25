@@ -1,16 +1,17 @@
-/* The Privacy Policy and Terms of Service links, and the agree line under
-   Sign in and Place order (src/lib/legal.ts says why and whose words). Each
-   opens the app's own screen (src/app/privacy.tsx, terms.tsx), never the
-   browser. */
+/* The Privacy Policy, Terms of Service and Return and Refund Policy links,
+   and the agree line under Sign in and Place order (src/lib/legal.ts says
+   why and whose words). Each opens the app's own screen
+   (src/app/privacy.tsx, terms.tsx, refund.tsx), never the browser. */
 import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import { agreeWords, PRIVACY_LABEL, PRIVACY_SCREEN, TERMS_LABEL, TERMS_SCREEN } from '../lib/legal';
+import { agreeWords, PRIVACY_LABEL, PRIVACY_SCREEN, REFUND_LABEL, REFUND_SCREEN, TERMS_LABEL, TERMS_SCREEN } from '../lib/legal';
 import { colors, space } from '../lib/theme';
 
 const open = (screen: string) => { router.push(screen); };
 
-/** "Privacy Policy   Terms of Service", side by side (the website's footer).
- *  onOpen runs first (a menu closes itself). */
+/** "Privacy Policy   Terms of Service   Return and Refund Policy", side by
+ *  side, wrapping on a narrow phone (the website's footer). onOpen runs
+ *  first (a menu closes itself). */
 export function LegalLinks({ color = colors.muted, onOpen, style, testID = 'legal' }: {
   color?: string;
   onOpen?: () => void;
@@ -27,6 +28,7 @@ export function LegalLinks({ color = colors.muted, onOpen, style, testID = 'lega
     <View style={[styles.row, style]} testID={testID}>
       {link(PRIVACY_LABEL, PRIVACY_SCREEN, 'privacy')}
       {link(TERMS_LABEL, TERMS_SCREEN, 'terms')}
+      {link(REFUND_LABEL, REFUND_SCREEN, 'refund')}
     </View>
   );
 }

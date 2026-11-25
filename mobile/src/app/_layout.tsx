@@ -81,6 +81,7 @@ export default function RootLayout() {
             <Stack.Screen name="delete-account" options={{ title: 'Delete my account' }} />
             <Stack.Screen name="privacy" options={{ title: 'Privacy Policy' }} />
             <Stack.Screen name="terms" options={{ title: 'Terms of Service' }} />
+            <Stack.Screen name="refund" options={{ title: 'Return and Refund Policy' }} />
           </Stack>
         </BuilderProvider>
       </DraftProvider>
