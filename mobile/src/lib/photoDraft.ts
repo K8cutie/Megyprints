@@ -12,7 +12,7 @@
    website can never disagree about it.
    ══════════════════════════════════════════════════════════════════════════ */
 import { addMoreLabel, MIN_ALBUM_PHOTOS, photosGoingIn, photosOverBy, photosShortBy, photoWord } from '@web/pages/builder/albumMinimum';
-import { isMiniSize, miniSuggestion, MINI_MAX_PHOTOS, MINI_MIN_PHOTOS, MINI_NAME, MINI_PAGES, MINI_SIZE } from '@web/lib/megyMini';
+import { isMiniSize, miniPagesForPhotos, miniPagesOf, miniPhotoRange, miniSuggestion, MINI_NAME, MINI_PAGES, MINI_SIZE } from '@web/lib/megyMini';
 import type { PhotoCheck } from '@web/lib/photoCheck';
 import { formatCount } from './photoDays';
 import { readPlace, type PhotoPlace } from './photoPlace';
@@ -296,6 +296,9 @@ export const NEXT = 'Next';
 export const ADD_MORE_PHOTOS = 'Add more photos';
 
 export const MAKE_ALBUM_INSTEAD = 'Make an album instead';
+/** A 16-page Megy Mini with more photos than it holds, while the 24-page
+ *  one is on sale and holds them: the size step, to pick 24 pages. */
+export const PICK_24_PAGES = 'Pick 24 pages';
 
 /** The words and the way on, from the website's 40-photo rule (16 to 40 for
  *  a Megy Mini: pass the album's size). */
@@ -307,32 +310,48 @@ export interface PhotoStepOptions {
   /** Megy Mini is on sale (the price list has "mini"): an album short of 40
    *  photos is offered the Mini. */
   miniOnSale?: boolean;
+  /** The Mini's pages (16 or 24, builder.miniPages). */
+  miniPages?: number;
+  /** The Mini page counts on sale (lib/megyMini miniPagesOnSale). */
+  miniPagesOnSale?: readonly number[];
 }
 
-/** The Megy Mini's photos step (lib/megyMini): 16 to 40 photos, its 16 pages. */
-function miniPhotoStep(count: number): PhotoStep {
-  const short = photosShortBy(count, MINI_SIZE);
-  const over = photosOverBy(count, MINI_SIZE);
+/** The Megy Mini's photos step (lib/megyMini): 16 to 40 photos for its 16
+ *  pages, 24 to 60 for 24. */
+function miniPhotoStep(count: number, opts?: PhotoStepOptions): PhotoStep {
+  const pages = miniPagesOf(opts?.miniPages);
+  const { min, max } = miniPhotoRange(pages);
+  const short = photosShortBy(count, MINI_SIZE, pages);
+  const over = photosOverBy(count, MINI_SIZE, pages);
+  const named = pages === MINI_PAGES ? MINI_NAME : `${pages}-page ${MINI_NAME}`;
   if (count === 0) {
     return {
       count, short, canGoOn: false, main: 'pick', mainLabel: PICK_PHOTOS, secondLabel: null,
-      message: `Pick the photos for your ${MINI_NAME}: ${MINI_MIN_PHOTOS} to ${MINI_MAX_PHOTOS} photos for its ${MINI_PAGES} pages.`,
+      message: `Pick the photos for your ${MINI_NAME}: ${min} to ${max} photos for its ${pages} pages.`,
     };
   }
   if (short > 0) {
     return {
       count, short, canGoOn: false, main: 'pick', mainLabel: addMoreLabel(short), secondLabel: null,
-      message: `You have ${formatCount(count)} ${photoWord(count)}. A ${MINI_NAME} needs at least ${MINI_MIN_PHOTOS}, one for every page: add ${short} more.`,
+      message: `You have ${formatCount(count)} ${photoWord(count)}. A ${named} needs at least ${min}, one for every page: add ${short} more.`,
     };
   }
   if (over > 0) {
+    // More than 16 pages hold, and the 24-page Mini is on sale and holds them.
+    const more = miniPagesForPhotos(count, (opts?.miniPagesOnSale ?? []).filter((n) => n > pages));
+    if (more != null) {
+      return {
+        count, short, canGoOn: false, main: 'size', mainLabel: PICK_24_PAGES, secondLabel: null,
+        message: `You have ${formatCount(count)} photos. A ${named} holds up to ${max}: take out ${over} (tap × on a photo), or pick ${more} pages, which hold up to ${miniPhotoRange(more).max}.`,
+      };
+    }
     return {
       count, short, canGoOn: false, main: 'size', mainLabel: MAKE_ALBUM_INSTEAD, secondLabel: null,
-      message: `You have ${formatCount(count)} photos. A ${MINI_NAME} holds up to ${MINI_MAX_PHOTOS}: take out ${over} (tap × on a photo), or make an album instead.`,
+      message: `You have ${formatCount(count)} photos. A ${named} holds up to ${max}: take out ${over} (tap × on a photo), or make an album instead.`,
     };
   }
   return {
-    count, short, canGoOn: true, main: 'next', mainLabel: NEXT, secondLabel: count < MINI_MAX_PHOTOS ? ADD_MORE_PHOTOS : null,
+    count, short, canGoOn: true, main: 'next', mainLabel: NEXT, secondLabel: count < max ? ADD_MORE_PHOTOS : null,
     message: `You have ${formatCount(count)} photos ready for your ${MINI_NAME}. Go on to pick your cover.`,
   };
 }
@@ -341,7 +360,7 @@ function miniPhotoStep(count: number): PhotoStep {
  *  can be lower than the photos picked: the same photo picked twice goes in
  *  once, and one the phone can't open doesn't go in). */
 export function photoStepFor(count: number, size?: string | null, opts?: PhotoStepOptions): PhotoStep {
-  if (isMiniSize(size)) return miniPhotoStep(count);
+  if (isMiniSize(size)) return miniPhotoStep(count, opts);
   const short = photosShortBy(count);
   if (count === 0) {
     return {
@@ -353,7 +372,7 @@ export function photoStepFor(count: number, size?: string | null, opts?: PhotoSt
     const message = `You have ${formatCount(count)} ${photoWord(count)}. Albums need at least ${MIN_ALBUM_PHOTOS}, one for every page: add ${short} more to make your album.`;
     // Under 40 photos, the Megy Mini (16 pages) while it is on sale.
     return opts?.miniOnSale
-      ? { count, short, canGoOn: false, main: 'pick', mainLabel: addMoreLabel(short), secondLabel: null, message: `${message} ${miniSuggestion(count)}`, suggestMini: true }
+      ? { count, short, canGoOn: false, main: 'pick', mainLabel: addMoreLabel(short), secondLabel: null, message: `${message} ${miniSuggestion(count, opts.miniPagesOnSale)}`, suggestMini: true }
       : { count, short, canGoOn: false, main: 'pick', mainLabel: addMoreLabel(short), secondLabel: null, message };
   }
   return {
@@ -365,13 +384,14 @@ export function photoStepFor(count: number, size?: string | null, opts?: PhotoSt
 }
 
 /** The picker's line under the count: how far the picked photos get the album. */
-export function pickerProgress(inAlbum: number, picked: number, size?: string | null): string {
+export function pickerProgress(inAlbum: number, picked: number, size?: string | null, miniPages?: number): string {
   if (isMiniSize(size)) {
     const total = inAlbum + picked;
-    const short = photosShortBy(total, MINI_SIZE);
-    const over = photosOverBy(total, MINI_SIZE);
-    if (short > 0) return `A ${MINI_NAME} needs at least ${MINI_MIN_PHOTOS} photos. Pick ${short} more.`;
-    if (over > 0) return `A ${MINI_NAME} holds up to ${MINI_MAX_PHOTOS} photos: ${over} too many.`;
+    const { min, max } = miniPhotoRange(miniPages);
+    const short = photosShortBy(total, MINI_SIZE, miniPages);
+    const over = photosOverBy(total, MINI_SIZE, miniPages);
+    if (short > 0) return `A ${MINI_NAME} needs at least ${min} photos. Pick ${short} more.`;
+    if (over > 0) return `A ${MINI_NAME} holds up to ${max} photos: ${over} too many.`;
     return `Enough photos for a ${MINI_NAME}.`;
   }
   const short = photosShortBy(inAlbum + picked);

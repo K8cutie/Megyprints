@@ -24,14 +24,15 @@ export function photosGoingIn(photos: readonly { leftOut?: boolean }[]): number 
 }
 
 /** How many more photos the book needs (0 = enough). Pass the size for a
- *  Megy Mini (16); left out = an album (40). */
-export function photosShortBy(count: number, size?: string | null): number {
-  return Math.max(0, minPhotosFor(size ?? '') - count);
+ *  Megy Mini (16, or its `miniPages`: 24); left out = an album (40). */
+export function photosShortBy(count: number, size?: string | null, miniPages?: number): number {
+  return Math.max(0, minPhotosFor(size ?? '', miniPages) - count);
 }
 
-/** How many photos too many (0 = fine). Only a Megy Mini has a ceiling (40). */
-export function photosOverBy(count: number, size?: string | null): number {
-  const max = maxPhotosFor(size ?? '');
+/** How many photos too many (0 = fine). Only a Megy Mini has a ceiling (40,
+ *  or 60 at 24 pages). */
+export function photosOverBy(count: number, size?: string | null, miniPages?: number): number {
+  const max = maxPhotosFor(size ?? '', miniPages);
   return Number.isFinite(max) ? Math.max(0, count - max) : 0;
 }
 
@@ -56,19 +57,19 @@ export function addMoreLabel(short: number): string {
 }
 
 /** Megy's answer to "generate" (and Surprise) while short. */
-export function tooFewToMakeMessage(have: number, size?: string | null): string {
-  const short = photosShortBy(have, size);
+export function tooFewToMakeMessage(have: number, size?: string | null, miniPages?: number): string {
+  const short = photosShortBy(have, size, miniPages);
   if (isMiniSize(size)) {
-    return `A ${MINI_NAME} needs at least ${minPhotosFor(size)} photos, one for every page. You have ${have}: add ${short} more and I'll make it.`;
+    return `A ${MINI_NAME} needs at least ${minPhotosFor(size, miniPages)} photos, one for every page. You have ${have}: add ${short} more and I'll make it.`;
   }
   return `Albums need at least ${MIN_ALBUM_PHOTOS} photos, one for every page. You have ${have}: add ${short} more and I'll make your album.`;
 }
 
 /** Why the album can't be ordered yet. */
-export function tooFewToOrderMessage(have: number, size?: string | null): string {
-  const short = photosShortBy(have, size);
+export function tooFewToOrderMessage(have: number, size?: string | null, miniPages?: number): string {
+  const short = photosShortBy(have, size, miniPages);
   if (isMiniSize(size)) {
-    return `Your ${MINI_NAME} has ${have} ${photoWord(have)}. It needs at least ${minPhotosFor(size)} to print, so add ${short} more before you order.`;
+    return `Your ${MINI_NAME} has ${have} ${photoWord(have)}. It needs at least ${minPhotosFor(size, miniPages)} to print, so add ${short} more before you order.`;
   }
   return `Your album has ${have} ${photoWord(have)}. Albums need at least ${MIN_ALBUM_PHOTOS} to print, so add ${short} more before you order.`;
 }
@@ -76,8 +77,8 @@ export function tooFewToOrderMessage(have: number, size?: string | null): string
 /** Thrown by checkout when the album being ordered is short. Not a fault to
  *  report: the customer just needs to add photos. */
 export class TooFewPhotosError extends Error {
-  constructor(have: number, size?: string | null) {
-    super(tooFewToOrderMessage(have, size));
+  constructor(have: number, size?: string | null, miniPages?: number) {
+    super(tooFewToOrderMessage(have, size, miniPages));
     this.name = 'TooFewPhotosError';
   }
 }

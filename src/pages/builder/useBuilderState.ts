@@ -31,7 +31,7 @@ import { isMaskId, type MaskId } from './maskShapes';
 import { isLookId, type LookId } from './lookRules';
 import { clampStickerGeom } from './stickers';
 import { MIN_ALBUM_PAGES } from './densities';
-import { bookPagesFor, maxPagesFor, isMiniSize } from '../../lib/megyMini';
+import { bookPagesFor, maxPagesFor, isMiniSize, miniPagesOf, miniPagesOfAlbum, pagesAreFixed, readMiniPagesFrom, writeMiniPagesTo, type MiniPages } from '../../lib/megyMini';
 import { miniCrossings, miniShape, miniReflow } from './miniPlanner';
 import { healSpreadPairs, spreadHalfOf, spreadQrCornerOf, spreadTemplateId, outerSpreadCorner, placeSpreadPair } from './miniSpread';
 import { memoriesAcrossSize, type CarriedMemory } from './generateAlbum';
@@ -811,6 +811,12 @@ export interface BuilderActions {
   albumSize: AlbumSizePreset;
   selectedTemplate: TemplateType;
   setAlbumSize: (s: AlbumSizePreset) => void;
+  /** A Megy Mini's pages, 16 or 24 (lib/megyMini): its own once it is made,
+   *  the customer's choice before (kept on this device). */
+  miniPages: MiniPages;
+  /** The page choice for a Mini not made yet. A made Mini changes its pages
+   *  only by being made again (generateAlbum's miniPages). */
+  setMiniPages: (n: number) => void;
   setAlbumType: (t: AlbumType) => void;
   setSelectedTemplate: (t: TemplateType) => void;
 
@@ -883,7 +889,7 @@ export interface BuilderActions {
    *  off only when its code is in `confirmedLost` (the customer said yes to
    *  exactly those); any other and nothing changes ({ made: false } with the
    *  plan, to ask about). */
-  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }) => Promise<GenerateResult>;
+  generateAlbum: (background?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[]; miniPages?: number }) => Promise<GenerateResult>;
   /** What generateAlbum is doing RIGHT NOW, or null when idle. The builder
    *  shows a "making your album" screen while this is set — a whole-album
    *  generation can take several seconds (measuring, laying out, waiting on
@@ -1147,6 +1153,14 @@ export function useBuilderState(): BuilderActions {
   /** The album's occasion, kept on this device (deviceStore; the website:
    *  localStorage, where its own steps read and write it too). */
   const currentAlbumTheme = useCallback(() => readAlbumThemeFrom(deviceStore), [deviceStore]);
+  /** A Megy Mini's page choice before it is made (16 or 24), kept on this
+   *  device like the occasion (lib/megyMini MINI_PAGES_KEY). */
+  const [miniChoice, setMiniChoice] = useState<MiniPages>(() => readMiniPagesFrom(deviceStore));
+  const setMiniPages = useCallback((n: number) => {
+    const pages = miniPagesOf(n);
+    writeMiniPagesTo(deviceStore, pages);
+    setMiniChoice(pages);
+  }, [deviceStore]);
   // ── Phase 1: Cloud hooks (the account, from the platform) ──
   const user = account.useUser();
   const albumSync = account.useAlbumSync();
@@ -2193,8 +2207,8 @@ export function useBuilderState(): BuilderActions {
   }, [albumPages.length]);
 
   const addPage = useCallback(() => {
-    // A Megy Mini is always its 16 pages (lib/megyMini): no page is added to it.
-    if (albumPagesRef.current.length >= maxPagesFor(albumSize)) return;
+    // A Megy Mini is always its 16 or 24 pages (lib/megyMini): no page is added to it.
+    if (pagesAreFixed(albumSize) || albumPagesRef.current.length >= maxPagesFor(albumSize)) return;
     pushSnapshot();
     setAlbumPages((prev) => {
       const newPage = createEmptyPage(prev.length, albumSize);
@@ -2213,8 +2227,8 @@ export function useBuilderState(): BuilderActions {
      sticker is placed in page fractions, so it is kept out of the spine again. */
   const deletePages = useCallback((indexes: readonly number[], opts?: { landOnLast?: boolean }): number => {
     const prev = albumPagesRef.current;
-    // Never under the book's pages: 40 for an album, all 16 for a Megy Mini.
-    const room = Math.max(0, prev.length - bookPagesFor(albumSize));
+    // Never under the book's pages: 40 for an album; a Megy Mini keeps all of its 16 or 24.
+    const room = pagesAreFixed(albumSize) ? 0 : Math.max(0, prev.length - bookPagesFor(albumSize));
     const wanted = [...new Set(indexes)].filter((i) => i >= 0 && i < prev.length).sort((a, b) => a - b);
     const going = new Set(wanted.slice(Math.max(0, wanted.length - room)));
     if (going.size === 0) return 0;
@@ -2365,10 +2379,18 @@ export function useBuilderState(): BuilderActions {
     return out;
   };
 
-  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[] }): Promise<GenerateResult> => {
-    const { size: newSize, confirmedLost, ...genOptions } = options ?? {};
+  const generateAlbumAction = useCallback(async (wizardBackground?: AlbumBackground, options?: { randomize?: boolean; size?: AlbumSizePreset; confirmedLost?: string[]; miniPages?: number }): Promise<GenerateResult> => {
+    const { size: newSize, confirmedLost, miniPages: askedPages, ...genOptions } = options ?? {};
     const size = newSize ?? albumSize;
     const resizing = size !== albumSize;
+    // A MEGY MINI is made at 16 or 24 pages: the ones asked for, else the
+    // made Mini's own, else the customer's choice (lib/megyMini).
+    const miniNow = isMiniSize(size) ? miniPagesOf(askedPages ?? (isMiniSize(albumSize) ? miniPagesOfAlbum(albumPagesRef.current, miniChoice) : miniChoice)) : undefined;
+    // A made Mini going from 16 pages to 24 (or back) is laid out again from
+    // scratch, as a new size is: Studio pages are for the old page count.
+    const repaging = !resizing && miniNow !== undefined && albumPagesRef.current.some((p) => (p.slotFills ?? []).some((f) => f != null))
+      && albumPagesRef.current.length !== miniNow;
+    const relayout = resizing || repaging;
     // Show the "making your album" screen for the whole run and let the browser
     // PAINT it before the synchronous layout work starts (a state update alone
     // would be batched behind the heavy loop and never appear).
@@ -2395,7 +2417,7 @@ export function useBuilderState(): BuilderActions {
     // A NEW SIZE KEEPS THE VIDEO MEMORIES: each comes along as its badge on
     // its photo. One that can't (its photo won't fill a page of the new
     // shape) never comes off without a yes to it — the caller asks (change_size).
-    const memories = resizing ? memoriesAcrossSize(albumPagesRef.current, photos, albumSize, size) : null;
+    const memories = relayout ? memoriesAcrossSize(albumPagesRef.current, photos, albumSize, size) : null;
     if (memories?.lost.some((q) => !confirmedLost?.includes(q.code))) return { made: false, memories };
     pushSnapshot();
     // Bake the active theme's photo frame + corner art onto every generated page.
@@ -2422,7 +2444,7 @@ export function useBuilderState(): BuilderActions {
     // (with a smaller minimum), fresh pages map back to the full photo list.
     // A NEW SIZE re-lays out every page: a Studio page is laid out for the old
     // shape and would be squashed onto the new one (1-star testers).
-    const { kept, used } = resizing ? { kept: [], used: new Set<number>() } : splitStudioPages(albumPagesRef.current);
+    const { kept, used } = relayout ? { kept: [], used: new Set<number>() } : splitStudioPages(albumPagesRef.current);
     // Photos the customer left out (Megy's photo check) stay out — not one
     // that carries a memory.
     const memoryPhotos = new Set((memories?.carried ?? []).map((m) => m.photo));
@@ -2450,7 +2472,7 @@ export function useBuilderState(): BuilderActions {
     // On Surprise about half the pages are full pages (FULL_PAGE_SHARE), so
     // the faces matter whenever fewer than half of a 40-page album fit.
     const faceCands = memoryFaceCandidates(pool, size, undefined,
-      photosPerPage == null ? Math.ceil(bookPagesFor(size) * FULL_PAGE_SHARE) : undefined);
+      photosPerPage == null ? Math.ceil(bookPagesFor(size, miniNow) * FULL_PAGE_SHARE) : undefined);
     if (faceCands.length > 0) {
       faceCenters = {};
       // Up to 8 s of work: shown as its own step with a count ("Finding the
@@ -2480,7 +2502,7 @@ export function useBuilderState(): BuilderActions {
     const scenes = planScenes(pool);
     setGenerating('laying_out');
     await paintFrame();
-    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, scenes, minPages: Math.max(1, bookPagesFor(size) - kept.length) });
+    let newPages = generateAlbum(pool, size, photosPerPage, bg, { ...genOptions, border, cornerBase, faceCenters, memories: carried, scenes, minPages: Math.max(1, bookPagesFor(size, miniNow) - kept.length) });
     remapSlotFills(newPages, poolMap);
     const quoteTheme = THEMES[selectedTemplate];
     // Bank quotes are off (DEAL_BANK_QUOTES): quote boxes are made empty, so
@@ -2526,6 +2548,10 @@ export function useBuilderState(): BuilderActions {
       setAlbumSizeState(size);
       setCoverFrontPage((c) => ({ ...c, size }));
     }
+    if (miniNow !== undefined) {
+      writeMiniPagesTo(deviceStore, miniNow);
+      setMiniChoice(miniNow);
+    }
     // When this album was made, saved on its pages so a reload or another
     // phone shows the same time: the testers' stamp (testingPhase).
     const madeAt = Date.now();
@@ -2537,7 +2563,7 @@ export function useBuilderState(): BuilderActions {
       setGenerating(null);
       setGeneratingCount(null);
     }
-  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme, ensureThemeQuotes, whenPhotosMeasured, whenPhotosChecked]);
+  }, [uploadedPhotos, albumSize, photosPerPage, selectedTemplate, faces, currentAlbumTheme, ensureThemeQuotes, whenPhotosMeasured, whenPhotosChecked, miniChoice, deviceStore]);
 
   /** Does the current page carry a video memory? Then its layout stays the
    *  full photo with the QR badge (see relayPageOnTemplate), and the layout
@@ -3900,8 +3926,10 @@ export function useBuilderState(): BuilderActions {
     setPreviewSeen(false); // a new album hasn't been previewed
     setRejectedTemplateIds([]);
     setPhotosPerPage(undefined);
-    // A new album is a new occasion (Step 1 asks it again).
+    // A new album is a new occasion (Step 1 asks it again), and a new Mini starts at 16 pages.
     writeAlbumThemeTo(deviceStore, '', occasionChanged);
+    writeMiniPagesTo(deviceStore, undefined);
+    setMiniChoice(16);
     setCoverDesign(DEFAULT_COVER_DESIGN);
     setCoverFrontPage(createCoverPage('8x8'));
     setEditScope('interior');
@@ -4157,6 +4185,8 @@ export function useBuilderState(): BuilderActions {
     albumSize,
     selectedTemplate,
     setAlbumSize: setAlbumSizeState,
+    miniPages: miniPagesOfAlbum(albumPages, miniChoice),
+    setMiniPages,
     setAlbumType: setAlbumTypeState,
     setSelectedTemplate: setSelectedTemplateState,
     albumTitle,

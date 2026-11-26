@@ -40,7 +40,7 @@ export const COVER_TO_PHOTOS = 'Next: add your photos →';
 /** A REAL (non-empty) album exists (WizardEngine.hasBuiltAlbum). Exported so
  *  the cover editor's button and Megy's words read the album the same way. */
 export function albumIsBuilt(pages: BuilderActions['albumPages']): boolean {
-  // A Megy Mini is made at 16 pages (lib/megyMini), an album at 40 or more.
+  // A Megy Mini is made at 16 or 24 pages (lib/megyMini), an album at 40 or more.
   return pages.length >= MINI_PAGES && pages.some(
     (p) => (p.slotFills?.some((f) => f != null) ?? false) || p.photos.length > 0,
   );
@@ -51,8 +51,8 @@ export function albumIsBuilt(pages: BuilderActions['albumPages']): boolean {
  *  to its pages and is never made again by it (that would wipe the customer's
  *  edits and memories). Short of 40 photos (a journey saved before the photos
  *  came first, or photos left out since) it goes to the photos. */
-export function coverStepNext(albumMade: boolean, photosIn: number, size?: string | null): { label: string; go: 'pages' | 'photos' | 'make' } {
+export function coverStepNext(albumMade: boolean, photosIn: number, size?: string | null, miniPages?: number): { label: string; go: 'pages' | 'photos' | 'make' } {
   if (albumMade) return { label: COVER_TO_PAGES, go: 'pages' };
-  if (photosShortBy(photosIn, size) > 0) return { label: COVER_TO_PHOTOS, go: 'photos' };
+  if (photosShortBy(photosIn, size, miniPages) > 0) return { label: COVER_TO_PHOTOS, go: 'photos' };
   return { label: MAKE_ALBUM, go: 'make' };
 }

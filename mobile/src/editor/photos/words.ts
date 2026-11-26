@@ -39,8 +39,11 @@ export const STUDIO_FIXED = 'Back to Megy’s layout. Your photos stayed where t
 export const LAYOUT_TITLE = 'Choose a layout';
 export const LAYOUT_CURRENT = '✓ Current';
 export const LAYOUT_NONE = 'No other layouts fit this page.';
-/** The Megy Mini's middle spread (pages 8 and 9, miniSpread.ts). */
+/** The Megy Mini's middle spread (pages 8 and 9 of 16, 12 and 13 of 24; miniSpread.ts). */
 export const LAYOUT_SPREAD_NOTE = 'This is the middle spread: one photo across pages 8 and 9. Tap the photo to change it, move it or zoom.';
+/** The same, for the spread's own pages ("12 and 13" on a 24-page Mini). */
+export const layoutSpreadNote = (leftPageIndex: number) =>
+  `This is the middle spread: one photo across pages ${leftPageIndex + 1} and ${leftPageIndex + 2}. Tap the photo to change it, move it or zoom.`;
 /** LayoutPicker.tsx's note on a page with a video memory (a tap on the QR
  *  opens "Change this memory": editor/memories). */
 export const LAYOUT_MEMORY_NOTE = 'This page has a video memory, so it stays one full photo with the QR in the corner. To use a layout with more photos, tap the QR and remove the video first.';
@@ -100,6 +103,8 @@ export const PAGES_TITLE = 'Pages';
 export const ADD_PAGE = 'Add a page';
 /** The Pages sheet on a Megy Mini (lib/megyMini): no page goes in or out. */
 export const MINI_PAGES_FIXED = "A Megy Mini is always 16 pages, so pages can't be added or deleted.";
+/** The same, for the Mini's own page count (16 or 24). */
+export const miniPagesFixed = (pages: number) => `A Megy Mini is always ${pages} pages, so pages can't be added or deleted.`;
 export const ADD_PAGE_DESC = 'A new page after this one. Then choose its layout.';
 export const deletePageLabel = (pageIndex: number) => `Delete page ${pageIndex + 1}`;
 export const DELETE_PAGE_DESC = 'Its words go with it. Its photos stay in your photos, ready to place again.';
