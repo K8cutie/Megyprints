@@ -33,6 +33,7 @@
 import type { KeptPhoto, KeyValueStore, PhotoIntake, PhotoSize, PhotoStore, PickedPhoto, StoredPhoto } from '@web/shared/platform';
 import type { PhotoCheck } from '@web/lib/photoCheck';
 import type { DraftPhoto } from '../lib/photoDraft';
+import { readPlace, type PhotoPlace } from '../lib/photoPlace';
 
 /** A photo from the Photos step, as the builder takes it. */
 export interface AppPickedPhoto extends PickedPhoto {
@@ -43,6 +44,8 @@ export interface AppPickedPhoto extends PickedPhoto {
   readonly height: number;
   /** When it was taken (ms), or null. */
   readonly capturedAt: number | null;
+  /** Where it was taken (EXIF GPS), when it has a place (lib/photoPlace). */
+  readonly location?: PhotoPlace;
   /** What the phone said about it just now (syncPhotos asked), so the photo
    *  store does not ask again. */
   readonly header?: PhotoHeader;
@@ -77,6 +80,7 @@ export function toPickedPhoto(p: DraftPhoto, bytes?: number, header?: PhotoHeade
     width: p.width,
     height: p.height,
     capturedAt: p.capturedAt,
+    ...(p.location ? { location: p.location } : {}),
     ...(header ? { header } : {}),
     ...(p.check ? { check: p.check } : {}),
     ...(p.kept ? { kept: true } : {}),
@@ -215,6 +219,9 @@ export function createPhotoIntake(inspect: InspectPhotos): PhotoIntake {
     },
     // Read when it was picked (Phase 2: EXIF where the phone's index lacks it).
     captureTime: async (p) => (isAppPickedPhoto(p) ? p.capturedAt ?? null : null),
+    // Where it was taken, read when it was picked (lib/gallery, lib/filePhotos):
+    // the album keeps photos from the same place together (planScenes, 200 m).
+    captureLocation: async (p) => (isAppPickedPhoto(p) ? readPlace(p.location) : null),
     previewUrlOf: (p) => (isAppPickedPhoto(p) ? p.uri : ''),
     known: (p) => (isAppPickedPhoto(p) && (p.check || p.kept) ? { check: p.check, kept: p.kept } : undefined),
     // Every address is checked again when an album opens: a photo can be

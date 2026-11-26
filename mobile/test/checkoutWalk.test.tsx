@@ -108,6 +108,13 @@ async function playBar() {
 }
 
 describe('the checkout screen, walked', () => {
+  it('in the Christmas sale (0073): what the free videos are worth, and how more are sold', async () => {
+    fake.rpc.public_video_offer = { data: { single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2099-12-31' } }, error: null };
+    await openScreen();
+    expect(screen.getByText('✓ 2 living-memory QRs (₱100 value)')).toBeOnTheScreen();
+    expect(screen.getByText(/Add more for ₱50 each, or 3 for ₱100 in the Christmas sale until December 31\./)).toBeOnTheScreen();
+  });
+
   it('shows the album, the live price, and the boxes, in the website\'s words', async () => {
     await openScreen();
     expect(screen.getByText('Finalize Your Order')).toBeOnTheScreen();
@@ -123,6 +130,19 @@ describe('the checkout screen, walked', () => {
     expect(hardPrice.total).toBeGreaterThan(softPrice.total);
     // The price came from the database's public price list, read once.
     expect(rec.rpcs.filter((r) => r.name === 'public_price_schedule')).toHaveLength(1);
+    // No launch price on this list: nothing crossed out, no "% off".
+    expect(screen.queryByTestId('order-launch-off')).toBeNull();
+  });
+
+  it('during the launch price (owner, 2026-11-24): "40% off" beside the total, the regular price crossed out, the same price paid', async () => {
+    fake.rpc.public_launch_price = { data: { pct: 40, until: '2099-12-31' }, error: null };
+    await openScreen();
+    const regular = Math.round(softPrice.total / 0.6);
+    expect(screen.getByTestId('order-launch-off')).toHaveTextContent('40% off');
+    expect(screen.getByTestId('order-total')).toHaveTextContent(new RegExp(`40% off\\s+${peso(regular)}\\s+${peso(softPrice.total)}`));
+    expect(screen.getByTestId('order-savings')).toHaveTextContent('Launch price: 40% off the album until December 31, 2099');
+    // What the customer pays doesn't change.
+    expect(screen.getByText(`Place order · pay ${peso(softPrice.total)} by bank transfer`)).toBeOnTheScreen();
   });
 
   it('under Place order, the website\'s line: placing an order agrees to the Terms, 18 or older; it opens the app\'s Terms screen (test/legalLinks.test.tsx)', async () => {

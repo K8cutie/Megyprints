@@ -9,22 +9,26 @@
    a wrong price on a money path is worse than a blocked one).
    ══════════════════════════════════════════════════════════════════════════ */
 import {
-  compareAtPriceOf,
+  crossedOutPrintOf,
   freeShippingValueOf,
   hdMemoriesPriceOf,
   hostingTiersOf,
   includedHostingYears,
+  launchOf,
+  launchRegularOf,
+  manilaToday,
   miniPriceBreakdown,
   priceBreakdown,
   priceOf,
   FREE_QR_MEMORIES,
   type Binding,
   type HostingTier,
+  type LaunchPrice,
   type PriceBreakdown,
   type PriceSchedule,
 } from '@web/lib/pricing';
 import type { AlbumSizePreset, CoverType } from '@web/pages/builder/types';
-import { isMiniSize, miniOfferOf } from '@web/lib/megyMini';
+import { isMiniSize, miniOfferFor, miniOfferOf } from '@web/lib/megyMini';
 import { checkoutPayTotal, type AffiliateCode } from '@web/lib/orderCodes';
 import type { TesterCode } from './testerCode';
 
@@ -60,8 +64,13 @@ export interface CheckoutPrice {
   total: number;
   /** What the customer pays: the total, or ₱0 with a tester code. */
   payTotal: number;
-  /** The crossed-out "was" total, while the price drop shows; else null. */
+  /** The crossed-out total: the album at its regular price while the launch
+   *  price runs (add-ons at their own price), else the old "was" total while
+   *  that runs; else null. */
   wasTotal: number | null;
+  /** The launch price running today (albums only; a Megy Mini never). When
+   *  set, `wasTotal` is the regular price and checkout says the launch line. */
+  launch: LaunchPrice | null;
   freeShippingValue: number;
   includedYears: number | null;
   /** The term the order stores (hosting_years): only with QR memories. */
@@ -86,7 +95,8 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
   if (isMiniSize(input.albumSize)) {
     // MEGY MINI (0062): a set price + shipping on top; never a "was" price.
-    const offer = schedule ? miniOfferOf(schedule) : null;
+    // Its price is its page count's: 16 or 24 pages (0070).
+    const offer = schedule ? miniOfferFor(miniOfferOf(schedule), input.pageCount) : null;
     const breakdown = schedule && offer
       ? miniPriceBreakdown(schedule, offer, input.qrCount, effectiveYears, input.hdMemories, input.videoMinutes ?? null)
       : { items: [], total: 0 };
@@ -97,6 +107,7 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
       // A Megy Mini takes no affiliate discount (0065); the affiliate still earns.
       payTotal: checkoutPayTotal(breakdown.total, input.tester, input.affiliate ?? null, true),
       wasTotal: null,
+      launch: null,
       freeShippingValue: 0,
       includedYears,
       effectiveYears,
@@ -112,18 +123,20 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
     ? priceBreakdown(schedule, input.albumSize, binding, input.pageCount, input.qrCount, effectiveYears, input.hdMemories, input.videoMinutes ?? null)
     : { items: [], total: 0 };
   const total = breakdown.total;
-  const wasPrint = schedule
-    ? (input.today === undefined
-      ? compareAtPriceOf(schedule, input.albumSize, binding, input.pageCount)
-      : compareAtPriceOf(schedule, input.albumSize, binding, input.pageCount, input.today))
-    : null;
+  const today = input.today ?? manilaToday();
+  const wasPrint = schedule ? crossedOutPrintOf(schedule, input.albumSize, binding, input.pageCount, today) : null;
   const wasTotal = schedule && wasPrint !== null ? wasPrint + (total - priceOf(schedule, input.albumSize, binding, input.pageCount)) : null;
+  // The launch line goes only with the launch's own crossed-out price.
+  const launch = schedule && launchRegularOf(schedule, input.albumSize, binding, input.pageCount, today) !== null
+    ? launchOf(schedule, today)
+    : null;
   return {
     ready: schedule !== null,
     breakdown,
     total,
     payTotal: checkoutPayTotal(total, input.tester, input.affiliate ?? null),
     wasTotal,
+    launch,
     freeShippingValue: schedule ? freeShippingValueOf(schedule) : 0,
     includedYears,
     effectiveYears,

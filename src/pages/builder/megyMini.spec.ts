@@ -154,7 +154,7 @@ describe('Megy Mini: the price (mirrors order_quote, 0062)', () => {
   } as unknown as PriceSchedule;
 
   it('reads the offer only when it is whole', () => {
-    expect(miniOfferOf(schedule)).toEqual({ size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 });
+    expect(miniOfferOf(schedule)).toEqual({ size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2, options: [{ pages: 16, price: 350, package_price: 299 }] });
     expect(miniOfferOf({ mini: null })).toBeNull();
     expect(miniOfferOf({})).toBeNull();
     expect(miniOfferOf(null)).toBeNull();

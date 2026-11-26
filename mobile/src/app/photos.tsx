@@ -35,7 +35,7 @@ import { photosOverBy, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { inspectPhotos, releasePickedFiles } from '../../modules/photo-files';
 import { useBuilder } from '../builder/BuilderProvider';
 import { albumMade, KEEP_PAGES, keptToCarry, MADE_ALBUM_PHOTOS_MESSAGE, MADE_ALBUM_PHOTOS_NOTE, REMAKE_ALBUM, remakeQuestion, resizeMadeAlbum, saveStep, sizeTap, syncNote, syncPhotos, TO_COVER, type PhotoSync } from '../builder/albumFlow';
-import { MINI_INSTEAD, MINI_SIZE, miniOfferOf } from '@web/lib/megyMini';
+import { MINI_INSTEAD, MINI_SIZE, miniOfferOf, miniPagesOnSale } from '@web/lib/megyMini';
 import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { useGoToPreview } from '../builder/useGoToPreview';
@@ -85,11 +85,13 @@ export default function YourPhotos() {
   // is offered the Mini (owner, 2026-11-16).
   const loadSchedule = useCallback(() => loadPriceSchedule(supabase, supabaseConfigured), []);
   const prices = usePriceSchedule(loadSchedule);
-  const miniOnSale = !!miniOfferOf(prices.schedule);
-  // A Megy Mini (16 to 40 photos) or an album (40 or more): the album's size says.
-  const picked = photoStep(draft.photos, builder.albumSize, { miniOnSale });
+  const miniOffer = miniOfferOf(prices.schedule);
+  const stepOpts = { miniOnSale: !!miniOffer, miniPages: builder.miniPages, miniPagesOnSale: miniPagesOnSale(miniOffer) };
+  // A Megy Mini (16 to 40 photos, 24 to 60 at 24 pages) or an album (40 or
+  // more): the album's size says.
+  const picked = photoStep(draft.photos, builder.albumSize, stepOpts);
   // Fewer went in than were picked: the builder's count decides.
-  const step = tookNow && tookNow.goingIn < picked.count ? photoStepFor(tookNow.goingIn, builder.albumSize, { miniOnSale }) : picked;
+  const step = tookNow && tookNow.goingIn < picked.count ? photoStepFor(tookNow.goingIn, builder.albumSize, stepOpts) : picked;
   // "Make a Megy Mini instead": the size step's own tap on the Mini (asked
   // first only when the album already has pages).
   const toMini = () => {
@@ -164,7 +166,7 @@ export default function YourPhotos() {
     const r: PhotoSync = await syncPhotos(builder, draft.photos, inspectPhotos, { addressOf: (id) => kept.get(id) });
     const note = syncNote(r);
     setTook(note || r.goingIn < photoStep(draft.photos, builder.albumSize).count ? { at: draft.updatedAt, goingIn: r.goingIn, note } : null);
-    return photosShortBy(r.goingIn, builder.albumSize) === 0 && photosOverBy(r.goingIn, builder.albumSize) === 0;
+    return photosShortBy(r.goingIn, builder.albumSize, builder.miniPages) === 0 && photosOverBy(r.goingIn, builder.albumSize, builder.miniPages) === 0;
   };
   const busyWhile = async <T,>(job: () => Promise<T>): Promise<T> => {
     setGoing(true);

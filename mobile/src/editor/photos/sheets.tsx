@@ -21,7 +21,7 @@ import type { SheetProps } from '../registry';
 import { addPageAfter, canAddPage, canDeletePage, deleteThisPage, photoTags, pickLook, pickMask, placePicked, type PickTarget } from './actions';
 import { pickFromPhone } from './pickFromPhone';
 import {
-  ADD_A_PHOTO, ADD_PAGE, ADD_PAGE_DESC, CANT_DELETE_PAGE, MINI_PAGES_FIXED, DELETE_PAGE_DESC, deletePageLabel, FILTER, MASK, MASK_HINT,
+  ADD_A_PHOTO, ADD_PAGE, ADD_PAGE_DESC, CANT_DELETE_PAGE, miniPagesFixed, DELETE_PAGE_DESC, deletePageLabel, FILTER, MASK, MASK_HINT,
   NO_PHOTOS_YET, ORIGINAL, PAGES_TITLE, REPLACE_PHOTO, UPLOAD_MORE,
 } from './words';
 
@@ -106,7 +106,7 @@ export function PagesSheet({ ctx, close }: SheetProps<undefined>) {
   return (
     <EditorSheet title={PAGES_TITLE} onClose={close} testID="photos-pages-sheet">
       {!canAddPage(ctx) ? (
-        <View style={styles.note}><Text style={styles.noteText} testID="photos-page-mini">{MINI_PAGES_FIXED}</Text></View>
+        <View style={styles.note}><Text style={styles.noteText} testID="photos-page-mini">{miniPagesFixed(ctx.builder.albumPages.length)}</Text></View>
       ) : (<>
       <SheetChoice label={ADD_PAGE} desc={ADD_PAGE_DESC} testID="photos-page-add"
         // The new page has no frames yet: its layouts come next.

@@ -18,7 +18,7 @@ import type { AlbumPage, AlbumSizeConfig, AlbumSizePreset, UploadedPhoto } from 
 import { offerableSizesAmong } from '@web/pages/builder/sizeOffer';
 import { densityRangeLabel } from '@web/pages/builder/densities';
 import { photosGoingIn, photosOverBy, photosShortBy, tooFewToMakeMessage } from '@web/pages/builder/albumMinimum';
-import { isMiniSize, miniPhotoProblem, MINI_NAME } from '@web/lib/megyMini';
+import { isMiniSize, miniPagesOf, miniPhotoProblem, MINI_NAME, MINI_SIZE } from '@web/lib/megyMini';
 import { albumIsBuilt, COVER_TO_PAGES, COVER_TO_PHOTOS, coverStepNext as wizardCoverStepNext, KEEP_PAGES, MAKE_ALBUM, REMAKE_ALBUM, TO_COVER } from '@web/assistant/wizardSteps';
 import { albumIsMade, confirmedIntent, placedMemories, rebuildQuestion, remakeLosesMessage } from '@web/assistant/rebuildQuestion';
 import { isAlbumNameReady } from '@web/lib/albumName';
@@ -105,7 +105,7 @@ export type SizeTap =
   | { kind: 'tooFew'; message: string }
   | { kind: 'ask'; question: string };
 
-type SizeBuilder = Pick<BuilderActions, 'albumPages' | 'albumSize' | 'uploadedPhotos' | 'photosPerPage'>;
+type SizeBuilder = Pick<BuilderActions, 'albumPages' | 'albumSize' | 'uploadedPhotos' | 'photosPerPage'> & Partial<Pick<BuilderActions, 'miniPages'>>;
 
 /** The website asks in chat and ends with 'Say "yes" to go ahead, or keep
  *  editing.'; the app asks with two buttons, so that part is left off. */
@@ -115,9 +115,10 @@ export function sizeTap(builder: SizeBuilder, size: AlbumSizePreset): SizeTap {
   if (size === builder.albumSize) return { kind: 'same' };
   if (!albumIsMade(builder.albumPages)) return { kind: 'set' };
   const have = photosGoingIn(builder.uploadedPhotos);
-  if (photosShortBy(have, size) > 0) return { kind: 'tooFew', message: tooFewToMakeMessage(have, size) };
-  // A Megy Mini holds 16 to 40 photos (lib/megyMini).
-  if (photosOverBy(have, size) > 0) return { kind: 'tooFew', message: miniPhotoProblem(have) ?? '' };
+  const pages = builder.miniPages;
+  if (photosShortBy(have, size, pages) > 0) return { kind: 'tooFew', message: tooFewToMakeMessage(have, size, pages) };
+  // A Megy Mini holds 16 to 40 photos (24 to 60 at 24 pages; lib/megyMini).
+  if (photosOverBy(have, size, pages) > 0) return { kind: 'tooFew', message: miniPhotoProblem(have, pages) ?? '' };
   const q = rebuildQuestion({ type: 'change_size', payload: { size }, rawMessage: '' }, builder);
   return { kind: 'ask', question: (q ?? '').replace(CHAT_YES, '') };
 }
@@ -128,16 +129,51 @@ export function sizeTap(builder: SizeBuilder, size: AlbumSizePreset): SizeTap {
 export async function resizeMadeAlbum(
   builder: SizeBuilder & Pick<BuilderActions, 'generateAlbum' | 'currentPageIndex'>,
   size: AlbumSizePreset,
+  /** A Megy Mini's pages (16 or 24); left out, the builder's choice. */
+  miniPages?: number,
 ): Promise<{ done: boolean; message: string }> {
   const intent = confirmedIntent({ type: 'change_size', payload: { size }, rawMessage: '' }, builder);
   const lost = Array.isArray(intent.payload?.confirmedLost) ? (intent.payload.confirmedLost as string[]) : [];
   // actionEngine pagesBackground: the background of the page on screen.
   const bg = builder.albumPages[builder.currentPageIndex ?? 0]?.background;
-  const r: GenerateResult = await builder.generateAlbum(bg, { size, ...(lost.length ? { confirmedLost: lost } : {}) });
+  const r: GenerateResult = await builder.generateAlbum(bg, { size, ...(lost.length ? { confirmedLost: lost } : {}), ...(isMiniSize(size) && miniPages != null ? { miniPages } : {}) });
   const label = sizeName(size);
   if (!r.made) return { done: false, message: `The size was not changed: your album stays ${sizeName(builder.albumSize)}.` };
-  if (isMiniSize(size)) return { done: true, message: `Your photos are now a ${MINI_NAME}: 16 A5 pages, laid out again from your photos.` };
+  if (isMiniSize(size)) return { done: true, message: `Your photos are now a ${MINI_NAME}: ${miniPagesOf(miniPages ?? builder.miniPages)} A5 pages, laid out again from your photos.` };
   return { done: true, message: `Album size changed to ${label}. Every page is laid out again for the new shape.` };
+}
+
+/** A tap on a Megy Mini's page count (16 or 24) on the size step. Before
+ *  the Mini is made it just sets the choice. A made Mini is laid out again
+ *  at the new count, asked first (the same way as a new size), and only
+ *  when its photos fit the new count. */
+export type MiniPagesTap =
+  | { kind: 'set' }
+  | { kind: 'same' }
+  | { kind: 'tooFew'; message: string }
+  | { kind: 'ask'; question: string };
+
+export function miniPagesTap(builder: Pick<BuilderActions, 'albumPages' | 'albumSize' | 'uploadedPhotos' | 'miniPages'>, pages: number): MiniPagesTap {
+  const n = miniPagesOf(pages);
+  if (!isMiniSize(builder.albumSize)) return { kind: 'set' };
+  if (n === builder.miniPages) return { kind: 'same' };
+  if (!albumIsMade(builder.albumPages)) return { kind: 'set' };
+  const have = photosGoingIn(builder.uploadedPhotos);
+  const problem = miniPhotoProblem(have, n);
+  if (problem) return { kind: 'tooFew', message: problem };
+  return { kind: 'ask', question: `Every page is laid out again from your photos for ${n} pages. Your video memories stay on their photos.` };
+}
+
+/** "Yes" to miniPagesTap's question: the Mini made again at `pages` pages. */
+export async function remakeMiniAt(
+  builder: Pick<BuilderActions, 'generateAlbum' | 'albumPages' | 'currentPageIndex' | 'miniPages'>,
+  pages: number,
+): Promise<{ done: boolean; message: string }> {
+  const n = miniPagesOf(pages);
+  const bg = builder.albumPages[builder.currentPageIndex ?? 0]?.background;
+  const r: GenerateResult = await builder.generateAlbum(bg, { size: MINI_SIZE, miniPages: n });
+  if (!r.made) return { done: false, message: `The pages were not changed: your ${MINI_NAME} stays ${builder.miniPages} pages.` };
+  return { done: true, message: `Your ${MINI_NAME} is now ${n} pages, laid out again from your photos.` };
 }
 
 /** A size as a customer reads it: "8×8", or "Megy Mini" for A5. */
@@ -279,8 +315,8 @@ export function syncNote(r: Pick<PhotoSync, 'skipped' | 'unreadable'>): string {
 }
 
 /** The photos step's way on (wizard: hard gate at 40, never a dead button). */
-export function photosShort(builder: Pick<BuilderActions, 'uploadedPhotos'> & Partial<Pick<BuilderActions, 'albumSize'>>): number {
-  return photosShortBy(photosGoingIn(builder.uploadedPhotos), builder.albumSize);
+export function photosShort(builder: Pick<BuilderActions, 'uploadedPhotos'> & Partial<Pick<BuilderActions, 'albumSize' | 'miniPages'>>): number {
+  return photosShortBy(photosGoingIn(builder.uploadedPhotos), builder.albumSize, builder.miniPages);
 }
 
 /* ── Cover ─────────────────────────────────────────────────────────────── */
@@ -350,8 +386,8 @@ export function albumMade(pages: BuilderActions['albumPages']): boolean {
  *  (an album already made goes back to its pages, never made again: that
  *  would wipe edits; short of 40 photos, to the photos; else it makes the
  *  album), from the photos going in. */
-export function coverStepNext(made: boolean, photosIn: number, size?: AlbumSizePreset): { label: string; go: 'pages' | 'photos' | 'make' } {
-  return wizardCoverStepNext(made, photosIn, size);
+export function coverStepNext(made: boolean, photosIn: number, size?: AlbumSizePreset, miniPages?: number): { label: string; go: 'pages' | 'photos' | 'make' } {
+  return wizardCoverStepNext(made, photosIn, size, miniPages);
 }
 
 /** The Photos step once the album is made (the website's upload step for a

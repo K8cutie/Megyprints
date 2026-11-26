@@ -48,6 +48,13 @@ const WITH_WAS = {
   },
 } as unknown as PriceSchedule;
 
+/** The same list during the launch price (owner, 2026-11-24: 40% off until
+ *  March 31, 2027). It keeps the "was" price too: the launch wins. */
+const WITH_LAUNCH = { ...WITH_WAS, launch: { pct: 40, until: '2027-03-31' } } as unknown as PriceSchedule;
+
+/** The same list in the Christmas sale (0073): ₱50 a video, any 3 for ₱100. */
+const WITH_SALE = { ...LIVE, video_offer: { single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2099-12-31' } } } as unknown as PriceSchedule;
+
 const TODAY = '2026-10-29';
 
 /* ── The website's own checkout arithmetic, cut out of Order.tsx ── */
@@ -55,6 +62,7 @@ const TODAY = '2026-10-29';
 interface WebPrice {
   binding: string; tiers: unknown; includedYears: number | null; effectiveYears: number | null; hdPrice: number;
   breakdown: pricing.PriceBreakdown; totalPrice: number; payTotal: number; freeShippingValue: number; wasTotal: number | null;
+  launch: pricing.LaunchPrice | null;
 }
 interface WebInput {
   schedule: PriceSchedule | null; albumSize: AlbumSizePreset; cover: CoverType; pageCount: number; qrCount: number;
@@ -76,11 +84,13 @@ const PRICE_BLOCK = cut('const schedule = getPriceSchedule();', '  const priceRe
 /** Runs the website's lines with these inputs (no event album: the app has
  *  none yet). compareAtPriceOf gets the fixed day, as the app's does. */
 function websitePrice(i: WebInput): WebPrice {
-  const body = `${BINDING_LINE}\n${PRICE_BLOCK}\nreturn { binding, tiers, includedYears, effectiveYears, hdPrice, breakdown, totalPrice, payTotal, freeShippingValue, wasTotal };`;
+  const body = `${BINDING_LINE}\n${PRICE_BLOCK}\nreturn { binding, tiers, includedYears, effectiveYears, hdPrice, breakdown, totalPrice, payTotal, freeShippingValue, wasTotal, launch };`;
   const js = ts.transpileModule(`function run() {\n${body}\n}`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
   const scope = {
     ...pricing,
     compareAtPriceOf: (s: PriceSchedule, size: AlbumSizePreset, b: pricing.Binding, pages: number) => pricing.compareAtPriceOf(s, size, b, pages, i.today),
+    crossedOutPrintOf: (s: PriceSchedule, size: AlbumSizePreset, b: pricing.Binding, pages: number) => pricing.crossedOutPrintOf(s, size, b, pages, i.today),
+    launchOf: (s: PriceSchedule) => pricing.launchOf(s, i.today),
     getPriceSchedule: () => i.schedule,
     checkoutPayTotal,
     albumSize: i.albumSize, cover: i.cover, pageCount: i.pageCount, qrCount: i.qrCount,
@@ -110,7 +120,7 @@ describe("the phone's price is the website's, number for number", () => {
   let compared = 0;
   let withWas = 0;
 
-  it.each([['the live list', LIVE], ['a list with a "was" price', WITH_WAS]] as const)('%s', (_l, schedule) => {
+  it.each([['the live list', LIVE], ['a list with a "was" price', WITH_WAS], ['a list with the launch price', WITH_LAUNCH], ['a list in the Christmas sale', WITH_SALE]] as const)('%s', (_l, schedule) => {
     for (const albumSize of sizes) for (const cover of covers) for (const pageCount of pageCounts) {
       for (const [qrCount, hostingYears, hdMemories] of memories) for (const [t, affiliate] of codes) {
         const input = { schedule, albumSize, cover, pageCount, qrCount, hostingYears, hdMemories, tester: t, affiliate, today: TODAY };
@@ -121,6 +131,7 @@ describe("the phone's price is the website's, number for number", () => {
         expect(a.total).toBe(w.totalPrice);
         expect(a.payTotal).toBe(w.payTotal);
         expect(a.wasTotal).toBe(w.wasTotal);
+        expect(a.launch).toEqual(w.launch);
         expect(a.effectiveYears).toBe(w.effectiveYears);
         expect(a.includedYears).toBe(w.includedYears);
         expect(a.tiers).toEqual(w.tiers);
@@ -144,6 +155,46 @@ describe("the phone's price is the website's, number for number", () => {
   it('the "was" price was on screen in some of them (the path ran)', () => { expect(withWas).toBeGreaterThan(0); });
 
   afterAll(() => { if (compared) console.log(`checkout prices compared with the website's: ${compared} (${withWas} with a "was" price)`); });
+});
+
+describe('the launch price (owner, 2026-11-24: "Yes, 40% to Mar 31")', () => {
+  const plain = { tester: null, hostingYears: null, hdMemories: false } as const;
+
+  it("crosses out the album's regular price; today's price is 40% off it", () => {
+    const a = checkoutPrice(WITH_LAUNCH, { ...plain, albumSize: '8x8', cover: 'softcover', pageCount: 40, qrCount: 0, today: TODAY });
+    expect(a.launch).toEqual({ pct: 40, until: '2027-03-31' });
+    expect(a.wasTotal).toBe(Math.round(a.total / 0.6));
+    expect(1 - a.total / (a.wasTotal as number)).toBeCloseTo(0.4, 3);
+  });
+
+  it('the add-ons are never discounted: they sit at their own price on both numbers', () => {
+    const bare = checkoutPrice(WITH_LAUNCH, { ...plain, albumSize: '8x8', cover: 'softcover', pageCount: 40, qrCount: 0, today: TODAY });
+    const more = checkoutPrice(WITH_LAUNCH, { ...plain, albumSize: '8x8', cover: 'softcover', pageCount: 40, qrCount: 9, hdMemories: true, hostingYears: 20, today: TODAY });
+    expect(more.total - bare.total).toBeGreaterThan(0);
+    expect((more.wasTotal as number) - (bare.wasTotal as number)).toBe(more.total - bare.total);
+  });
+
+  it('the launch wins over the old "was" price while both are set', () => {
+    const a = checkoutPrice(WITH_LAUNCH, { ...plain, albumSize: '8x8', cover: 'hardboundLeather', pageCount: 60, qrCount: 0, today: TODAY });
+    expect(a.wasTotal).toBe(pricing.launchRegularOf(WITH_LAUNCH, '8x8', 'hard', 60, TODAY));
+    expect(a.wasTotal).not.toBe(pricing.compareAtPriceOf(WITH_LAUNCH, '8x8', 'hard', 60, TODAY));
+  });
+
+  it('runs through March 31 (Manila) and is gone on April 1', () => {
+    const on = checkoutPrice(WITH_LAUNCH, { ...plain, albumSize: '6x6', cover: 'softcover', pageCount: 40, qrCount: 0, today: '2027-03-31' });
+    const off = checkoutPrice(WITH_LAUNCH, { ...plain, albumSize: '6x6', cover: 'softcover', pageCount: 40, qrCount: 0, today: '2027-04-01' });
+    expect(on.launch).not.toBeNull();
+    expect(off.launch).toBeNull();
+    expect(off.wasTotal).toBeNull();
+  });
+
+  it('the Megy Mini keeps its own price: no % off, no crossed-out price', () => {
+    const MINI_LIST = { ...WITH_LAUNCH, mini: { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 } } as unknown as PriceSchedule;
+    const a = checkoutPrice(MINI_LIST, { ...plain, albumSize: '5.8x8.3', cover: 'staple', pageCount: 16, qrCount: 0, today: TODAY });
+    expect(a.mini).toBe(true);
+    expect(a.launch).toBeNull();
+    expect(a.wasTotal).toBeNull();
+  });
 });
 
 describe("the database's saved total (order_quote, 0066) is the phone's total", () => {

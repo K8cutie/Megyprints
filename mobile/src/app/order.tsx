@@ -33,7 +33,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
 import { EMPTY_ADDRESS, type AddressValue } from '@web/lib/contact';
 import { trackOf } from '@web/lib/orderTracker';
-import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, QR_PACK_SENTENCE } from '@web/lib/pricing';
+import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, includedVideosValue, launchLine, launchOff, videoOfferOf, videoOfferSentence } from '@web/lib/pricing';
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
@@ -150,6 +150,8 @@ export default function OrderScreen() {
     : fixture!), [ordersOwn, b, b?.albumPages, b?.coverFront, b?.albumTitle, ownRow, ownId, fixture]);
   const loadSchedule = useCallback(() => loadPriceSchedule(supabase, supabaseConfigured), []);
   const prices = usePriceSchedule(loadSchedule);
+  // How extra videos are sold (0073), and what the free ones are worth at the single price.
+  const videoOffer = videoOfferOf(prices.schedule);
 
   const [step, setStep] = useState<Step>('form');
   // The form as typed the last time checkout was open for this album
@@ -248,7 +250,7 @@ export default function OrderScreen() {
   const pageCount = album.pages.length;
   const qrCount = countQrMemories(album.pages);
   const photosIn = albumPhotoCount(album.pages);
-  const tooFew = photosShortBy(photosIn, albumSize) > 0;
+  const tooFew = photosShortBy(photosIn, albumSize, pageCount) > 0;
   // MEGY MINI (lib/megyMini): its own cover (staples), its own price + shipping.
   const mini = isMiniSize(albumSize);
 
@@ -750,6 +752,7 @@ export default function OrderScreen() {
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
             {!eventLink && price.ready && price.payTotal < price.total && (tester || affiliate) && <Text style={styles.was}>{peso(price.total)}  </Text>}
+            {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && price.launch && <Text style={styles.off} testID="order-launch-off">{`${launchOff(price.launch)}  `}</Text>}
             {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && <Text style={styles.was}>{peso(price.wasTotal)}  </Text>}
             {eventLink ? '₱0' : price.ready ? peso(price.payTotal) : '—'}
           </Text>
@@ -757,7 +760,9 @@ export default function OrderScreen() {
         {coveredByBooking && <Text style={styles.savings} testID="order-covered">{EV.COVERED_LINE}</Text>}
         {!!eventLink && !coveredByBooking && <Text style={styles.small} testID="order-covered-later">{EV.COVERED_LATER}</Text>}
         {!eventLink && price.ready && !tester && !affiliate && price.wasTotal !== null && (
-          <Text style={styles.savings} testID="order-savings">New lower price: you save {peso(price.wasTotal - price.total)}</Text>
+          <Text style={styles.savings} testID="order-savings">
+            {price.launch ? launchLine(price.launch) : `New lower price: you save ${peso(price.wasTotal - price.total)}`}
+          </Text>
         )}
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
@@ -770,7 +775,7 @@ export default function OrderScreen() {
           {!mini && <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>}
           {mini
             ? <Text style={styles.small}>✓ {price.freeVideos} video memories</Text>
-            : <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs</Text>}
+            : <Text style={styles.small}>✓ {FREE_QR_MEMORIES} living-memory QRs{includedVideosValue(FREE_QR_MEMORIES, videoOffer) ? ` (${peso(includedVideosValue(FREE_QR_MEMORIES, videoOffer) as number)} value)` : ''}</Text>}
           {price.includedYears !== null && <Text style={styles.small}>✓ {includedHostingLine(price.includedYears, price.effectiveYears)}</Text>}
         </View>
         {qrCount > 0 && price.tiers.length > 0 && !eventLink && (
@@ -797,15 +802,15 @@ export default function OrderScreen() {
             {eventLink
               ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
               : mini
-                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. {QR_PACK_SENTENCE}</>
-                : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. {QR_PACK_SENTENCE}</>}
+                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. {videoOfferSentence(videoOffer)}</>
+                : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. {videoOfferSentence(videoOffer)}</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
         </View>
       </Section>
 
       {tooFew ? (
-        <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn, albumSize)}</Text></View>
+        <View style={styles.warn} testID="order-too-few-photos"><Text style={styles.warnText}>{tooFewToOrderMessage(photosIn, albumSize, pageCount)}</Text></View>
       ) : asking ? null : (
         <>
           <Button
@@ -955,6 +960,7 @@ const styles = StyleSheet.create({
   total: { fontSize: 24, fontWeight: '800', color: colors.accent },
   was: { fontSize: 15, fontWeight: '500', color: colors.muted, textDecorationLine: 'line-through' },
   savings: { fontSize: 13, fontWeight: '700', color: colors.good, textAlign: 'right' },
+  off: { fontSize: 14, fontWeight: '800', color: colors.good },
   included: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 2 },
   qrNote: { borderWidth: 1, borderColor: '#E9B8A0', backgroundColor: '#FBF0EA', borderRadius: 12, padding: 12 },
   dealOk: { borderColor: '#BFE3C8', backgroundColor: '#EEF8F1' },

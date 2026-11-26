@@ -74,7 +74,7 @@ export function checkCheckout(i: CheckoutCheckInput): CheckoutCheck {
   if (!i.signedIn) return { ok: false, kind: 'message', message: SIGN_IN_PROBLEM, signIn: true, name, phone };
   if (i.openOrderUnanswered) return { ok: false, kind: 'askSecond', name, phone };
   const have = albumPhotoCount(i.pages);
-  if (photosShortBy(have, i.size) > 0) return { ok: false, kind: 'message', message: tooFewToOrderMessage(have, i.size), openAlbum: true, name, phone };
+  if (photosShortBy(have, i.size, i.pages.length) > 0) return { ok: false, kind: 'message', message: tooFewToOrderMessage(have, i.size, i.pages.length), openAlbum: true, name, phone };
   return { ok: true, name, phone };
 }
 

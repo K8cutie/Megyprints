@@ -10,7 +10,7 @@ import type { AlbumPage, PageTemplate } from '@web/pages/builder/types';
 import { layoutChangeLeftovers } from '@web/pages/builder/useBuilderState';
 import { findPhotoSlot, placedPhotoPages, swapNotice } from '@web/pages/builder/slotSwap';
 import { blankPagePlan, deletedBlankNote } from '@web/pages/builder/blankPages';
-import { bookPagesFor, isMiniSize } from '@web/lib/megyMini';
+import { bookPagesFor, isMiniSize, pagesAreFixed } from '@web/lib/megyMini';
 import { edgeGuardMessage, type MaskId } from '@web/pages/builder/maskShapes';
 import type { LookId } from '@web/pages/builder/lookRules';
 import { SOFT_MESSAGE } from '@web/pages/builder/slotGeometry';
@@ -174,10 +174,11 @@ export const photosHeld = (t: PageTemplate) => t.slots.filter((s) => s.kind !== 
 
 /* ── Pages ─────────────────────────────────────────────────────────────── */
 
-/** A page can be deleted: an album keeps the 40-page floor, a Megy Mini all 16. */
-export const canDeletePage = (ctx: Pick<EditorContext, 'builder'>) => ctx.builder.albumPages.length > bookPagesFor(ctx.builder.albumSize);
+/** A page can be deleted: an album keeps the 40-page floor, a Megy Mini all of its 16 or 24. */
+export const canDeletePage = (ctx: Pick<EditorContext, 'builder'>) => !pagesAreFixed(ctx.builder.albumSize)
+  && ctx.builder.albumPages.length > bookPagesFor(ctx.builder.albumSize);
 
-/** A page can be added: never to a Megy Mini, always 16 pages (lib/megyMini). */
+/** A page can be added: never to a Megy Mini, always its 16 or 24 pages (lib/megyMini). */
 export const canAddPage = (ctx: Pick<EditorContext, 'builder'>) => !isMiniSize(ctx.builder.albumSize);
 
 /** A new empty page after this one (addPage moves to it), as Megy's "add a page" does. */

@@ -2,14 +2,14 @@
   "expo": {
     "name": "Megy Prints 2.0 (dev)",
     "slug": "megyprints-2",
-    "version": "2.1.5",
+    "version": "2.1.8",
     "scheme": "megyprints-dev",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.megyprints.app.dev",
-      "versionCode": 115,
+      "versionCode": 118,
       "adaptiveIcon": {
         "backgroundColor": "#B85C38",
         "foregroundImage": "./assets/android-icon-foreground.png"
@@ -19,7 +19,6 @@
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO",
-        "android.permission.ACCESS_MEDIA_LOCATION",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
@@ -38,7 +37,7 @@
           "granularPermissions": [
             "photo"
           ],
-          "isAccessMediaLocationEnabled": false
+          "isAccessMediaLocationEnabled": true
         }
       ],
       "expo-image",
