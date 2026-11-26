@@ -1,16 +1,18 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 24-PAGE MEGY MINI PROOF (0071; always rolled back)
+--  MEGY PRINTS — 24-PAGE MEGY MINI PROOF (0075; always rolled back)
 --
 --  The price list offers the Mini at 16 pages (₱350) and 24 pages (₱449); a
 --  Mini order is priced by its page count; a 24-page Mini with videos pays
 --  the same packs as a 16-page one; any other page count is refused (MP021);
 --  a customer can't set the 24-page prices; every 16-page price is what it
---  was before 0070. The script ends by raising, so NOTHING is written; the
---  report is the error message.
+--  was before; the album prices set per size (0074) and the longer videos are
+--  untouched. The script ends by raising, so NOTHING is written; the report is
+--  the error message.
 --
---  HOW TO RUN (after 0071):
---    npx supabase db query --linked --file supabase/security/mini-24-proof.sql
---  Before applying 0071: one file = "begin;" + 0071 + this file without "begin;".
+--  HOW TO RUN (after 0075):
+--    docker exec -i supabase_db_megyprints_testers psql -U postgres < supabase/security/mini-24-proof.sql
+--    (live, read-only by rollback: npx supabase db query --linked --file …)
+--  Before applying 0075: one file = "begin;" + 0075 + this file without "begin;".
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
 
@@ -154,6 +156,14 @@ begin
     perform pg_temp.log(true, 'off: a 24-page Mini order is refused (MP022)', '');
   end;
 end $$;
+
+-- ── 0075 leaves the albums and longer videos alone ──
+select pg_temp.log(
+  (public.order_quote('8x8', 'hardboundLeather', 40, 0, null, false, null, null) ->> 'total')::int
+    = (select (sizes -> '8x8' ->> 'price_hard')::int from public.pricing_model where id = 1),
+  'an 8x8 hardcover still costs its set price (0074)', 'the 8x8 hardcover price moved');
+select pg_temp.log(jsonb_typeof(public.public_price_schedule() -> 'long_video_prices') = 'object',
+  'longer videos are still in the price list', 'longer videos disappeared from the price list');
 
 do $$
 declare report text; total integer; fails integer;

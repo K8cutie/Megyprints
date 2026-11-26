@@ -1,19 +1,27 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0071_mini_24_pages.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0075_mini_24_pages.sql  (idempotent; safe to re-run)
 --
 --  WHY (owner, 2026-11-23): a second stapled booklet, "an additional a second
 --  staple offering": the Megy Mini at 24 pages, ₱449 (₱399 in a package), next
 --  to the 16-page one at ₱350 (₱299). One product, two page counts: same A5,
 --  staples, 2 free videos, add-ons and shipping. 24 pages = 6 folded sheets =
 --  3 press sheets (₱26.50 each), so it costs about ₱83 to make (16 pages: ₱56).
+--  Then (2026-11-26): "mini24 should already be live make it live. add it to
+--  2.1.8 update".
+--
+--  REBUILT ON THE LIVE DATABASE (was 0071, written after the draft 0070). It
+--  carries 0074's price list (album prices set per size) and 0067's owner view,
+--  quote and order check, each with only the 24-page changes. It does NOT
+--  include 0070's longer-videos switch: longer videos stay as they are live.
 --
 --  What changes:
 --    1. pricing_model.mini24_price (449), mini24_package_price (399),
 --       mini24_cost (83, owner's view only);
 --    2. public_price_schedule(): "mini" gains "options", one per page count
 --       ({pages, price, package_price}). Its top-level pages/price stay the
---       16-page Mini, so app 2.1.5 and the website keep selling that one;
---    3. order_quote(): a Mini is priced by its page_count from "options"
+--       16-page Mini, so apps before 2.1.8 and the website keep selling that
+--       one;
+--    3. order_quote(): a Mini is priced by its page count from "options"
 --       (null for any other count, so it can't be ordered); the quote says
 --       its pages;
 --    4. orders_quote(): a Mini has 16 or 24 pages (MP021; was 16 only);
@@ -21,14 +29,14 @@
 --       sets them (owner only).
 --
 --  ADDITIVE for the live clients: none of them sends a 24-page Mini, and every
---  16-page price and rule is unchanged. Run AFTER 0070 (the longer-videos
---  switch): its price list and owner view are carried here unchanged.
+--  16-page and album price and rule is unchanged.
+--
+--  ⚠ Open drafts that redefine these functions must carry the 24-page lines:
+--  0070 (#317: public_price_schedule, owner_pricing_model) and 0073 (#327:
+--  order_quote).
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. The 24-page numbers ══════
--- (0070's switch, in case this runs on a database without it: off)
-alter table public.store_settings add column if not exists long_videos_on boolean not null default false;
-
 alter table public.pricing_model add column if not exists mini24_price         integer not null default 449;
 alter table public.pricing_model add column if not exists mini24_package_price integer not null default 399;
 alter table public.pricing_model add column if not exists mini24_cost          integer not null default 83;
@@ -39,7 +47,7 @@ alter table public.pricing_model add constraint pricing_model_mini24_chk check (
   and mini24_package_price between 1 and 100000
   and mini24_cost between 0 and 100000);
 
--- ══════ 2. The price list (0070's, plus mini.options) ══════
+-- ══════ 2. The price list (0074's, plus mini.options) ══════
 create or replace function public.public_price_schedule()
 returns jsonb
 language plpgsql
@@ -59,6 +67,8 @@ declare
   show_cmp   boolean;
   ship       numeric;
   reserve    numeric;
+  sheet_rate numeric;
+  base       numeric;
   k          text;
   v          jsonb;
 begin
@@ -72,16 +82,24 @@ begin
   disabled := coalesce(srow -> 'disabled_sizes', '[]'::jsonb);
   ship     := greatest(coalesce(m.shipping_allowance, 0), 0);
   reserve  := greatest(coalesce(m.hosting_reserve, 0), 0);
+  sheet_rate := m.sheet_cost * mult;
   show_cmp := m.compare_multiple is not null and m.compare_until is not null
               and m.compare_multiple > mult
               and m.compare_until >= (now() at time zone 'Asia/Manila')::date;
 
   for k, v in select * from jsonb_each(m.sizes) loop
+    -- The sheets in the smallest album, which a set price already pays for.
+    base := ceil(m.min_pages::numeric / (v ->> 'pps')::int) * sheet_rate + reserve;
     out_sizes := out_sizes || jsonb_build_object(k, jsonb_build_object(
       'pps',       (v ->> 'pps')::int,
-      -- shipping rides inside the rate: flat, never multiplied
-      'soft_rate', (m.soft_cover_cost + m.soft_bind_cost) * mult + (v ->> 'surcharge')::numeric + ship,
-      'hard_rate', (v ->> 'hb')::numeric * mult + (v ->> 'surcharge')::numeric + ship
+      -- A set price (0074) wins; otherwise the multiple. Shipping rides inside
+      -- the rate: flat, never multiplied.
+      'soft_rate', case when jsonb_typeof(v -> 'price_soft') = 'number'
+                        then (v ->> 'price_soft')::numeric - base
+                        else (m.soft_cover_cost + m.soft_bind_cost) * mult + (v ->> 'surcharge')::numeric + ship end,
+      'hard_rate', case when jsonb_typeof(v -> 'price_hard') = 'number'
+                        then (v ->> 'price_hard')::numeric - base
+                        else (v ->> 'hb')::numeric * mult + (v ->> 'surcharge')::numeric + ship end
     ));
     if show_cmp then
       cmp_sizes := cmp_sizes || jsonb_build_object(k, jsonb_build_object(
@@ -108,7 +126,7 @@ begin
       'package_price', m.mini_package_price,
       'shipping_fee',  m.mini_shipping_fee,
       'free_qr',       m.mini_free_qr,
-      -- 0071: every page count on sale. The top-level pages/price above stay
+      -- 0075: every page count on sale. The top-level pages/price above stay
       -- the 16-page Mini, for app versions that read only those.
       'options',       jsonb_build_array(
         jsonb_build_object('pages', 16, 'price', m.mini_price,    'package_price', m.mini_package_price),
@@ -118,13 +136,11 @@ begin
 
   return jsonb_build_object(
     'min_pages',           m.min_pages,
-    'sheet_rate',          m.sheet_cost * mult,
+    'sheet_rate',          sheet_rate,
     'hosting_reserve',     m.hosting_reserve,
     'hosting_tiers',       m.hosting_tiers,
     'hd_memories_price',   m.hd_memories_price,
-    -- 0070: only while the owner has them on; null = videos up to 2 minutes
-    'long_video_prices',   case when coalesce((srow ->> 'long_videos_on')::boolean, false)
-                                then jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price) end,
+    'long_video_prices',   jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price),
     'free_shipping_value', ship,
     'compare_at',          compare,
     'disabled_sizes',      disabled,
@@ -165,7 +181,6 @@ begin
     'hd_memories_price',    m.hd_memories_price,
     'video_3min_price',     m.video_3min_price,
     'video_5min_price',     m.video_5min_price,
-    'long_videos_on',       coalesce((srow ->> 'long_videos_on')::boolean, false),
     'shipping_allowance',   m.shipping_allowance,
     'compare_multiple',     m.compare_multiple,
     'compare_until',        to_char(m.compare_until, 'YYYY-MM-DD'),
@@ -261,8 +276,8 @@ begin
     if z is null or jsonb_typeof(z) <> 'object' or p_cover is distinct from 'staple' then
       return null;
     end if;
-    -- 0071: the price for the order's page count (16 or 24); a list
-    -- without options (before 0070) sells 16 pages only.
+    -- 0075: the price for the order's page count (16 or 24); a list
+    -- without options (before 0075) sells 16 pages only.
     if jsonb_typeof(z -> 'options') = 'array' then
       select (o ->> 'price')::integer into price
         from jsonb_array_elements(z -> 'options') o
@@ -421,3 +436,12 @@ grant execute on function public.set_megy_mini_24(integer, integer) to authentic
 select p as pages,
        (public.order_quote('5.8x8.3', 'staple', p, 3, null, false, null, null) ->> 'total') as total
   from unnest(array[16, 24, 20]) p;
+
+-- The album prices (0074) and longer videos are untouched.
+select 'album prices by size kept (8x8 hard 40 pp)' as check,
+       round(10 * (public.public_price_schedule() ->> 'sheet_rate')::numeric
+             + (public.public_price_schedule() -> 'sizes' -> '8x8' ->> 'hard_rate')::numeric)
+       + (public.public_price_schedule() ->> 'hosting_reserve')::numeric as ok
+union all
+select 'longer videos still in the price list',
+       (jsonb_typeof(public.public_price_schedule() -> 'long_video_prices') = 'object')::int;
