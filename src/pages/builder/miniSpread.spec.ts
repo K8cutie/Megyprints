@@ -78,7 +78,8 @@ describe('the middle spread: which pages, which photo', () => {
     for (const t of SPREAD_TEMPLATES) {
       expect(ids.has(t.id)).toBe(false);
       expect(getTemplateById(t.id)).toBe(t);
-      expect(t.albumSizes).toEqual([MINI_SIZE]);
+      // A4, and A5 so a Mini made before 2026-11-27 still finds its spread
+      expect(t.albumSizes).toEqual([MINI_SIZE, '5.8x8.3']);
     }
   });
 });
@@ -131,7 +132,7 @@ describe('the middle spread: the halves meet exactly at the fold', () => {
 });
 
 describe('the middle spread: a video memory goes in an outer corner only', () => {
-  const W = 148 / 25.4, H = 210 / 25.4;
+  const W = 210 / 25.4, H = 297 / 25.4; // A4
 
   it('left half: top or bottom LEFT; right half: top or bottom RIGHT', () => {
     expect(SPREAD_QR_CORNERS).toEqual({ left: ['bl', 'tl'], right: ['br', 'tr'] });

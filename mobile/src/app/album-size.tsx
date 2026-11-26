@@ -26,7 +26,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALBUM_SIZES, type AlbumSizeConfig } from '@web/pages/builder/types';
-import { isMiniSize, miniOfferOf, miniPhotoRangeLabel, MINI_NAME, MINI_PAGES, MINI_PHOTO_RANGE, MINI_SIZE, type MiniOffer } from '@web/lib/megyMini';
+import { isMiniSize, miniOfferOf, miniPhotoRangeLabel, MINI_NAME, MINI_PAGES, MINI_PAPER, MINI_PHOTO_RANGE, MINI_SIZE, type MiniOffer } from '@web/lib/megyMini';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { miniPagesTap, offerableSizes, pagesHoldPhotos, remakeMiniAt, resizeMadeAlbum, saveStep, SIZE_LINE, sizePhotosPerPage, sizeTap } from '../builder/albumFlow';
@@ -61,7 +61,7 @@ async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null; sc
   }
 }
 
-/** The Megy Mini's card: A5's own size entry, named as the product. */
+/** The Megy Mini's card: A4's own size entry, named as the product. */
 const MINI_CARD: AlbumSizeConfig = { ...(ALBUM_SIZES.find((s) => s.preset === MINI_SIZE) as AlbumSizeConfig), name: MINI_NAME };
 
 export default function AlbumSize() {
@@ -198,14 +198,14 @@ export default function AlbumSize() {
           const choices = mini && mini.options.length > 1 ? mini.options : null;
           return (
             <>
-              <Text style={styles.section}>Or a small booklet</Text>
+              <Text style={styles.section}>Or a stapled booklet</Text>
               <Pressable accessibilityRole="radio" accessibilityState={{ checked: on, busy: resizing === MINI_SIZE }} onPress={() => pick(MINI_CARD)}
                 style={[styles.card, on && styles.cardOn]} testID="size-mini">
                 <View style={styles.cardTop}>
                   <View style={[styles.shape, styles.mini]} />
                   <View style={styles.cardWords}>
                     <Text style={styles.name}>{MINI_NAME}</Text>
-                    <Text style={styles.perPage}>{choices ? 'A5 · 16 or 24 pages' : `A5 · ${MINI_PAGES} pages · ${MINI_PHOTO_RANGE} photos`}</Text>
+                    <Text style={styles.perPage}>{choices ? `${MINI_PAPER} · 16 or 24 pages` : `${MINI_PAPER} · ${MINI_PAGES} pages · ${MINI_PHOTO_RANGE} photos`}</Text>
                   </View>
                   {resizing === MINI_SIZE ? <ActivityIndicator color={colors.accent} />
                     : on && <Text style={styles.tick} accessibilityLabel="Picked">✓</Text>}
@@ -257,8 +257,8 @@ const styles = StyleSheet.create({
   square: { width: 36, height: 36 },
   landscape: { width: 44, height: 30 },
   portrait: { width: 30, height: 44 },
-  // A5 is smaller than every album: a smaller shape, the same portrait.
-  mini: { width: 22, height: 31 },
+  // A4: a little taller than the portrait albums, the same kind of shape.
+  mini: { width: 31, height: 44 },
   section: { fontSize: 16, fontWeight: '700', color: colors.muted, marginTop: space.sm },
   cardWords: { flex: 1 },
   name: { fontSize: 18, fontWeight: '700', color: colors.text },

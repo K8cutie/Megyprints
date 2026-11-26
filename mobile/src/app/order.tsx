@@ -37,7 +37,7 @@ import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, includedVideosV
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
-import { isMiniSize, MINI_COVER, MINI_NAME } from '@web/lib/megyMini';
+import { isMiniSize, MINI_COVER, MINI_NAME, MINI_PAPER } from '@web/lib/megyMini';
 
 /** The Megy Mini's one cover (lib/megyMini): never offered for an album. */
 const MINI_COVER_CHOICE: (typeof COVERS)[number] = {
@@ -628,7 +628,7 @@ export default function OrderScreen() {
   }
 
   /* ══════════════ FORM ══════════════ */
-  const sizeName = mini ? `${MINI_NAME} · A5` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
+  const sizeName = mini ? `${MINI_NAME} · ${MINI_PAPER}` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
   const materialName = MATERIALS.find((m) => m.type === material)?.name ?? material;
   const coverName = mini ? MINI_COVER_CHOICE.name : COVERS.find((c) => c.type === cover)?.name ?? cover;
   // An order that didn't finish sending is never "pay that order" (0068).

@@ -994,7 +994,8 @@ const SIZE_ORIENTATION: { size: AlbumSizePreset; orientation: PageTemplate['orie
   { size: '6x8', orientation: 'portrait' },
   { size: S1158, orientation: 'landscape' },
   { size: S8511, orientation: 'portrait' },
-  { size: '5.8x8.3', orientation: 'portrait' },  // A5, the Megy Mini
+  { size: '5.8x8.3', orientation: 'portrait' },  // A5, the Megy Mini until 2026-11-27
+  { size: '8.3x11.7', orientation: 'portrait' }, // A4, the Megy Mini
 ];
 
 /** Physical safe-area inches per size (album inches × the 0.04 margin each side). */
@@ -1003,6 +1004,7 @@ const GAP_SAFE_IN: Record<string, [number, number]> = {
   '6x6': [6 * 0.92, 6 * 0.92], '8x8': [8 * 0.92, 8 * 0.92],
   '11.5x8': [11.5 * 0.92, 8 * 0.92], '8.5x11': [8.5 * 0.92, 11 * 0.92],
   '5.8x8.3': [(148 / 25.4) * 0.92, (210 / 25.4) * 0.92],
+  '8.3x11.7': [(210 / 25.4) * 0.92, (297 / 25.4) * 0.92],
 };
 /** Would a ratio-fit frame inside a [maxW×maxH] fraction of the safe area print
  *  at least 2" on its short side? (Mirrors rsBox's fit math so gap variants
@@ -1158,6 +1160,7 @@ const ZERO_MARGIN_PT: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 const QR_FULL_IN: Record<string, [number, number]> = {
   '6x4': [6, 4], '8x6': [8, 6], '6x8': [6, 8], '6x6': [6, 6], '8x8': [8, 8], '11.5x8': [11.5, 8], '8.5x11': [8.5, 11],
   '5.8x8.3': [148 / 25.4, 210 / 25.4],
+  '8.3x11.7': [210 / 25.4, 297 / 25.4],
 };
 const QR_BADGE_TEMPLATES: PageTemplate[] = [];
 for (const { size, orientation } of SIZE_ORIENTATION) {
@@ -1301,7 +1304,7 @@ export const TEMPLATE_COUNT = PAGE_TEMPLATES.length;
    correctly at every album aspect (square / portrait / landscape).
    The TITLE is always textSlot index 0, which coverLayout.deriveSpine reads to
    populate the spine. ══════════════════════════════════════════════════════ */
-const ALL_ALBUM_SIZES: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11', '5.8x8.3'];
+const ALL_ALBUM_SIZES: AlbumSizePreset[] = ['6x6', '8x8', '6x4', '8x6', '6x8', '11.5x8', '8.5x11', '5.8x8.3', '8.3x11.7'];
 
 /** Default cover layout: a full-bleed hero photo with a title box low-centre.
  *  Leave the hero empty + set a background colour for a clean text-only cover. */

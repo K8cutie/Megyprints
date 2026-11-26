@@ -39,10 +39,12 @@ export const SPREAD_RIGHT_ID = 'mini-spread-right';
 /** The outer corners each half may carry a video memory in. */
 export const SPREAD_QR_CORNERS: Record<SpreadHalf, readonly QrCorner[]> = { left: ['bl', 'tl'], right: ['br', 'tr'] };
 
-const MINI = '5.8x8.3' as const;
-/** A5 in inches: the spread half's own page, no spine reserve. */
-const PAGE_W_IN = 148 / 25.4;
-const PAGE_H_IN = 210 / 25.4;
+const MINI = '8.3x11.7' as const;
+/** A5, the Mini before 2026-11-27: its Minis open as A4 (retiredSizes). */
+const OLD_MINI = '5.8x8.3' as const;
+/** A4 in inches: the spread half's own page, no spine reserve. */
+const PAGE_W_IN = 210 / 25.4;
+const PAGE_H_IN = 297 / 25.4;
 /** The same chip as every album's: 1.2" square, 0.35" in from the trim. */
 const QR_IN = 1.2;
 const QR_PAD_IN = 0.35;
@@ -88,7 +90,7 @@ function half(side: SpreadHalf, corner: QrCorner | null): PageTemplate {
     margin: { top: 0, bottom: 0, left: 0, right: 0 },
     orientation: 'landscape',
     targetRatio: '4:3',
-    albumSizes: [MINI],
+    albumSizes: [MINI, OLD_MINI],
     fullBleed: true,
     spreadHalf: side,
     slots,
@@ -104,8 +106,8 @@ export const SPREAD_TEMPLATES: PageTemplate[] = [
   ...SPREAD_QR_CORNERS.right.map((c) => half('right', c)),
 ];
 
-/** The spread's shape (two A5 pages side by side), width / height. */
-export const SPREAD_ASPECT = (2 * 148) / 210;
+/** The spread's shape (two A4 pages side by side), width / height. */
+export const SPREAD_ASPECT = (2 * 210) / 297;
 
 /** The photo for the middle spread: a landscape one that crops least on the
  *  spread (at most 12% off its top and bottom or a third off its sides),

@@ -446,7 +446,8 @@ export function isFullPagePhoto(page: AlbumPage): boolean {
    fitting photos takes the least-bad others — and, when the caller detected
    faces, only those whose faces the centred crop keeps. */
 const PAGE_ASPECT: Record<string, number> = {
-  '5.8x8.3': 148 / 210,  // A5, the Megy Mini
+  '5.8x8.3': 148 / 210,  // A5, the Megy Mini until 2026-11-27
+  '8.3x11.7': 210 / 297, // A4, the Megy Mini
   '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
 };
 const SIDE_CROP_OK = 0.34;

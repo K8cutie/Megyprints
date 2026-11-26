@@ -38,7 +38,7 @@ const photoFills = (p: AlbumPage) => {
   return (p.slotFills ?? []).filter((f, i) => f != null && t?.slots[i]?.kind !== 'qr');
 };
 
-const base = { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 };
+const base = { size: '8.3x11.7', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 };
 const both = { ...base, options: [{ pages: 16, price: 350, package_price: 299 }, { pages: 24, price: 449, package_price: 399 }] };
 const schedule = {
   min_pages: 40, sheet_rate: 60.95, hosting_reserve: 50,
@@ -88,8 +88,8 @@ describe('the 24-page Mini: its pages and photos', () => {
     expect(miniPagesForPhotos(45, [16, 24])).toBe(24);
     expect(miniPagesForPhotos(45, [16])).toBeNull();
     expect(miniPagesForPhotos(61, [16, 24])).toBeNull();
-    expect(miniSuggestion(30, [16, 24])).toBe('Or make a Megy Mini: 16 A5 pages, and your 30 photos fit.');
-    expect(miniSuggestion(10, [16, 24])).toBe('Or make a Megy Mini: it needs only 16 photos for its 16 A5 pages.');
+    expect(miniSuggestion(30, [16, 24])).toBe('Or make a Megy Mini: 16 A4 pages, and your 30 photos fit.');
+    expect(miniSuggestion(10, [16, 24])).toBe('Or make a Megy Mini: it needs only 16 photos for its 16 A4 pages.');
   });
 
   it('is exactly 24 pages, none empty, every photo placed, for 24 to 60 photos', () => {
@@ -138,8 +138,21 @@ describe('the 24-page Mini: its pages and photos', () => {
     expect(placed[12].id).toBe('R');
   });
 
-  it('prints on 3 press sheets: 6 folded sheets, two spreads a side', () => {
+  it('prints on 6 press sheets at A4: 6 folded sheets, one spread a side', () => {
     const { layout, sheets } = saddleSheetPlan(MINI_SIZE, 24);
+    expect(layout.pagesPerSheet).toBe(4);
+    expect(sheets.map((s) => [s.front, s.back])).toEqual([
+      [[{ left: 24, right: 1 }], [{ left: 2, right: 23 }]],
+      [[{ left: 22, right: 3 }], [{ left: 4, right: 21 }]],
+      [[{ left: 20, right: 5 }], [{ left: 6, right: 19 }]],
+      [[{ left: 18, right: 7 }], [{ left: 8, right: 17 }]],
+      [[{ left: 16, right: 9 }], [{ left: 10, right: 15 }]],
+      [[{ left: 14, right: 11 }], [{ left: 12, right: 13 }]],
+    ]);
+  });
+
+  it('an A5 one (ordered before 2026-11-27) prints on 3 press sheets, two spreads a side', () => {
+    const { layout, sheets } = saddleSheetPlan('5.8x8.3', 24);
     expect(layout.pagesPerSheet).toBe(8);
     expect(sheets).toEqual([
       { front: [{ left: 24, right: 1 }, { left: 22, right: 3 }], back: [{ left: 2, right: 23 }, { left: 4, right: 21 }] },
@@ -181,7 +194,7 @@ describe('the 24-page Mini: the price list', () => {
     expect(offer.price).toBe(449);
     const b = miniPriceBreakdown(schedule, offer, 0);
     expect(b.items.map((i) => [i.label, i.amount])).toEqual([
-      ['Megy Mini — A5 · 24 pages · staples · 2 video memories included', 449],
+      ['Megy Mini — A4 · 24 pages · staples · 2 video memories included', 449],
       ['Shipping', 120],
     ]);
     expect(b.total).toBe(569);

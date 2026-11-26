@@ -142,7 +142,8 @@ export function getPreferredRatioForAlbum(albumSize: string): PhotoRatio {
     case '6x4':    return '4:3';   // landscape → 4:3
     case '8x6':    return '4:3';   // landscape → 4:3
     case '6x8':    return '3:4';   // portrait
-    case '5.8x8.3': return '3:4';  // A5 portrait (Megy Mini) → 3:4
+    case '5.8x8.3': return '3:4';  // A5 portrait (Megy Mini until 2026-11-27) → 3:4
+    case '8.3x11.7': return '3:4'; // A4 portrait (Megy Mini) → 3:4
     case '6x6':    return '1:1';   // square → 1:1
     case '8x8':    return '1:1';   // square → 1:1
     case '11.5x8': return '4:3';   // landscape → 4:3

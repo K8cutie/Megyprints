@@ -112,8 +112,10 @@ export type BackgroundType = 'solid' | 'gradient' | 'texture' | 'image';
 
 export type AlbumSizePreset =
   | '6x6' | '8x8' | '6x4' | '8x6' | '6x8' | '11.5x8' | '8.5x11'
-  /** A5 portrait (148 x 210 mm): the Megy Mini booklet only, never an album size (lib/megyMini). */
-  | '5.8x8.3';
+  /** A5 portrait (148 x 210 mm): the Megy Mini until 2026-11-27, never an album size (lib/megyMini). */
+  | '5.8x8.3'
+  /** A4 portrait (210 x 297 mm): the Megy Mini booklet only, never an album size (lib/megyMini). */
+  | '8.3x11.7';
 
 export type MaterialType = 'matte' | 'glossy' | 'semigloss' | 'pearl' | 'linen';
 /** 'staple': the Megy Mini's stapled (saddle-stitched) soft cover, no spine. Never offered for an album. */
@@ -758,8 +760,10 @@ export const ALBUM_SIZES: AlbumSizeConfig[] = [
   { preset: '6x8', name: '6×8" Portrait', width: 1800, height: 2400, category: 'portrait' },
   { preset: '11.5x8', name: '11.5×8" Landscape', width: 3450, height: 2400, category: 'landscape' },
   { preset: '8.5x11', name: '8.5×11" Portrait', width: 2550, height: 3300, category: 'portrait' },
-  // A5 at 300 dpi (148 x 210 mm). The Megy Mini's page; sizeOffer keeps it out of the album size lists.
+  // A5 at 300 dpi (148 x 210 mm). The Megy Mini's page until 2026-11-27; sizeOffer keeps it out of the album size lists.
   { preset: '5.8x8.3', name: 'A5 Portrait', width: 1748, height: 2480, category: 'portrait' },
+  // A4 at 300 dpi (210 x 297 mm). The Megy Mini's page; sizeOffer keeps it out of the album size lists.
+  { preset: '8.3x11.7', name: 'A4 Portrait', width: 2480, height: 3508, category: 'portrait' },
 ];
 
 export const MATERIALS: { type: MaterialType; name: string; description: string; priceFactor: number }[] = [

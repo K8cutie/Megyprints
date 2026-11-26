@@ -37,8 +37,9 @@ export const MIN_PAGES = 40;
 export const SIZE_LABELS: Record<AlbumSizePreset, string> = {
   '6x4': '6×4', '8x6': '8×6', '6x8': '6×8', '6x6': '6×6',
   '8x8': '8×8', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
-  // The Megy Mini's page (lib/megyMini): never an album size.
+  // The Megy Mini's page (lib/megyMini): never an album size. A5 until 2026-11-27.
   '5.8x8.3': 'A5',
+  '8.3x11.7': 'A4',
 };
 
 /** Owner-only view of the cost model — the shape of owner_pricing_model(). */
@@ -749,7 +750,7 @@ export function miniPriceBreakdown(
   const longCharge = longVideoCharge(schedule, videoMinutes, qrMemories);
   const items: PriceLine[] = [
     {
-      label: `Megy Mini — A5 · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
+      label: `Megy Mini — ${SIZE_LABELS[offer.size] ?? 'A4'} · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
       amount: offer.price,
     },
     { label: 'Shipping', amount: offer.shipping_fee },

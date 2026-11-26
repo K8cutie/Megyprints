@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PDFDocument, PDFDict, PDFName, PDFString, StandardFonts, degrees, rgb } from 'pdf-lib';
+import { PDFArray, PDFDocument, PDFDict, PDFName, PDFRawStream, PDFString, StandardFonts, decodePDFRawStream, degrees, rgb } from 'pdf-lib';
 import jsPDF from 'jspdf';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -389,6 +389,47 @@ describe('Megy Mini press sheets (folded and stapled)', () => {
 
   it('takes the stapled cover: one side, no spine', async () => {
     const { spineIn } = await imposeCoverSheet(await coverPdf('5.8x8.3', 'staple', 16), '5.8x8.3', 'staple', 16, 'MP-MINI', T);
+    expect(spineIn).toBeCloseTo(0, 3);
+  });
+
+  /* A4 (owner, 2026-11-27: "lets make megy mini as an a4"): one open spread a
+     side, turned a quarter, so 16 pages take 4 sheets and 24 take 6. */
+  it('lays a 16-page A4 Mini on 4 sheets, one turned spread a side, and a 24-page one on 6', async () => {
+    for (const [pages, sheets] of [[16, 4], [24, 6]] as const) {
+      drawn.length = 0;
+      const { bytes, plan } = await imposeAlbumSheets(await albumPdf('8.3x11.7', pages, 0.125, true), '8.3x11.7', 'MP-A4', T);
+      expect(plan.sheets).toBe(sheets);
+      const out = await PDFDocument.load(bytes);
+      expect(out.getPageCount()).toBe(2 * sheets);
+      for (const pg of out.getPages()) expect([pg.getWidth(), pg.getHeight()]).toEqual([12.5 * 72, 19 * 72]);
+      expect(drawn).toContain(`MP-A4 · Megy Mini · sheet 1 of ${sheets} · front`);
+      expect(drawn).toContain(`fold 1 · pages ${pages} | 1`);
+      expect(drawn).toContain(`fold ${sheets} · pages ${pages / 2 + 2} | ${pages / 2 - 1}`);
+      expect(drawn.filter((t) => /^\d+$/.test(t))).toEqual([]);
+      expect(await fontsIn(bytes)).toEqual({ objects: 0, pagesListing: 0 });
+    }
+  });
+
+  it('turns the A4 pages: clockwise on the front, anticlockwise on the back', async () => {
+    const { bytes } = await imposeAlbumSheets(await albumPdf('8.3x11.7', 16, 0.125, true), '8.3x11.7', 'MP-A4', T);
+    const out = await PDFDocument.load(bytes);
+    const turns = async (i: number) => {
+      const c = out.getPage(i).node.Contents();
+      const items = c instanceof PDFArray ? c.asArray().map((r) => out.context.lookup(r)) : [c];
+      const text = items.map((s) => (s instanceof PDFRawStream ? new TextDecoder().decode(decodePDFRawStream(s).decode()) : '')).join('\n');
+      // pdf-lib turns a drawn page with "cos sin -sin cos 0 0 cm": a quarter
+      // turn clockwise is 0 -1 1 0, anticlockwise 0 1 -1 0.
+      return [...text.matchAll(/(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+) 0 0 cm/g)]
+        .map((m) => m.slice(1, 5).map(Number))
+        .filter(([a, b, cc, d]) => Math.abs(a) < 1e-6 && Math.abs(d) < 1e-6 && Math.abs(b) === 1 && cc === -b)
+        .map(([, b]) => (b < 0 ? 'cw' : 'acw'));
+    };
+    expect(await turns(0)).toEqual(['cw', 'cw']);
+    expect(await turns(1)).toEqual(['acw', 'acw']);
+  });
+
+  it('takes the A4 stapled cover: one side, no spine', async () => {
+    const { spineIn } = await imposeCoverSheet(await coverPdf('8.3x11.7', 'staple', 16), '8.3x11.7', 'staple', 16, 'MP-A4', T);
     expect(spineIn).toBeCloseTo(0, 3);
   });
 });

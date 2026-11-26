@@ -185,14 +185,18 @@ export function pagesPerSheetBySize(): Record<AlbumSizePreset, number> {
 
 /* ── STAPLED BOOKLETS (the Megy Mini, lib/megyMini) ───────────────────────────
    A Mini isn't cut into single leaves glued at a spine. Each press sheet
-   carries SPREADS: two A5 pages side by side, one piece of paper. A spread
+   carries SPREADS: two pages side by side, one piece of paper. A spread
    keeps the full trim edge all round its outside and none at the fold.
    Printed both sides (the back flipped on the sheet's long edge, so a spread's
-   back sits right behind it), cut across between the spreads, each folded in
-   half, nested outermost first and stapled through the fold.
+   back sits right behind it), cut round the trim, each folded in half, nested
+   outermost first and stapled through the fold.
 
-   16 pages = 4 folded sheets = 2 press sheets with 2 spreads a side: the same
-   8 pages a sheet the price list counts. */
+   A5 (the Mini until 2026-11-27): two spreads a side, across the sheet, so 16
+   pages = 4 folded sheets = 2 press sheets. A4: an open A4 spread (16.5 in) is
+   wider than the sheet (12.5 in), so it is TURNED a quarter and runs down the
+   sheet's 19 in side, one a side: 16 pages = 4 press sheets. Across, it fits
+   with its trim edges and about 1.4 mm to spare, so its cut marks on the long
+   sides sit inside the trim edge (drawCutMarks does that by itself). */
 
 /** Two facing pages of a stapled booklet, 1-based page numbers. */
 export interface SaddleSpread { left: number; right: number }
@@ -216,6 +220,11 @@ export interface SaddleLayout {
   trimH: number;
   /** One spread = two pages across: 2 × trimW wide. */
   spreadW: number;
+  /** The spread is turned a quarter on the sheet (A4): its pages sit one
+   *  above the other and it folds across. On the front it is turned
+   *  clockwise (its left page on top); on the back anticlockwise, so after
+   *  the flip each page backs the right one. */
+  rotated: boolean;
   /** Spreads on each side of a press sheet, stacked top to bottom. */
   spreadsPerSide: number;
   /** = 4 × spreadsPerSide (two pages a spread, two sides). */
@@ -227,14 +236,19 @@ export interface SaddleLayout {
   /** Where the cutter goes, inches from the left / top edge. */
   cutsX: number[];
   cutsY: number[];
-  /** Where each spread folds, inches from the left edge. */
-  foldX: number;
   spareX: number;
   spareY: number;
 }
 
+/** Where a spread folds on the sheet: x of an upright spread's fold line,
+ *  y of a turned one's. Inches from the sheet's left / top edge. */
+export function saddleFoldOf(layout: SaddleLayout, slot: SheetSlot): number {
+  return (layout.rotated ? slot.y : slot.x) + layout.trimW;
+}
+
 /** The press sheet for a stapled booklet of this size: spreads one across,
- *  as many down as fit with their full trim edges. */
+ *  as many down as fit with their full trim edges; a spread too wide for the
+ *  sheet (A4) is turned a quarter and runs down it. */
 export function saddleLayout(size: AlbumSizePreset): SaddleLayout {
   const { trimW, trimH } = trimInches(size);
   const u = PRESS_SHEET.unprintableIn;
@@ -242,30 +256,33 @@ export function saddleLayout(size: AlbumSizePreset): SaddleLayout {
   const availW = PRESS_SHEET.wIn - 2 * u;
   const availH = PRESS_SHEET.hIn - 2 * u;
   const spreadW = 2 * trimW;
-  if (spreadW + 2 * b > availW + EPS) {
+  const rotated = spreadW + 2 * b > availW + EPS;
+  // The spread's trim box as it lies on the sheet.
+  const across = rotated ? trimH : spreadW;
+  const down = rotated ? spreadW : trimH;
+  if (across + 2 * b > availW + EPS) {
     throw new Error(`A ${size} spread does not fit across the ${PRESS_SHEET.wIn}×${PRESS_SHEET.hIn} sheet.`);
   }
-  const rows = Math.floor((availH + EPS) / (trimH + 2 * b));
+  const rows = Math.floor((availH + EPS) / (down + 2 * b));
   if (rows < 1) throw new Error(`A ${size} spread does not fit down the ${PRESS_SHEET.wIn}×${PRESS_SHEET.hIn} sheet.`);
-  const spareX = availW - (spreadW + 2 * b);
-  const spareY = availH - rows * (trimH + 2 * b);
+  const spareX = availW - (across + 2 * b);
+  const spareY = availH - rows * (down + 2 * b);
   const x = u + spareX / 2 + b;
   const slots: SheetSlot[] = Array.from({ length: rows }, (_, r) => ({
     x,
-    y: u + spareY / 2 + b + r * (trimH + 2 * b),
-    w: spreadW,
-    h: trimH,
+    y: u + spareY / 2 + b + r * (down + 2 * b),
+    w: across,
+    h: down,
     bleed: { top: b, right: b, bottom: b, left: b },
   }));
   const uniq = (xs: number[]) => [...new Set(xs.map((v) => Math.round(v * 10000) / 10000))].sort((p, q) => p - q);
   return {
-    size, trimW, trimH, spreadW,
+    size, trimW, trimH, spreadW, rotated,
     spreadsPerSide: rows,
     pagesPerSheet: 4 * rows,
     slots,
-    cutsX: uniq([x, x + spreadW]),
+    cutsX: uniq([x, x + across]),
     cutsY: uniq(slots.flatMap((s) => [s.y, s.y + s.h])),
-    foldX: x + trimW,
     spareX, spareY,
   };
 }
@@ -480,6 +497,11 @@ export function coverFitsSheet(size: AlbumSizePreset, cover: CoverType, pageCoun
 /** What checkout says when a cover is left out, in plain words — or null when
  *  every cover fits. `available` = the covers that fit this album. */
 export function coverChoiceNote(size: AlbumSizePreset, pageCount: number, available: CoverType[], paper: CoverPaper = {}): string | null {
+  // A Megy Mini is only ever stapled, so no cover is "left out" of it. (Its
+  // checkout said "Softcover and Hardbound is not available for an album with
+  // 16 pages. The cover is too big for our printer." from the start; found
+  // walking the A4 Mini, 2026-11-27.)
+  if (isMiniSize(size)) return null;
   const off = COVERS.filter((c) => !available.includes(c.type));
   if (!off.length) return null;
   if (!available.length) {

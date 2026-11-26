@@ -3,7 +3,8 @@ import type { AlbumSizePreset } from './types';
 /* ══════════════════════════════════════════════════════════════════════════
    SIZES WE NO LONGER MAKE — 9×9 removed (owner, 2026-10-24).
 
-   An album saved at 9×9 opens as 8×8. It is the same square page, and both
+   An album saved at 9×9 opens as 8×8 (and a Megy Mini saved at A5 as A4:
+   MOVED_SIZES). It is the same square page, and both
    sizes draw on the same 750-px design canvas (getCanvasDimensions), so every
    text box, photo pan and studio frame carries across unchanged — only the
    layout ids name the size. Every 9×9 layout has an 8×8 twin with the same
@@ -19,6 +20,14 @@ import type { AlbumSizePreset } from './types';
  *  order at each of these (retiredSizes.spec holds the two in step). */
 export const RETIRED_SIZES: Record<string, AlbumSizePreset> = { '9x9': '8x8' };
 
+/** A size whose albums now open at another, though the database may still
+ *  take an order at it from an older app: the Megy Mini's A5, which became A4
+ *  (owner, 2026-11-27: "lets make megy mini as an a4"). The same shape, and
+ *  the same layouts (miniTemplates lists both sizes), so pages, photos and
+ *  words carry across, only bigger. Not in RETIRED_SIZES: 0053 holds that
+ *  list to the sizes the database refuses outright. */
+export const MOVED_SIZES: Record<string, AlbumSizePreset> = { '5.8x8.3': '8.3x11.7' };
+
 /** Old hand-made 9×9 layouts whose 8×8 number belongs to another layout. */
 const ODD_TWINS: Record<string, string> = {
   't9x9-21': 't8x8-22',              // the same 2×3 grid
@@ -28,7 +37,7 @@ const ODD_TWINS: Record<string, string> = {
 /** The size a saved album opens as: its own, or the stand-in for a size we
  *  no longer make. */
 export function liveAlbumSize<S extends string | null | undefined>(size: S): S | AlbumSizePreset {
-  return (size && RETIRED_SIZES[size]) || size;
+  return (size && (RETIRED_SIZES[size] ?? MOVED_SIZES[size])) || size;
 }
 
 /** The 8×8 twin of a 9×9 layout id; any other id comes back as it is. */
@@ -49,7 +58,7 @@ export function liftRetiredPage<T>(page: T): T {
   if (!page || typeof page !== 'object') return page;
   const p = page as T & StoredPage;
   const next: StoredPage = {};
-  if (typeof p.size === 'string' && RETIRED_SIZES[p.size]) next.size = RETIRED_SIZES[p.size];
+  if (typeof p.size === 'string' && liveAlbumSize(p.size) !== p.size) next.size = liveAlbumSize(p.size);
   if (typeof p.templateId === 'string' && liveTemplateId(p.templateId) !== p.templateId) next.templateId = liveTemplateId(p.templateId);
   if (typeof p.template_id === 'string' && liveTemplateId(p.template_id) !== p.template_id) next.template_id = liveTemplateId(p.template_id);
   return Object.keys(next).length ? { ...p, ...next } : page;

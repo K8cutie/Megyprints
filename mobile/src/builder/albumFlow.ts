@@ -18,7 +18,7 @@ import type { AlbumPage, AlbumSizeConfig, AlbumSizePreset, UploadedPhoto } from 
 import { offerableSizesAmong } from '@web/pages/builder/sizeOffer';
 import { densityRangeLabel } from '@web/pages/builder/densities';
 import { photosGoingIn, photosOverBy, photosShortBy, tooFewToMakeMessage } from '@web/pages/builder/albumMinimum';
-import { isMiniSize, miniPagesOf, miniPhotoProblem, MINI_NAME, MINI_SIZE } from '@web/lib/megyMini';
+import { isMiniSize, miniPagesOf, miniPhotoProblem, MINI_NAME, MINI_PAPER, MINI_SIZE } from '@web/lib/megyMini';
 import { albumIsBuilt, COVER_TO_PAGES, COVER_TO_PHOTOS, coverStepNext as wizardCoverStepNext, KEEP_PAGES, MAKE_ALBUM, REMAKE_ALBUM, TO_COVER } from '@web/assistant/wizardSteps';
 import { albumIsMade, confirmedIntent, placedMemories, rebuildQuestion, remakeLosesMessage } from '@web/assistant/rebuildQuestion';
 import { isAlbumNameReady } from '@web/lib/albumName';
@@ -139,7 +139,7 @@ export async function resizeMadeAlbum(
   const r: GenerateResult = await builder.generateAlbum(bg, { size, ...(lost.length ? { confirmedLost: lost } : {}), ...(isMiniSize(size) && miniPages != null ? { miniPages } : {}) });
   const label = sizeName(size);
   if (!r.made) return { done: false, message: `The size was not changed: your album stays ${sizeName(builder.albumSize)}.` };
-  if (isMiniSize(size)) return { done: true, message: `Your photos are now a ${MINI_NAME}: ${miniPagesOf(miniPages ?? builder.miniPages)} A5 pages, laid out again from your photos.` };
+  if (isMiniSize(size)) return { done: true, message: `Your photos are now a ${MINI_NAME}: ${miniPagesOf(miniPages ?? builder.miniPages)} ${MINI_PAPER} pages, laid out again from your photos.` };
   return { done: true, message: `Album size changed to ${label}. Every page is laid out again for the new shape.` };
 }
 
@@ -176,7 +176,7 @@ export async function remakeMiniAt(
   return { done: true, message: `Your ${MINI_NAME} is now ${n} pages, laid out again from your photos.` };
 }
 
-/** A size as a customer reads it: "8×8", or "Megy Mini" for A5. */
+/** A size as a customer reads it: "8×8", or "Megy Mini" for a Mini. */
 export function sizeName(size: AlbumSizePreset): string {
   return isMiniSize(size) ? MINI_NAME : size.replace('x', '×');
 }

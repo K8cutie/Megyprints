@@ -189,8 +189,8 @@ describe('the launch price (owner, 2026-11-24: "Yes, 40% to Mar 31")', () => {
   });
 
   it('the Megy Mini keeps its own price: no % off, no crossed-out price', () => {
-    const MINI_LIST = { ...WITH_LAUNCH, mini: { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 } } as unknown as PriceSchedule;
-    const a = checkoutPrice(MINI_LIST, { ...plain, albumSize: '5.8x8.3', cover: 'staple', pageCount: 16, qrCount: 0, today: TODAY });
+    const MINI_LIST = { ...WITH_LAUNCH, mini: { size: '8.3x11.7', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 } } as unknown as PriceSchedule;
+    const a = checkoutPrice(MINI_LIST, { ...plain, albumSize: '8.3x11.7', cover: 'staple', pageCount: 16, qrCount: 0, today: TODAY });
     expect(a.mini).toBe(true);
     expect(a.launch).toBeNull();
     expect(a.wasTotal).toBeNull();

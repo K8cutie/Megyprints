@@ -33,7 +33,7 @@ jest.mock('../src/lib/supabase', () => ({
 
 import AlbumSize from '../src/app/album-size';
 
-const MINI_16 = { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 };
+const MINI_16 = { size: '8.3x11.7', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 };
 const MINI_BOTH = { ...MINI_16, options: [{ pages: 16, price: 350, package_price: 299 }, { pages: 24, price: 449, package_price: 399 }] };
 const list = (mini: unknown) => ({
   disabled_sizes: [], free_shipping_value: 200, hd_memories_price: 99, hosting_reserve: 50,
@@ -58,7 +58,7 @@ describe('the size step', () => {
     expect(await screen.findByTestId('size-mini-pages-24')).toBeTruthy();
     expect(screen.getByTestId('size-mini-pages-16')).toHaveTextContent('16 pages16–40 photos₱350');
     expect(screen.getByTestId('size-mini-pages-24')).toHaveTextContent('24 pages24–60 photos₱449');
-    expect(screen.getByTestId('size-mini')).toHaveTextContent(/A5 · 16 or 24 pages/);
+    expect(screen.getByTestId('size-mini')).toHaveTextContent(/A4 · 16 or 24 pages/);
     expect(screen.getByTestId('size-mini')).toHaveTextContent(/A stapled booklet with 2 video memories included\. Shipping ₱120 on top\./);
   });
 
@@ -90,7 +90,7 @@ describe('the size step', () => {
   it('a price list without page counts (before 0070): the 16-page card as before', async () => {
     mockRpc.answer = { data: list(MINI_16), error: null };
     await render(<AlbumSize />);
-    expect(await screen.findByTestId('size-mini')).toHaveTextContent(/A5 · 16 pages · 16–40 photos/);
+    expect(await screen.findByTestId('size-mini')).toHaveTextContent(/A4 · 16 pages · 16–40 photos/);
     expect(screen.getByTestId('size-mini')).toHaveTextContent(/₱350 \+ ₱120 shipping\./);
     expect(screen.queryByTestId('size-mini-pages-24')).toBeNull();
   });
@@ -140,7 +140,7 @@ describe('checkout', () => {
   it('a 24-page Mini is ₱449 + ₱120 shipping; a 16-page one still ₱350', () => {
     const p24 = checkoutPrice(list(MINI_BOTH), input(24));
     expect([p24.ready, p24.total, p24.shipping]).toEqual([true, 569, 120]);
-    expect(p24.breakdown.items[0]).toEqual({ label: 'Megy Mini — A5 · 24 pages · staples · 2 video memories included', amount: 449 });
+    expect(p24.breakdown.items[0]).toEqual({ label: 'Megy Mini — A4 · 24 pages · staples · 2 video memories included', amount: 449 });
     expect(checkoutPrice(list(MINI_BOTH), input(16)).total).toBe(470);
   });
 

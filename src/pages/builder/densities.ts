@@ -33,9 +33,10 @@ export const DENSITY_BY_SIZE: Record<AlbumSizePreset, number[]> = {
   '6x8': [1, 2, 3, 4],
   '11.5x8': [1, 2, 3, 4, 5, 6],
   '8.5x11': [1, 2, 3, 4, 5, 6],
-  // The Megy Mini (A5) is laid out by its own page planner (miniPlanner), which
-  // fills its 16 pages from 1 to 5 photos a page whatever is chosen here.
+  // The Megy Mini (A4; A5 before 2026-11-27) is laid out by its own page planner
+  // (miniPlanner), which fills its pages from 1 to 5 photos a page whatever is chosen here.
   '5.8x8.3': [1, 2, 3, 4],
+  '8.3x11.7': [1, 2, 3, 4],
 };
 
 /** Friendly name for each density count. */
@@ -90,6 +91,7 @@ const NATURAL_BY_SIZE: Record<AlbumSizePreset, number> = {
   '8x6': 3, '6x8': 3, '6x6': 3, '8x8': 3, '11.5x8': 3, '8.5x11': 3,
   // The Megy Mini: 16 pages, so its natural is set by its photo range (16-40), not a fill threshold.
   '5.8x8.3': 3,
+  '8.3x11.7': 3,
 };
 export function naturalPerPage(albumSize: string): number {
   // Loose-string read on purpose (see densityRangeLabel) — table stays strict.
