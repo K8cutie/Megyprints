@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Megy Prints order</title>
+  <style>
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+           background: #FFF8F0; color: #3B2F2A; font: 16px/1.5 system-ui, sans-serif; text-align: center; padding: 16px; box-sizing: border-box; }
+    a { color: #B85C38; }
+  </style>
+</head>
+<body>
+  <!-- The order tag's QR code (on every album's back cover) opens /o/<order
+       number>. vercel.json serves this page for it; o.js opens the order's
+       page in the site (#/o/<number>). The site itself can't be served at
+       /o/…: its files are linked relatively (vite base './'). -->
+  <main>
+    <p>Opening the order…</p>
+    <p><a id="go" href="/">Open Megy Prints</a></p>
+  </main>
+  <script src="/o.js"></script>
+</body>
+</html>

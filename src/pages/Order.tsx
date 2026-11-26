@@ -737,6 +737,8 @@ export default function Order() {
           coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
           coverFront: printJob.coverFront,
           photos: printJob.photos,
+          // Printed on the back with a QR code that opens this order (orderTag.ts).
+          orderNumber: order.order_number,
         }, (e, attempt) => reportError(e, { path: 'checkout', step: 'cover_pdf', attempt, orderId: order.id, pages: printJob.pages.length }));
       } catch (e) {
         // Sending it is the connection; anything before that is this phone

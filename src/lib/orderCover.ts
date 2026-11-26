@@ -36,6 +36,7 @@ export const COVER_PHOTO_NOT_HERE =
 
 type OrderCoverRow = {
   id: string;
+  order_number: string | null;
   album_size: string | null;
   cover: string | null;
   material: string | null;
@@ -54,7 +55,7 @@ export async function sendOrderCover(
 ): Promise<void> {
   const { data, error } = await supabase
     .from('orders')
-    .select('id, album_size, cover, material, page_count, cover_front:album_snapshot->cover_front, photos:album_snapshot->photos')
+    .select('id, order_number, album_size, cover, material, page_count, cover_front:album_snapshot->cover_front, photos:album_snapshot->photos')
     .eq('user_id', userId)
     .eq('id', orderId)
     .maybeSingle();
@@ -98,5 +99,7 @@ export async function sendOrderCover(
     coverDesign: DEFAULT_COVER_DESIGN,
     coverFront,
     photos,
+    // Printed on the back with a QR code that opens this order (orderTag.ts).
+    orderNumber: row.order_number,
   }, (e, attempt) => reportError(e, { path: 'your_orders', step: 'send_cover', attempt, orderId, pages: row.page_count }));
 }

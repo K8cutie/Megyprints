@@ -274,7 +274,7 @@ export default function CoverEditor({ mode = 'modal', nextLabel = 'Continue →'
   // nobody hunts for a Back toggle that no longer exists.
   const reservedNote = (
     <p className="shrink-0 text-center text-[10px] text-[#B9A992] pt-1.5 px-6">
-      The back cover carries the Megy Prints mark in your cover colour.
+      The back cover carries the Megy Prints mark in your cover colour. At the bottom we print your order number and a small QR code, so we can keep track of your album.
     </p>
   );
 

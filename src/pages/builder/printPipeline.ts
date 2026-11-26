@@ -21,6 +21,7 @@ import type { QrFill, OrnamentFill, SlotText, CoverDesign, CoverType, MaterialTy
 import { textureDataUri, TEXTURE_TILE_PX } from './textures';
 import { coverWrapGeometry, insetRect } from './coverGeometry';
 import { coverLayout, deriveSpine, deriveBrandedBack, solidOf, type PositionedText } from './coverLayout';
+import type { OrderTag } from './orderTag';
 import { withBleed, bleedPx, drawMirroredEdges } from './printBleed';
 import { loadFontFaces } from './fonts';
 import { rgbaToPng } from '../../lib/rgbaPng';
@@ -1178,6 +1179,10 @@ export interface CoverPrintInput {
    *  (deriveBrandedBack — the back is brand space, not customer artwork),
    *  instead of the legacy CoverDesign layout. */
   coverFront?: AlbumPage;
+  /** The order's number (MP-2026-…): printed on the back with a QR code
+   *  that opens the order (orderTag.ts), so a book is never mixed up in
+   *  printing or delivery. Missing: no tag. */
+  orderNumber?: string | null;
 }
 
 /** Draw words onto the wrap, then take them back off as patches: the wrap keeps
@@ -1210,7 +1215,7 @@ function liftWords(ctx: CanvasRenderingContext2D, near: { x: number; y: number; 
 /** Render the flat cover wrap at full resolution: a JPEG, and its words (the
  *  front's title, the spine, the back's mark) on top at 300 DPI. */
 export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<PrintLayers> {
-  const { albumSize, pageCount, cover, material, coverDesign, photos, coverFront } = input;
+  const { albumSize, pageCount, cover, material, coverDesign, photos, coverFront, orderNumber } = input;
   const geom = coverWrapGeometry(albumSize, pageCount, cover, { material });
   const W = geom.wrap.wPx;
   const H = geom.wrap.hPx;
@@ -1226,7 +1231,7 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<P
     //    DERIVED from the front page (text = front title, colour = front bg) +
     //    the RESERVED back panel (Megy Prints mark on the front's colour). ──
     const spine = deriveSpine(coverFront, geom);
-    const branded = deriveBrandedBack(coverFront, geom);
+    const branded = deriveBrandedBack(coverFront, geom, orderNumber);
     const frontBg = solidOf(coverFront.background);
     // Full-bleed base (no white turn-in): the reserved back's colour left of the
     // spine, the front's colour right.
@@ -1235,6 +1240,9 @@ export async function renderCoverWrapForPrint(input: CoverPrintInput): Promise<P
     ctx.fillRect(0, 0, splitX, H);
     ctx.fillStyle = frontBg;
     ctx.fillRect(splitX, 0, W - splitX, H);
+    // The order tag's QR code (its number is one of the back's texts): drawn
+    // into the wrap before the words are lifted, so it stays in the picture.
+    if (branded.tag) drawOrderTagQr(ctx, branded.tag);
     // The spine repeats the front title in its font; the back has the brand mark.
     await loadFontFaces([...branded.texts.map((t) => t.style), spine.text]);
     // Reserved back panel: the brand lockup only — no customer artwork.
@@ -1344,6 +1352,17 @@ function wrapCoverText(ctx: CanvasRenderingContext2D, text: string, maxWidth: nu
   }
   lines.push(cur);
   return lines;
+}
+
+/** The order tag's QR code: its white square, then its dark squares, each on
+ *  whole pixels (orderTag.ts), the same rectangles the 2.0 app fills. */
+function drawOrderTagQr(ctx: CanvasRenderingContext2D, tag: OrderTag): void {
+  ctx.save();
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(tag.qrBox.x, tag.qrBox.y, tag.qrBox.width, tag.qrBox.height);
+  ctx.fillStyle = '#000000';
+  for (const r of tag.dark) ctx.fillRect(r.x, r.y, r.width, r.height);
+  ctx.restore();
 }
 
 /** Draw one positioned cover text. fontSize/outlineWidth are already in wrap-px,

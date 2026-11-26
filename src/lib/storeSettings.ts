@@ -292,6 +292,22 @@ export async function setMegyMini(next: { on: boolean; price: number; packagePri
   return null;
 }
 
+/** Owner-only (definer RPC, 0074). Sets or clears album prices by size and
+ *  cover — the price of the smallest album, shipping and hosting included:
+ *  `{ '8x8': { soft: 1505, hard: 1965 } }`. null clears one (that cover goes
+ *  back to the store multiple); a cover left out is left alone. The SQL
+ *  refuses a price under the floor (Bridgemedia cost + shipping + hosting).
+ *  Reloads the schedule so checkout picks it up at once. */
+export async function setSizePrices(
+  prices: Partial<Record<AlbumSizePreset, { soft?: number | null; hard?: number | null }>>,
+): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_size_prices', { p_prices: prices });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only. The raw cost model behind the schedule, for the admin Pricing
  *  panel. Rejected by the database for anyone else, so a non-owner reaching this
  *  gets an error rather than the figures. */

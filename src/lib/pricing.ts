@@ -63,7 +63,11 @@ export interface PricingModel {
    *  Absent before 0067. */
   video_3min_price?: number;
   video_5min_price?: number;
-  sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
+  /** Per size: pages per press sheet, hardcover cost and a flat surcharge.
+   *  `price_soft` / `price_hard` (0074) are the owner's set prices for the
+   *  smallest album (min_pages), shipping and hosting included; a size without
+   *  one is priced by the multiple. */
+  sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number; price_soft?: number | null; price_hard?: number | null }>;
   /** Shipping built into every album price (owner, 2026-10-08; migration
    *  0041), so checkout can say "Free shipping". Flat, added after the markup
    *  like the hosting reserve — never multiplied. Absent before 0041 → 0. */
@@ -779,10 +783,23 @@ export function perPageCost(model: PricingModel, size: AlbumSizePreset): number 
   return model.sheet_cost / model.sizes[size].pps;
 }
 
-/** The operator's view of the customer price, computed from the raw model at an
- *  arbitrary multiple (the Pricing panel's what-if slider). At the store's own
- *  multiple this must equal priceOf() on the schedule — see the spec. */
-export function ownerPriceOf(
+/** The owner's set price for a size and cover (0074): the smallest album
+ *  (min_pages), shipping and hosting included. null when that size is priced
+ *  by the multiple. */
+export function setPriceOf(
+  model: Pick<PricingModel, 'sizes'>,
+  size: AlbumSizePreset,
+  binding: Binding,
+): number | null {
+  const s = model.sizes[size];
+  const v = binding === 'hard' ? s?.price_hard : s?.price_soft;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** The price the MULTIPLE alone would give, ignoring any set price: the
+ *  what-if tools in the Pricing panel (the explore slider, the 3× / 5×
+ *  reference sheet). */
+export function multiplePriceOf(
   model: PricingModel,
   size: AlbumSizePreset,
   binding: Binding,
@@ -793,6 +810,28 @@ export function ownerPriceOf(
     + model.sizes[size].surcharge
     + hostingReserveOf(model)
     + shippingAllowanceOf(model);
+}
+
+/** The operator's view of the customer price at a multiple. A size with a set
+ *  price (0074) costs exactly that at min_pages, and the multiple only prices
+ *  its extra sheets; any other size is the multiple formula. At the store's
+ *  own multiple this must equal priceOf() on the schedule — see the spec. The
+ *  set-price branch repeats scheduleFrom() + priceOf() step for step, so the
+ *  two round identically. */
+export function ownerPriceOf(
+  model: PricingModel,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  multiple: number,
+): number {
+  const set = setPriceOf(model, size, binding);
+  if (set === null) return multiplePriceOf(model, size, binding, pages, multiple);
+  const pps = model.sizes[size].pps;
+  const sheetRate = model.sheet_cost * multiple;
+  const reserve = hostingReserveOf(model);
+  const rate = set - (sheetsFor(pps, model.min_pages, model.min_pages) * sheetRate + reserve);
+  return Math.round(sheetsFor(pps, model.min_pages, pages) * sheetRate + rate) + reserve;
 }
 
 /** Pure mirror of public_price_schedule()'s arithmetic. Lives here so the spec
@@ -817,13 +856,18 @@ export function scheduleFrom(
     && (today === undefined || today <= until);
   const sizes = {} as PriceSchedule['sizes'];
   const compareSizes = {} as CompareAt['sizes'];
+  const sheetRate = model.sheet_cost * multiple;
   for (const key of Object.keys(model.sizes) as AlbumSizePreset[]) {
     const s = model.sizes[key];
     const soft = model.soft_cover_cost + model.soft_bind_cost;
+    // A set price (0074) wins: the rate that makes the smallest album cost it.
+    const base = sheetsFor(s.pps, model.min_pages, model.min_pages) * sheetRate + reserve;
+    const setSoft = setPriceOf(model, key, 'soft');
+    const setHard = setPriceOf(model, key, 'hard');
     sizes[key] = {
       pps: s.pps,
-      soft_rate: soft * multiple + s.surcharge + ship,
-      hard_rate: s.hb * multiple + s.surcharge + ship,
+      soft_rate: setSoft !== null ? setSoft - base : soft * multiple + s.surcharge + ship,
+      hard_rate: setHard !== null ? setHard - base : s.hb * multiple + s.surcharge + ship,
     };
     if (showCompare) {
       compareSizes[key] = {
@@ -834,7 +878,7 @@ export function scheduleFrom(
   }
   return {
     min_pages: model.min_pages,
-    sheet_rate: model.sheet_cost * multiple,
+    sheet_rate: sheetRate,
     hosting_reserve: model.hosting_reserve,
     hosting_tiers: model.hosting_tiers,
     hd_memories_price: model.hd_memories_price,
