@@ -450,7 +450,7 @@ select 'album prices by size kept (8x8 hard 40 pp)',
 --
 --   update public.pricing_model
 --      set mini_size = '8.3x11.7',
---          mini_price = 450,   mini_package_price = 399,   mini_cost = 75,
---          mini24_price = 550, mini24_package_price = 499, mini24_cost = 110,
+--          mini_price = 450,   mini_package_price = 399,   mini_cost = 80,
+--          mini24_price = 550, mini24_package_price = 499, mini24_cost = 120,
 --          updated_at = now()
 --    where id = 1;
