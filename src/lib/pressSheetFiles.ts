@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════
    pressSheetFiles — the console's "Print sheets" / "Cover sheet" / "Sheets
-   as JPEG" / "Print PDF" / "Cover PDF" buttons.
+   as JPEG" buttons: every one is laid out on the press sheet.
 
    Reads an order's print files from the private print-pdfs bucket (operators
    only), lays them out on the shop's 12.5 × 19 sheet (printSheetPdf) and hands
@@ -227,21 +227,10 @@ export async function downloadSheetsAsJpeg(o: PrintOrder, progress: (line: strin
   return coverMissing ? `${note}. No cover picture: ${coverMissing}` : note;
 }
 
-/** Download the customer's print file as it is ("Print PDF"), with no fonts. */
-export async function downloadPrintFile(o: PrintOrder): Promise<string> {
-  const src = await readPrintFile(`${printFilesOf(o)}.pdf`, 'print file');
-  const { cleanPrintFile } = await pressTools();
-  saveFile(await cleanPrintFile(src, 'print file', { pages: o.page_count, order: o.order_number }), `megyprints-${o.order_number}.pdf`);
-  return 'Print PDF: one page per album page';
-}
-
-/** Download the customer's flat cover as it is ("Cover PDF"), with no fonts. */
-export async function downloadCoverFile(o: PrintOrder): Promise<string> {
-  const src = await readPrintFile(`${printFilesOf(o)}-cover.pdf`, 'cover file');
-  const { cleanPrintFile } = await pressTools();
-  saveFile(await cleanPrintFile(src, 'cover file'), `megyprints-${o.order_number}-cover.pdf`);
-  return 'Cover PDF: the flat cover';
-}
+/* No loose-page downloads (the old "Print PDF" / "Cover PDF", removed
+   2026-11-23): the press takes only the 12.5 × 19 sheet, and the phone's file
+   of loose album-size pages, handed out beside the sheets, got opened as the
+   printout. Every download here is laid out on the sheet. */
 
 /** Download the one-sheet printer check. */
 export async function downloadPressTestSheet(): Promise<void> {

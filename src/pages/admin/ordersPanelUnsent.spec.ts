@@ -30,7 +30,7 @@ vi.mock('../../lib/supabase', () => ({
 }));
 vi.mock('../../lib/pressSheetFiles', () => ({
   downloadAlbumSheets: vi.fn(), downloadCoverSheet: vi.fn(), downloadPressTestSheet: vi.fn(), downloadSheetsAsJpeg: vi.fn(),
-  downloadPrintFile: vi.fn(), downloadCoverFile: vi.fn(), orderSpine: () => 'stapled, no spine',
+  orderSpine: () => 'stapled, no spine',
 }));
 
 import OrdersPanel from './OrdersPanel';
