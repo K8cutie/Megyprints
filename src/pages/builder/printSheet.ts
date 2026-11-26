@@ -497,6 +497,11 @@ export function coverFitsSheet(size: AlbumSizePreset, cover: CoverType, pageCoun
 /** What checkout says when a cover is left out, in plain words — or null when
  *  every cover fits. `available` = the covers that fit this album. */
 export function coverChoiceNote(size: AlbumSizePreset, pageCount: number, available: CoverType[], paper: CoverPaper = {}): string | null {
+  // A Megy Mini is only ever stapled, so no cover is "left out" of it. (Its
+  // checkout said "Softcover and Hardbound is not available for an album with
+  // 16 pages. The cover is too big for our printer." from the start; found
+  // walking the A4 Mini, 2026-11-27.)
+  if (isMiniSize(size)) return null;
   const off = COVERS.filter((c) => !available.includes(c.type));
   if (!off.length) return null;
   if (!available.length) {
