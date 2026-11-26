@@ -137,9 +137,9 @@ describe('text resolution parity', () => {
 describe('album-size surfaces (the 9x9 class of bug)', () => {
   const presets = ALBUM_SIZES.map((s) => s.preset);
 
-  it('covers all 8 sizes (update EVERY assertion block here when adding one)', () => {
-    // 7 album sizes + A5, the Megy Mini's page (lib/megyMini).
-    expect(presets).toHaveLength(8);
+  it('covers all 9 sizes (update EVERY assertion block here when adding one)', () => {
+    // 7 album sizes + A4, the Megy Mini's page, and A5, its page until 2026-11-27 (lib/megyMini).
+    expect(presets).toHaveLength(9);
     expect(presets).not.toContain('9x9'); // removed 2026-10-24 — see retiredSizes.ts
   });
 
@@ -166,7 +166,7 @@ describe('album-size surfaces (the 9x9 class of bug)', () => {
 
   it('the assistant has at least one chat alias per size (9x9 shipped without one)', () => {
     const reachable = new Set(Object.values(SIZE_ALIASES));
-    // Albums only: A5 is the Megy Mini's, not a size Megy sets by chat.
+    // Albums only: A4 and A5 are the Megy Mini's, not sizes Megy sets by chat.
     for (const p of presets.filter((s) => !isMiniSize(s))) {
       expect(reachable.has(p), `SIZE_ALIASES cannot reach ${p} — Megy can't set it by chat`).toBe(true);
     }

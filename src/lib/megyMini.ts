@@ -1,9 +1,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   MEGY MINI: the 16-page A5 booklet with staples, sold next to the albums.
+   MEGY MINI: the A4 booklet with staples, sold next to the albums (owner,
+   2026-11-27: "lets make megy mini as an a4 and price it at 450 and 550
+   respectively. Plus shipping." It was A5 until then).
 
    Owner, 2026-11-16: "Megy Mini along side the regular albums", "as an item
    not part of a package 350+shipping", "2 QR videos free for megy mini".
-   The print shop calls the format a "catalogue": A5 pages, 180gsm glossy
+   The print shop calls the format a "catalogue": A4 pages, 180gsm glossy
    inside, a 260gsm cover, folded and stapled (saddle-stitched), no spine.
 
    One place for what makes a book a Megy Mini, read by the website and the
@@ -11,24 +13,34 @@
    (public_price_schedule().mini, migration 0062) carries its price, shipping
    fee and free videos; it is there only while the owner has Megy Mini on.
 
-   A Mini is an album row like any other, told apart by its size: A5 is
-   '5.8x8.3' (a "WxH" name, because several places read the width off the
+   A Mini is an album row like any other, told apart by its size: A4 is
+   '8.3x11.7' (a "WxH" name, because several places read the width off the
    name) and is never offered as an album size (sizeOffer). Its cover is
    'staple'. The database refuses anything else (0062: MP020, MP021, MP022).
+
+   THE A5 MINI (2026-11-16 to 11-27) was '5.8x8.3': the same shape, so a Mini
+   made at A5 opens as A4 in the app (retiredSizes MOVED_SIZES). The price
+   list says which size is on sale (mini.size, 0076); an app sells only its
+   own. A5 orders placed before still print as A5 (printSheet saddleLayout).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset, CoverType } from '../pages/builder/types';
 import { MIN_ALBUM_PAGES } from '../pages/builder/densities';
 
 export const MINI_NAME = 'Megy Mini';
-/** A5 portrait, 148 × 210 mm. */
-export const MINI_SIZE: AlbumSizePreset = '5.8x8.3';
+/** A4 portrait, 210 × 297 mm. */
+export const MINI_SIZE: AlbumSizePreset = '8.3x11.7';
+/** The A5 Mini's size (148 × 210 mm), sold until 2026-11-27: its orders
+ *  still print as A5. */
+export const OLD_MINI_SIZE: AlbumSizePreset = '5.8x8.3';
+/** "A4", for the Mini's own words. */
+export const MINI_PAPER = 'A4';
 export const MINI_COVER: CoverType = 'staple';
 /** Always exactly this many pages: 4 sheets folded in half and stapled. */
 export const MINI_PAGES = 16;
 /** One photo a page at the least, so no page is ever left empty. */
 export const MINI_MIN_PHOTOS = MINI_PAGES;
-/** The most photos 16 A5 pages hold without a page getting crowded. */
+/** The most photos 16 Mini pages hold without a page getting crowded. */
 export const MINI_MAX_PHOTOS = 40;
 /** Full pages set aside for video memories (the 2 free ones). */
 export const MINI_MEMORY_PAGES = 2;
@@ -48,8 +60,9 @@ export interface MiniOffer {
   free_qr: number;
 }
 
+/** A Megy Mini's size: A4, or the A5 it was before (old albums and orders). */
 export function isMiniSize(size: unknown): boolean {
-  return size === MINI_SIZE;
+  return size === MINI_SIZE || size === OLD_MINI_SIZE;
 }
 
 export function isMiniCover(cover: unknown): boolean {

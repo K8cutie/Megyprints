@@ -17,7 +17,8 @@ import { supabase } from './supabase';
 import { printFilesOf, type AdminOrder } from './adminOrders';
 import { ALBUM_SIZES, type AlbumSizePreset, type CoverType, type MaterialType } from '../pages/builder/types';
 import { PRINTER_SPEC, spineLabel, spineWidthInches } from '../pages/builder/coverGeometry';
-import { printSides } from '../pages/builder/printSheet';
+import { printSides, saddleLayout } from '../pages/builder/printSheet';
+import { isMiniSize, OLD_MINI_SIZE } from './megyMini';
 import type { PageOneSide } from '../pages/builder/binding';
 import { canvasTextPainter } from './canvasTextPainter';
 import { zipStored, type ZipEntry } from './jpegZip';
@@ -56,6 +57,13 @@ export function orderSpine(o: Pick<PrintOrder, 'cover' | 'material' | 'page_coun
 
 /** A Megy Mini's sheets, start to finish (printSheet saddleLayout). */
 export const STAPLED_HOW_TO = 'flip on the long edge · cut across between the two spreads and round their trim · fold each down the middle · nest them, fold 1 outermost · 2 staples through the fold';
+/** The A4 Mini's: one spread a side, turned (printSheet saddleLayout). */
+export const STAPLED_HOW_TO_ONE = 'flip on the long edge · one spread a side, turned: cut round its trim · fold it across the middle · nest them, fold 1 outermost · 2 staples through the fold';
+
+/** How to finish a Mini's sheets, for its size: A5 has two spreads a side, A4 one. */
+export function stapledHowTo(size: AlbumSizePreset): string {
+  return saddleLayout(size).spreadsPerSide === 1 ? STAPLED_HOW_TO_ONE : STAPLED_HOW_TO;
+}
 
 /** What to tell the operator after the cover sheet: its spine, and when the
  *  cover file was drawn for another spine than this paper makes (files from
@@ -120,9 +128,9 @@ export function stackHowTo(piles: number): string {
  *  pages than the order was priced for never gets here: imposeAlbumSheets
  *  refuses it (unpaidPagesMessage). */
 function sheetsNote(o: PrintOrder, plan: { sheets: number; pageCount: number; layout: { leavesPerSheet: number } }, pageOne: PageOneSide): string {
-  if (o.album_size === '5.8x8.3') {
-    // A Megy Mini (lib/megyMini): spreads, folded and stapled.
-    const mini = `Megy Mini: ${plan.sheets} sheets, both sides · ${STAPLED_HOW_TO}`;
+  if (o.album_size && isMiniSize(o.album_size)) {
+    // A Megy Mini (lib/megyMini): spreads, folded and stapled. A4, or A5 from before 2026-11-27.
+    const mini = `Megy Mini ${o.album_size === OLD_MINI_SIZE ? 'A5' : 'A4'}: ${plan.sheets} sheets, both sides · ${stapledHowTo(o.album_size as AlbumSizePreset)}`;
     return plan.pageCount === o.page_count ? mini : `${mini}. Check: the print file has ${plan.pageCount} pages, the order says ${o.page_count}.`;
   }
   const note = `${plan.sheets} sheets, both sides · ${stackHowTo(plan.layout.leavesPerSheet)} · ${blankSidesNote(plan.pageCount, pageOne)}`;

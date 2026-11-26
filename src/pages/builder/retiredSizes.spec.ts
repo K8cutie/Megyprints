@@ -3,7 +3,7 @@ import { isMiniSize } from '../../lib/megyMini';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { RETIRED_SIZES, liveAlbumSize, liveTemplateId, liftRetiredPage, liftRetiredPages } from './retiredSizes';
+import { MOVED_SIZES, RETIRED_SIZES, liveAlbumSize, liveTemplateId, liftRetiredPage, liftRetiredPages } from './retiredSizes';
 import { PAGE_TEMPLATES, getTemplateById, getTemplatesForAlbum, migrateRetiredPages } from './pageTemplates';
 import { ALBUM_SIZES } from './types';
 import { deserializeAlbum } from '../../lib/useAlbumSync';
@@ -91,11 +91,22 @@ describe('every 9×9 layout has an 8×8 twin', () => {
 });
 
 describe('the converter', () => {
-  it('9×9 opens as 8×8; every other size, and no size, stays as it is', () => {
+  it('9×9 opens as 8×8, the A5 Mini as A4; every other size, and no size, stays as it is', () => {
     expect(liveAlbumSize('9x9')).toBe('8x8');
-    for (const s of ALBUM_SIZES) expect(liveAlbumSize(s.preset)).toBe(s.preset);
+    expect(liveAlbumSize('5.8x8.3')).toBe('8.3x11.7');
+    for (const s of ALBUM_SIZES) if (!MOVED_SIZES[s.preset]) expect(liveAlbumSize(s.preset)).toBe(s.preset);
     expect(liveAlbumSize(undefined)).toBeUndefined();
     expect(liveAlbumSize(null)).toBeNull();
+  });
+
+  it('moves an A5 Mini page to A4 and keeps its layout, photos and words (the same shape)', () => {
+    const page = { id: 'p2', size: '5.8x8.3', templateId: 'mini-l-pp', slotFills: [1, 2, 3], textElements: [{ id: 't', text: 'Baguio' }] };
+    const moved = liftRetiredPage(page);
+    expect(moved).toEqual({ ...page, size: '8.3x11.7' });
+    // (the Mini's layouts live in the app: native-2.0's miniTemplates lists both sizes)
+    // nothing else on a Mini page moves
+    const a4 = { ...page, size: '8.3x11.7' };
+    expect(liftRetiredPage(a4)).toBe(a4);
   });
 
   it('moves a 9×9 page — size and layout — and keeps everything else on it', () => {

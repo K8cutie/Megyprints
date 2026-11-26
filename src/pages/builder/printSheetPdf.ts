@@ -27,7 +27,7 @@ import {
 } from 'pdf-lib';
 import { DEFAULT_MATERIAL, type AlbumSizePreset, type CoverType, type MaterialType } from './types';
 import {
-  PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, saddleSheetPlan, sheetLayout, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
+  PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, saddleSheetPlan, saddleFoldOf, sheetLayout, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
 import { isMiniSize } from '../../lib/megyMini';
 import { LEGACY_LEAF_IN, coverWrapGeometry, isHardcover, leafInches, spineForLeaf, spineFromWrapWidth, spineLabel } from './coverGeometry';
@@ -332,12 +332,14 @@ export async function imposeAlbumSheets(src: ArrayBuffer | Uint8Array, size: Alb
 }
 
 /**
- * A MEGY MINI's press sheets (lib/megyMini): A5 SPREADS, two to a side, each
- * keeping its trim edge all round its outside and none at the fold (the two
- * pages are one piece of paper there). Print both sides (flip on the long
- * edge), cut across between the spreads and round their trim, fold each down
- * the middle, nest them as numbered ("fold 1" outermost) and staple through
- * the fold. Where each page goes is printSheet.ts's saddleSheetPlan.
+ * A MEGY MINI's press sheets (lib/megyMini): SPREADS, each keeping its trim
+ * edge all round its outside and none at the fold (the two pages are one
+ * piece of paper there). A4: one spread a side, turned a quarter (clockwise on
+ * the front, anticlockwise on the back, so each page backs the right one
+ * after the flip); A5 (orders from before 2026-11-27): two a side, upright.
+ * Print both sides (flip on the long edge), cut round the trim, fold each
+ * down the middle, nest them as numbered ("fold 1" outermost) and staple
+ * through the fold. Where each page goes is printSheet.ts's saddleSheetPlan.
  */
 async function imposeStapledSheets(src: ArrayBuffer | Uint8Array, size: AlbumSizePreset, orderLabel: string, text: TextPainter, paidPages?: number | null): Promise<ImposeResult> {
   const { pages } = await loadCustomerPdf(src, 'print file');
@@ -395,22 +397,47 @@ async function imposeStapledSheets(src: ArrayBuffer | Uint8Array, size: AlbumSiz
           const embedded = embeddedOf.get(`${page}:${onLeft}`);
           if (!embedded) continue;
           const keep = keepOf(onLeft);
-          const x = slot.x + (onLeft ? 0 : trimW);
-          const boxL = px(x - keep.left);
-          const boxB = py(slot.y + slot.h + keep.bottom);
           const boxW = (trimW + keep.left + keep.right) * PT;
           const boxH = (trimH + keep.top + keep.bottom) * PT;
-          sheet.pushOperators(pushGraphicsState(), rectangle(boxL, boxB, boxW, boxH), clip(), endPath());
-          sheet.drawPage(embedded, { x: boxL, y: boxB, width: boxW, height: boxH });
+          if (!layout.rotated) {
+            const x = slot.x + (onLeft ? 0 : trimW);
+            const boxL = px(x - keep.left);
+            const boxB = py(slot.y + slot.h + keep.bottom);
+            sheet.pushOperators(pushGraphicsState(), rectangle(boxL, boxB, boxW, boxH), clip(), endPath());
+            sheet.drawPage(embedded, { x: boxL, y: boxB, width: boxW, height: boxH });
+            sheet.pushOperators(popGraphicsState());
+            continue;
+          }
+          // Turned (A4). Front, clockwise: the left page on top, each page's
+          // top to the sheet's right. Back, anticlockwise: the left page
+          // below, its top to the sheet's left.
+          const cw = side === 'front';
+          const top = slot.y + ((onLeft === cw) ? 0 : trimW);
+          const x0 = slot.x - (cw ? keep.bottom : keep.top);
+          const x1 = slot.x + trimH + (cw ? keep.top : keep.bottom);
+          const y0 = top - (cw ? keep.left : keep.right);
+          const y1 = top + trimW + (cw ? keep.right : keep.left);
+          sheet.pushOperators(pushGraphicsState(), rectangle(px(x0), py(y1), (x1 - x0) * PT, (y1 - y0) * PT), clip(), endPath());
+          sheet.drawPage(embedded, cw
+            ? { x: px(x0), y: py(y0), width: boxW, height: boxH, rotate: degrees(-90) }
+            : { x: px(x1), y: py(y1), width: boxW, height: boxH, rotate: degrees(90) });
           sheet.pushOperators(popGraphicsState());
         }
       });
       drawCutMarks(sheet, layout.slots.slice(0, spreads.length));
-      // The fold: a short line above and below each spread, outside the trim.
+      // The fold: a short line at each end of it, outside the trim edge where
+      // the sheet has white (upright spreads, above and below); a turned
+      // spread has none beside it, so its lines sit in the trim edge.
+      const tick = (ax: number, ay: number, bx: number, by: number) => sheet.drawLine({ start: { x: px(ax), y: py(ay) }, end: { x: px(bx), y: py(by) }, thickness: 0.5, color: rgb(0.45, 0.45, 0.45), dashArray: [2, 2] });
       for (const slot of layout.slots.slice(0, spreads.length)) {
-        const fx = px(layout.foldX);
-        sheet.drawLine({ start: { x: fx, y: py(slot.y - slot.bleed.top - 0.02) }, end: { x: fx, y: py(slot.y - slot.bleed.top - 0.14) }, thickness: 0.5, color: rgb(0.45, 0.45, 0.45), dashArray: [2, 2] });
-        sheet.drawLine({ start: { x: fx, y: py(slot.y + slot.h + slot.bleed.bottom + 0.02) }, end: { x: fx, y: py(slot.y + slot.h + slot.bleed.bottom + 0.14) }, thickness: 0.5, color: rgb(0.45, 0.45, 0.45), dashArray: [2, 2] });
+        const f = saddleFoldOf(layout, slot);
+        if (layout.rotated) {
+          tick(slot.x - slot.bleed.left, f, slot.x - 1 / 32, f);
+          tick(slot.x + slot.w + 1 / 32, f, slot.x + slot.w + slot.bleed.right, f);
+        } else {
+          tick(f, slot.y - slot.bleed.top - 0.02, f, slot.y - slot.bleed.top - 0.14);
+          tick(f, slot.y + slot.h + slot.bleed.bottom + 0.02, f, slot.y + slot.h + slot.bleed.bottom + 0.14);
+        }
       }
       const folds = spreads.map((sp, r) => `fold ${i * layout.spreadsPerSide + r + 1} · pages ${sp.left} | ${sp.right}`);
       await drawSheetLabel(sheet, words, `${orderLabel} · Megy Mini · sheet ${i + 1} of ${sheets.length} · ${side}`, layout.slots.slice(0, spreads.length), folds);
