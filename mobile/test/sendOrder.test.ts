@@ -149,6 +149,15 @@ describe('a retry, and files already sent', () => {
     expect(seen).toEqual(['order order-1', 'cover']);
   });
 
+  it('the order row is read back with the total the database saved on it (bug hunt B3: the payment step asks for that)', async () => {
+    fake.insertAnswer = { quoted_amount: 1355, amount: null };
+    const seen: unknown[] = [];
+    const r = await sendOrder(placeOrderPlan(input()), deps({ onOrder: (o) => { seen.push(o); } }));
+    expect(rec.insertSelects).toEqual(['id, order_number, status, quoted_amount, amount']);
+    expect(seen[0]).toMatchObject({ id: 'order-1', quoted_amount: 1355, amount: null });
+    expect(r.order).toMatchObject({ quoted_amount: 1355 });
+  });
+
   it('a file already there is "done" by the website\'s own rule (storageUpload isAlreadyExists)', async () => {
     /* eslint-disable-next-line @typescript-eslint/no-require-imports */
     const webStorage = jest.requireActual('@web/lib/storageUpload') as { isAlreadyExists: (e: unknown) => boolean };

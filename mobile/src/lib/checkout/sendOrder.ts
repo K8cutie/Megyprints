@@ -117,7 +117,11 @@ export interface SendDeps {
 }
 
 /** The order row as the insert answered it. */
-export interface PlacedOrder { id: string; order_number: string; status: string }
+/** The order row as the database saved it. quoted_amount (0055) is the total the
+ *  database priced the order at, which the payment step asks for (bug hunt B3,
+ *  2026-11-27: the phone's own total could differ if a price or a code's
+ *  discount changed while checkout was open). */
+export interface PlacedOrder { id: string; order_number: string; status: string; quoted_amount?: number | null; amount?: number | null }
 
 /** orders.ts COVER_RETRY_WAITS_MS: 3 tries in all. */
 export const COVER_RETRY_WAITS_MS = [1500, 4000];
@@ -184,7 +188,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
   let order = placed;
   if (!order) {
     onStep({ step: 'order' });
-    const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status').single();
+    const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status, quoted_amount, amount').single();
     if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
     if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(String(plan.orderRow.tester_code ?? ''));
     // An affiliate code that stopped working, or this order can't take (0061): the database's words.

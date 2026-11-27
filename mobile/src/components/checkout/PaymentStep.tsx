@@ -37,8 +37,10 @@ export interface PaySummary { albumLine: string; breakdown: { label: string; amo
  *  `amount` is null only for an order that has no saved total (placed before
  *  the database saved it, 0055): the step says so, and how to learn it,
  *  instead of making a total up. */
-export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back to your order', live = false, onPaid }: {
+export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back to your order', live = false, onPaid, note }: {
   amount: number | null;
+  /** A line under the title (e.g. the price changed while ordering). */
+  note?: string;
   order: Pick<OpenOrder, 'id' | 'order_number' | 'created_at' | 'album_id'> | null;
   summary?: PaySummary;
   onBack: () => void;
@@ -103,6 +105,7 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
         </View>
       )}
       <Text style={[styles.h1, styles.center]}>{amount !== null ? `Send ${amountLabel}` : `Pay order ${order?.order_number ?? ''}`}</Text>
+      {note ? <Text style={[styles.small, styles.center]} testID="pay-note">{note}</Text> : null}
       {order && (
         <Text style={[styles.small, styles.center]} testID="pay-order-placed">
           Order <Text style={styles.orderNo}>{order.order_number}</Text> is placed.{'\n'}<Text style={styles.taupe}>Pay by bank transfer to finish.</Text>

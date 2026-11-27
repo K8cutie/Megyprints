@@ -106,6 +106,19 @@ export function askedToPay(o: Pick<OpenOrder, 'amount' | 'quoted_amount'>): numb
   return null;
 }
 
+/** What the payment step asks for right after Place order (bug hunt B3,
+ *  2026-11-27): the total the database saved on the new order, the same one
+ *  Your orders → Pay asks for later. The phone's own total only when the row
+ *  has none (a free tester order, a booking that pays). `changed` when the two
+ *  differ: a price or a code's discount moved while checkout was open, so the
+ *  phone's line-by-line summary no longer adds up to what is asked. */
+export const PRICE_MOVED = 'The price changed while you were ordering. This is the total on your order now.';
+export function payAfterPlacing(o: { amount?: number | null; quoted_amount?: number | null }, phoneTotal: number): { amount: number; changed: boolean } {
+  const saved = askedToPay({ amount: o.amount ?? null, quoted_amount: o.quoted_amount ?? null });
+  if (saved === null) return { amount: phoneTotal, changed: false };
+  return { amount: saved, changed: saved !== phoneTotal };
+}
+
 /** Where "Open order MP-…" goes, in the app. The website's button opens its
  *  Orders page (/orders?order=<id>); the phone's browser is not signed in
  *  (the website sends a signed-out visitor from /orders to its home page, so

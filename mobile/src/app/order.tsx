@@ -70,7 +70,7 @@ import { TesterCodeGoneError } from '../lib/checkout/testerCode';
 import type { PlacedOrder } from '../lib/checkout/sendOrder';
 import { finishToCopy, sameFinishNote, type CopiedFinish } from '../lib/checkout/sameFinish';
 import { lastFinishForAlbum } from '../lib/orders/myOrders';
-import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
+import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payAfterPlacing, placedOn, PRICE_MOVED, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
 import { checkoutPrice, peso, placeOrderLabel } from '../lib/checkout/price';
@@ -198,6 +198,8 @@ export default function OrderScreen() {
   const secondOk = useRef(false);
   const [plan, setPlan] = useState<PlaceOrderPlan | null>(null);
   const [placedAmount, setPlacedAmount] = useState(0);
+  // The saved total differs from the phone's (a price moved mid-checkout): bug hunt B3.
+  const [priceMoved, setPriceMoved] = useState(false);
 
   const scrollRef = useRef<ScrollViewInstance>(null);
   // Where each part of the form starts on the page, to go to the first thing
@@ -427,6 +429,7 @@ export default function OrderScreen() {
       });
       setPlan(p);
       setPlacedAmount(price.payTotal);
+      setPriceMoved(false);
       if (finishing && !placedRef.current) placedRef.current = { id: openOrder!.id, order_number: openOrder!.order_number, status: openOrder!.status };
       setStep('placing');
     } catch (e) {
@@ -519,7 +522,11 @@ export default function OrderScreen() {
         text={ownText} placed={placedRef.current} sent={sentRef.current}
         bookingNumber={eventLink?.bookingNumber ?? null}
         finishing={!!fo}
-        onOrder={(o) => { placedRef.current = o; }}
+        onOrder={(o) => {
+          placedRef.current = o;
+          // A new order row: ask for the total the database saved on it (B3).
+          if (!fo) { const p = payAfterPlacing(o, price.payTotal); setPlacedAmount(p.amount); setPriceMoved(p.changed); }
+        }}
         onSent={(r) => {
           placedRef.current = r.order;
           setPlacedOrder(r.order);
@@ -604,7 +611,8 @@ export default function OrderScreen() {
     const summary = { albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal, shipsFree: !price.mini };
     if (live && placedOrder) {
       // After Finish sending the summary is the order's, not the album's now: left out.
-      return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={payAfterFinish ? undefined : summary} live
+      return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={payAfterFinish || priceMoved ? undefined : summary} live
+        note={priceMoved && !payAfterFinish ? PRICE_MOVED : undefined}
         onBack={() => setStep('form')}
         onPaid={(receiptError) => { setDone({ number: placedOrder.order_number, test: false, receiptError }); setStep('done'); }} />;
     }
