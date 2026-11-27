@@ -54,6 +54,7 @@ export default function Privacy() {
           <li><b>Order &amp; delivery details</b> — your name, contact number, and shipping address, used to deliver your album.</li>
           <li><b>Living-memory QR links</b> — if you attach a video to an album, we store that link so the printed QR code can open it. You can re-point or remove it anytime.</li>
           <li><b>Basic technical data</b> — anonymous error and performance diagnostics that help us keep the app working.</li>
+          <li><b>Which post you came from</b> — if you came from a link in one of our posts or ads, we save which post it was with your order.</li>
         </ul>
       </Section>
 
@@ -63,6 +64,7 @@ export default function Privacy() {
           <li>To create and manage your account and order history.</li>
           <li>To respond to your questions and provide support.</li>
           <li>To operate, secure, and improve the service.</li>
+          <li>To see which posts lead to orders.</li>
         </ul>
         <p>We do <b>not</b> sell your personal information or your photos.</p>
       </Section>
@@ -113,9 +115,9 @@ export default function Privacy() {
         </p>
         <p>
           <b>What we keep:</b> if you've ordered before, we keep a receipt-only record of that
-          sale — order number, amount, status and dates, and the album's size, material and page
-          count — because Philippine tax and accounting rules require a business to keep records
-          of its sales. That record carries no name, phone number, address or photos, and is no
+          sale — order number, amount, status and dates, the album's size, material and page
+          count, and which post the order came from — because Philippine tax and accounting rules
+          require a business to keep records of its sales. That record carries no name, phone number, address or photos, and is no
           longer linked to you.
         </p>
         <p>

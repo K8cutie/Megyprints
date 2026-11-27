@@ -40,6 +40,7 @@ import PaidClipSweep from './components/PaidClipSweep';
 import { loadTemplateSettings } from './lib/templateSettings';
 import { loadStoreSettings } from './lib/storeSettings';
 import { captureAffiliateRef } from './lib/affiliates';
+import { captureOrderSource } from './lib/orderSource';
 
 export default function App() {
   // Load operator template overrides + the store price multiple once on start.
@@ -48,6 +49,10 @@ export default function App() {
   // Opened from an affiliate's link (?ref=CODE, 0061): keep the code on this
   // device, so checkout can apply it, and tidy it out of the address bar.
   useEffect(() => { captureAffiliateRef(); }, []);
+  // Opened from a post's link (?p=TAG, 0063): keep the tag on this device so
+  // an order placed later can say which post it came from. A link may carry
+  // both: each takes only its own word out of the address.
+  useEffect(() => { captureOrderSource(); }, []);
 
   // Return to where the user was after an OAuth round-trip. redirectTo can't
   // carry a #hash, so Google sends us back to a bare path (→ Home on this
