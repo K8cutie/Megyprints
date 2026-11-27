@@ -62,7 +62,7 @@ export default function MegyMiniPricing({ model, onSaved }: { model: PricingMode
         <div className="min-w-[220px] max-w-md">
           <h4 className="font-semibold text-dark">Megy Mini</h4>
           <p className="text-xs text-medium mt-1 leading-snug">
-            A booklet with staples (A4; it was A5 until the A4 app), sold next to the albums. Its shipping is <b>charged on top</b> (albums ship free).
+            A 16-page A5 booklet with staples, sold next to the albums. Its shipping is <b>charged on top</b> (albums ship free).
             The app shows it only while it is on.
           </p>
         </div>

@@ -89,9 +89,11 @@ export function checkoutPayTotal(total: number, tester: TesterCode | null, affil
   return total;
 }
 
-/** The checkout line under the price. */
-export function affiliateLine(a: AffiliateCode, mini = false): string {
-  return mini ? `Code ${a.code}: no discount on a Megy Mini` : `Code ${a.code}: ${peso(a.discount)} off`;
+/** The checkout line under the price. `mini`: a stapled booklet, true or its
+ *  name ("Megy Magazine"); true says "Megy Mini". */
+export function affiliateLine(a: AffiliateCode, mini: boolean | string = false): string {
+  if (mini) return `Code ${a.code}: no discount on a ${typeof mini === 'string' ? mini : 'Megy Mini'}`;
+  return `Code ${a.code}: ${peso(a.discount)} off`;
 }
 
 export type CodeCheck =
@@ -324,7 +326,7 @@ export function exampleCommission(albumPrice: number, s: Pick<AffiliateProgram, 
 export function affiliateTerms(p: AffiliateProgram): string[] {
   return [
     `You earn ${p.ratePct}% of the album price (the album with its included pages, after your client's ${peso(p.discount)} off) on every order placed with your code, or within ${p.windowDays} days of your client opening your link. Extra pages and add-ons don't earn.`,
-    `A Megy Mini has no discount for your client, and you still earn ${p.ratePct}% of its price.`,
+    `A Megy Mini or Megy Magazine has no discount for your client, and you still earn ${p.ratePct}% of its price.`,
     'A sale is paid once its album is delivered. A cancelled or refunded order earns nothing.',
     `We pay by GCash to the number you give us, once you have at least ${peso(p.minPayout)} to be paid. Your earnings are yours to declare for tax; we withhold tax where the law requires it.`,
     "Your own orders don't earn and don't get the discount. An order sent to your own number or name is checked and may be cancelled.",

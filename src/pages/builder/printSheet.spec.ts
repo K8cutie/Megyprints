@@ -275,7 +275,7 @@ describe('covers on the sheet', () => {
   it('tells checkout, in plain words, why a cover is missing', () => {
     expect(coverChoiceNote('8x8', 40, ['softcover', HARD])).toBeNull();
     expect(coverChoiceNote('8.5x11', 40, ['softcover'])).toBe('Hardbound is not available for 8.5×11 albums. The cover is too big for our printer.');
-    // a Megy Mini is only ever stapled: nothing is left out of it, A4 or A5
+    // a booklet is only ever stapled: nothing is left out of it, A4 or A5
     for (const size of ['8.3x11.7', '5.8x8.3'] as const) for (const n of [16, 24]) expect(coverChoiceNote(size, n, ['staple'])).toBeNull();
     expect(coverChoiceNote('8x8', 400, ['softcover'])).toBe('Hardbound is not available for an album with 400 pages. The cover is too big for our printer.');
     expect(coverChoiceNote('8.5x11', 600, [])).toBe('This album has too many pages for our printer. Make it 520 pages or fewer.');

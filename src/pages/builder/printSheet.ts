@@ -191,7 +191,7 @@ export function pagesPerSheetBySize(): Record<AlbumSizePreset, number> {
    back sits right behind it), cut round the trim, each folded in half, nested
    outermost first and stapled through the fold.
 
-   A5 (the Mini until 2026-11-27): two spreads a side, across the sheet, so 16
+   A5 (the Megy Mini): two spreads a side, across the sheet, so 16
    pages = 4 folded sheets = 2 press sheets. A4: an open A4 spread (16.5 in) is
    wider than the sheet (12.5 in), so it is TURNED a quarter and runs down the
    sheet's 19 in side, one a side: 16 pages = 4 press sheets. Across, it fits
@@ -500,7 +500,7 @@ export function coverChoiceNote(size: AlbumSizePreset, pageCount: number, availa
   // A Megy Mini is only ever stapled, so no cover is "left out" of it. (Its
   // checkout said "Softcover and Hardbound is not available for an album with
   // 16 pages. The cover is too big for our printer." from the start; found
-  // walking the A4 Mini, 2026-11-27.)
+  // walking the A4 booklet, 2026-11-27.)
   if (isMiniSize(size)) return null;
   const off = COVERS.filter((c) => !available.includes(c.type));
   if (!off.length) return null;

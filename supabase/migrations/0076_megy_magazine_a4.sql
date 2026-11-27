@@ -1,48 +1,63 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0076_mini_a4.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0076_megy_magazine_a4.sql  (idempotent; safe to re-run)
 --
---  WHY (owner, 2026-11-27): "lets make megy mini as an a4 and price it at 450
---  and 550 respectively. Plus shipping." The Megy Mini becomes an A4 booklet
---  ('8.3x11.7', 210 x 297 mm), 16 pages ₱450 or 24 pages ₱550, shipping on
---  top. It was A5 ('5.8x8.3').
---
---  THE SWITCH: pricing_model.mini_size says which Mini is on sale. It starts
---  at A5, so applying this changes nothing anyone sees. The price list names
---  that size (mini.size), and an app offers the Mini only when the size is its
---  own (lib/megyMini miniOfferOf): apps before 2.1.8 make A5, 2.1.8 makes A4.
---  So the day the A4 app is live, ONE update moves the size and the prices
---  together (see the end of this file); from then the older apps stop offering
---  the Mini instead of selling A5 at A4's price, and an A5 Mini a customer
---  already started opens as A4 in the new app (same shape, same layouts).
+--  WHY (owner, 2026-11-27): "A5 stays, with its current prices, the A4 album
+--  becomes another product which is the gap between mini and the cheapest
+--  album"; then "₱599 / ₱699". MEGY MAGAZINE: the Megy Mini's stapled booklet
+--  at A4 ('8.3x11.7', 210 x 297 mm), 16 pages ₱599 or 24 pages ₱699, shipping
+--  on top, 2 free videos, sold BESIDE the Mini. The Mini stays A5 at ₱350 /
+--  ₱449. (This file first moved the Mini itself to A4; that was never applied.)
 --
 --  What changes:
---    1. pricing_model.mini_size ('5.8x8.3' or '8.3x11.7'; '5.8x8.3' now);
---    2. public_price_schedule(): mini.size is mini_size (was always A5);
---    3. owner_pricing_model() shows mini_size;
---    4. order_quote(): a Mini at either size is priced only when it is the
---       size on sale (null otherwise, so it can't be ordered);
---    5. orders_quote(): a Mini order is A4 or A5 with staples (MP020); one at
---       the size not on sale is refused as not on sale (MP022). Orders placed
---       before keep their quote (an UPDATE never re-quotes), and A5 orders
---       still print as A5;
---    6. set_megy_mini_size() (owner only) moves the size.
+--    1. pricing_model.a4_* (its prices, package prices, costs, shipping) and
+--       store_settings.a4_on (false: applying this changes nothing anyone sees);
+--    2. public_price_schedule(): a new key "a4", shaped like "mini", while
+--       a4_on and its shipping fee is set. "mini" is unchanged, so every app
+--       that sells the Mini today keeps selling it; only an app that knows
+--       Megy Magazine (2.1.9) reads "a4";
+--    3. owner_pricing_model() shows the a4_* numbers;
+--    4. order_quote(): an A4 order with staples is priced from "a4", an A5
+--       one from "mini" (each null when its booklet isn't on sale);
+--    5. orders_quote(): a booklet order is A5 or A4 with staples (MP020), 16
+--       or 24 pages (MP021), and on sale (MP022), in its own name.
+--  The affiliate rule needs nothing: 0065 already gives no client discount on
+--  any stapled order (cover 'staple'), and the affiliate earns 10% of it.
 --
---  Every other price and rule is unchanged (0075's text, == live 2026-11-27,
---  with only the size lines changed).
+--  Every other price and rule is unchanged (0075's text, == live 2026-11-27).
 --
---  ⚠ Open drafts that redefine these functions must carry the mini_size lines
---  too: 0070 (#317: public_price_schedule, owner_pricing_model) and 0073
---  (#327: order_quote).
+--  ⚠ Open drafts that redefine these functions must carry the a4 lines too:
+--  0070 (#317: public_price_schedule, owner_pricing_model) and 0073 (#327:
+--  order_quote).
 -- ════════════════════════════════════════════════════════════════════════════
 
--- ══════ 1. Which Mini is on sale ══════
-alter table public.pricing_model add column if not exists mini_size text not null default '5.8x8.3';
+-- ══════ 1. Megy Magazine's numbers ══════
+-- Costs are estimates (2 x the A5's real ₱40 per 16 pages) until the print
+-- shop quotes A4. Package prices: ₱50 under, as the Mini's.
+alter table public.pricing_model add column if not exists a4_price             integer not null default 599;
+alter table public.pricing_model add column if not exists a4_package_price     integer not null default 549;
+alter table public.pricing_model add column if not exists a4_cost              integer not null default 80;
+alter table public.pricing_model add column if not exists a4_24_price          integer not null default 699;
+alter table public.pricing_model add column if not exists a4_24_package_price  integer not null default 649;
+alter table public.pricing_model add column if not exists a4_24_cost           integer not null default 120;
+alter table public.pricing_model add column if not exists a4_shipping_fee      integer default 120;
 
+alter table public.pricing_model drop constraint if exists pricing_model_a4_chk;
+alter table public.pricing_model add constraint pricing_model_a4_chk check (
+  a4_price between 1 and 100000
+  and a4_package_price between 1 and 100000
+  and a4_cost between 0 and 100000
+  and a4_24_price between 1 and 100000
+  and a4_24_package_price between 1 and 100000
+  and a4_24_cost between 0 and 100000
+  and (a4_shipping_fee is null or a4_shipping_fee between 0 and 10000));
+
+-- The first draft of this file (never applied) added mini_size; gone.
 alter table public.pricing_model drop constraint if exists pricing_model_mini_size_chk;
-alter table public.pricing_model add constraint pricing_model_mini_size_chk check (
-  mini_size in ('5.8x8.3', '8.3x11.7'));
+alter table public.pricing_model drop column if exists mini_size;
 
--- ══════ 2. The price list (0075's, the Mini's size from mini_size) ══════
+alter table public.store_settings add column if not exists a4_on boolean not null default false;
+
+-- ══════ 2. The price list (0075's, plus "a4") ══════
 create or replace function public.public_price_schedule()
 returns jsonb
 language plpgsql
@@ -59,6 +74,7 @@ declare
   cmp_sizes  jsonb := '{}'::jsonb;
   compare    jsonb := null;
   mini       jsonb := null;
+  a4         jsonb := null;
   show_cmp   boolean;
   ship       numeric;
   reserve    numeric;
@@ -114,8 +130,7 @@ begin
 
   if coalesce((srow ->> 'mini_on')::boolean, false) and m.mini_shipping_fee is not null then
     mini := jsonb_build_object(
-      -- 0076: the Mini on sale, A5 or A4; an app offers only its own size.
-      'size',          m.mini_size,
+      'size',          '5.8x8.3',
       'cover',         'staple',
       'pages',         16,
       'price',         m.mini_price,
@@ -130,6 +145,22 @@ begin
     );
   end if;
 
+  -- 0076: Megy Magazine, the same booklet at A4, its own prices.
+  if coalesce((srow ->> 'a4_on')::boolean, false) and m.a4_shipping_fee is not null then
+    a4 := jsonb_build_object(
+      'size',          '8.3x11.7',
+      'cover',         'staple',
+      'pages',         16,
+      'price',         m.a4_price,
+      'package_price', m.a4_package_price,
+      'shipping_fee',  m.a4_shipping_fee,
+      'free_qr',       m.mini_free_qr,
+      'options',       jsonb_build_array(
+        jsonb_build_object('pages', 16, 'price', m.a4_price,    'package_price', m.a4_package_price),
+        jsonb_build_object('pages', 24, 'price', m.a4_24_price, 'package_price', m.a4_24_package_price))
+    );
+  end if;
+
   return jsonb_build_object(
     'min_pages',           m.min_pages,
     'sheet_rate',          sheet_rate,
@@ -141,7 +172,8 @@ begin
     'compare_at',          compare,
     'disabled_sizes',      disabled,
     'sizes',               out_sizes,
-    'mini',                mini
+    'mini',                mini,
+    'a4',                  a4
   );
 end
 $$;
@@ -193,7 +225,14 @@ begin
     'mini24_price',         m.mini24_price,
     'mini24_package_price', m.mini24_package_price,
     'mini24_cost',          m.mini24_cost,
-    'mini_size',            m.mini_size
+    'a4_on',                coalesce((srow ->> 'a4_on')::boolean, false),
+    'a4_price',             m.a4_price,
+    'a4_package_price',     m.a4_package_price,
+    'a4_cost',              m.a4_cost,
+    'a4_24_price',          m.a4_24_price,
+    'a4_24_package_price',  m.a4_24_package_price,
+    'a4_24_cost',           m.a4_24_cost,
+    'a4_shipping_fee',      m.a4_shipping_fee
   );
 end
 $$;
@@ -201,7 +240,7 @@ revoke all on function public.owner_pricing_model() from public;
 revoke execute on function public.owner_pricing_model() from anon;
 grant execute on function public.owner_pricing_model() to authenticated;
 
--- ══════ 4. The checkout's total (0075's; a Mini only at the size on sale) ══════
+-- ══════ 4. The checkout's total (0075's; each booklet from its own list) ══════
 create or replace function public.order_quote(
   p_size text, p_cover text, p_pages integer, p_qr integer, p_years integer, p_hd boolean,
   p_schedule jsonb default null, p_minutes integer default null)
@@ -268,10 +307,10 @@ begin
     end if;
   end if;
 
-  -- ── Megy Mini: a set price, shipping on top, its own free QR count ──
-  -- 0076: A4 or A5, priced only when it is the size on sale (mini.size).
+  -- ── A booklet: a set price, shipping on top, its own free QR count ──
+  -- 0076: the Megy Mini (A5) from "mini", Megy Magazine (A4) from "a4".
   if p_size in ('5.8x8.3', '8.3x11.7') then
-    z := s -> 'mini';
+    z := case when p_size = '8.3x11.7' then s -> 'a4' else s -> 'mini' end;
     if z is null or jsonb_typeof(z) <> 'object' or p_cover is distinct from 'staple'
        or (z ->> 'size') is distinct from p_size then
       return null;
@@ -348,7 +387,7 @@ end
 $$;
 revoke all on function public.order_quote(text, text, integer, integer, integer, boolean, jsonb, integer) from public, anon, authenticated;
 
--- ══════ 5. A Mini order is A4 or A5 with staples ══════
+-- ══════ 5. A booklet order is A5 or A4 with staples ══════
 create or replace function public.orders_quote()
 returns trigger
 language plpgsql
@@ -378,19 +417,19 @@ begin
     q := null;
   end;
 
-  -- A Megy Mini has one shape and one price, so it IS a gate. 0076: A4, or
-  -- A5 from before; one at the size not on sale gets no quote (MP022 below).
+  -- A booklet has one shape and one price, so it IS a gate. 0076: the Megy
+  -- Mini (A5) or Megy Magazine (A4); one not on sale gets no quote (MP022).
   v_mini := new.album_size in ('5.8x8.3', '8.3x11.7') or new.cover = 'staple';
   if v_mini then
     if new.album_size is null or new.album_size not in ('5.8x8.3', '8.3x11.7')
        or new.cover is distinct from 'staple' then
-      raise exception 'A Megy Mini is A4 with staples.' using errcode = 'MP020';
+      raise exception 'A Megy Mini is A5 and Megy Magazine A4, both with staples.' using errcode = 'MP020';
     end if;
     if coalesce(new.page_count, 0) not in (16, 24) then
-      raise exception 'A Megy Mini has 16 or 24 pages.' using errcode = 'MP021';
+      raise exception '% has 16 or 24 pages.', case when new.album_size = '8.3x11.7' then 'Megy Magazine' else 'A Megy Mini' end using errcode = 'MP021';
     end if;
     if q is null then
-      raise exception 'Megy Mini isn''t on sale right now.' using errcode = 'MP022';
+      raise exception '% isn''t on sale right now.', case when new.album_size = '8.3x11.7' then 'Megy Magazine' else 'Megy Mini' end using errcode = 'MP022';
     end if;
   end if;
 
@@ -406,51 +445,25 @@ create trigger orders_quote_trg
   before insert or update on public.orders
   for each row execute function public.orders_quote();
 
--- ══════ 6. The owner moves the Mini on sale ══════
-create or replace function public.set_megy_mini_size(p_size text)
-returns jsonb
-language plpgsql
-volatile
-security definer
-set search_path = public
-as $$
-begin
-  if not public.is_owner() then
-    raise exception 'not authorized' using errcode = '42501';
-  end if;
-  if p_size is null or p_size not in ('5.8x8.3', '8.3x11.7') then
-    raise exception 'The Megy Mini is A4 (8.3x11.7) or A5 (5.8x8.3)' using errcode = '22023';
-  end if;
-  update public.pricing_model set mini_size = p_size, updated_at = now() where id = 1;
-  return public.owner_pricing_model();
-end
-$$;
-revoke all on function public.set_megy_mini_size(text) from public;
-revoke execute on function public.set_megy_mini_size(text) from anon;
-grant execute on function public.set_megy_mini_size(text) to authenticated;
+-- ══════ 6. The first draft's size switch (never applied): gone ══════
+drop function if exists public.set_megy_mini_size(text);
 
 -- ══════ Verify ══════
--- Nothing anyone sees changes: the Mini on sale is still A5 at its prices; an
--- A4 one has no price until the size moves. (All null while Megy Mini is off.)
+-- Nothing anyone sees changes: the Mini is still A5 at its prices; Megy
+-- Magazine has no price until a4_on. (The Mini's are null while it is off.)
 select size, p as pages,
        (public.order_quote(size, 'staple', p, 3, null, false, null, null) ->> 'total') as total
   from unnest(array['5.8x8.3', '8.3x11.7']) size, unnest(array[16, 24]) p;
 
-select 'mini size on sale' as check, (select mini_size from public.pricing_model where id = 1) as value
+select 'megy magazine on sale' as check, (select a4_on::text from public.store_settings where id = 1) as value
 union all
 select 'album prices by size kept (8x8 hard 40 pp)',
        (round(10 * (public.public_price_schedule() ->> 'sheet_rate')::numeric
              + (public.public_price_schedule() -> 'sizes' -> '8x8' ->> 'hard_rate')::numeric)
        + (public.public_price_schedule() ->> 'hosting_reserve')::numeric)::text;
 
--- ══════ THE DAY THE A4 APP IS LIVE (not run by this file) ══════
--- The size and the prices move together (owner, 2026-11-27: A4 at ₱450 and
--- ₱550 plus shipping; package prices ₱50 under, as before; costs are
--- estimates until the print shop quotes A4):
+-- ══════ TO PUT MEGY MAGAZINE ON SALE (not run by this file) ══════
+-- Older apps never read "a4", so it can go on as soon as this is applied;
+-- only an app that knows Megy Magazine (2.1.9) shows it:
 --
---   update public.pricing_model
---      set mini_size = '8.3x11.7',
---          mini_price = 450,   mini_package_price = 399,   mini_cost = 80,
---          mini24_price = 550, mini24_package_price = 499, mini24_cost = 120,
---          updated_at = now()
---    where id = 1;
+--   update public.store_settings set a4_on = true where id = 1;

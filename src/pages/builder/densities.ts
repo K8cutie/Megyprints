@@ -33,7 +33,7 @@ export const DENSITY_BY_SIZE: Record<AlbumSizePreset, number[]> = {
   '6x8': [1, 2, 3, 4],
   '11.5x8': [1, 2, 3, 4, 5, 6],
   '8.5x11': [1, 2, 3, 4, 5, 6],
-  // The Megy Mini (A4; A5 before 2026-11-27): the website never makes one, same cap.
+  // The booklets (Megy Mini A5, Megy Magazine A4): the website never makes one, same cap.
   '5.8x8.3': [1, 2, 3, 4],
   '8.3x11.7': [1, 2, 3, 4],
 };
