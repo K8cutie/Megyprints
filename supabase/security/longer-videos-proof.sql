@@ -21,6 +21,19 @@
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
 
+-- 0079 (the switch) has longer videos OFF until the owner turns them on;
+-- this proof is about them on sale, so it turns them on (rolled back with
+-- the rest). Before 0079 there is no switch: they are always on.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'store_settings'
+                and column_name = 'long_videos_on') then
+    execute 'update public.store_settings set long_videos_on = true where id = 1';
+  end if;
+end
+$$;
+
 create temp table lv_log (n serial, line text);
 grant insert, select on lv_log to authenticated;
 grant usage on sequence lv_log_n_seq to authenticated;
