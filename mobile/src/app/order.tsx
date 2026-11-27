@@ -201,6 +201,9 @@ export default function OrderScreen() {
   const [askSecond, setAskSecond] = useState(false);
   const secondOk = useRef(false);
   const [plan, setPlan] = useState<PlaceOrderPlan | null>(null);
+  // The last try was a free tester order (its code is on its row): Place order again
+  // keeps that path, where the code claims it; Finish sending has no claim (Mother, L1-45).
+  const savedIsTestOrder = !!plan?.orderRow?.tester_code;
   const [placedAmount, setPlacedAmount] = useState(0);
   // The saved total differs from the phone's (a price moved mid-checkout): bug hunt B3.
   const [priceMoved, setPriceMoved] = useState(false);
@@ -421,7 +424,7 @@ export default function OrderScreen() {
     if (tooFull) { setMessage(tooFull); return; }
     // A send that stopped after its order row was saved, this visit (L1-45):
     // finish THAT order from what it froze, never from the form.
-    if (retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing, eventAlbum: !!eventLink })) {
+    if (retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing || savedIsTestOrder, eventAlbum: !!eventLink })) {
       void startFinishing(placedRef.current!.id);
       return;
     }
@@ -672,7 +675,7 @@ export default function OrderScreen() {
       // (the form opened at the top, the words below the fold: beta round 2).
       onContentSizeChange={() => { if (!showFailure.current) return; showFailure.current = false; scrollRef.current?.scrollToEnd({ animated: false }); }}>
       {ordersOwn && <View testID="order-own-album" />}
-      {retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing, eventAlbum: !!eventLink }) && placedRef.current && (
+      {retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing || savedIsTestOrder, eventAlbum: !!eventLink }) && placedRef.current && (
         <View style={styles.notice} testID="order-saved-note">
           <Text style={styles.noticeBody}>{savedOrderNote(placedRef.current.order_number)}</Text>
           <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; orderIdRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-saved-new-instead" />

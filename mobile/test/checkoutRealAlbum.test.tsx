@@ -464,6 +464,24 @@ describe('checkout on the album "Order this album" opened it with', () => {
     expect(screen.getByText('Send ₱1,505')).toBeOnTheScreen();
   });
 
+  it('a free tester order whose send stopped after it was saved: Place order again keeps the code\'s path ("Test order placed"), the same order (Mother, L1-45)', async () => {
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+      throw new Error('Print file upload failed: timeout');
+    };
+    await place(true);
+    expect(await screen.findByText('Print file upload failed: timeout')).toBeOnTheScreen();
+    // No saved-order note: a free tester order is finished by its code, not paid.
+    expect(screen.queryByTestId('order-saved-note')).toBeNull();
+    mockSend.run = placesAndSends;
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(2);
+    expect(mockSend.calls[1].placed).toEqual({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+    expect(mockSend.calls[1].plan.orderRow.tester_code).toBe('MEGYTEST');
+    expect(screen.queryByText(/^Send ₱/)).toBeNull();
+  });
+
   it('"Place a new order instead" on that note really places a new order (bug hunt L1-45 b)', async () => {
     mockSend.run = async (c) => {
       c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });

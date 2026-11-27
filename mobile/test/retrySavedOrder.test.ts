@@ -38,7 +38,9 @@ describe('Place order again after a send that stopped once the order was saved',
   it('the checkout screen: Place order goes to Finish sending for the saved order; "new instead" forgets it', () => {
     const src = readFileSync(path.join(__dirname, '../src/app/order.tsx'), 'utf8').replace(/\r\n/g, '\n');
     // Checked before any plan is built from the form.
-    const check = src.indexOf('if (retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing, eventAlbum: !!eventLink })) {\n      void startFinishing(placedRef.current!.id);\n      return;\n    }');
+    // A free tester order (its code on the last try's row) keeps its own path (Mother, L1-45).
+    expect(src).toContain('const savedIsTestOrder = !!plan?.orderRow?.tester_code;');
+    const check = src.indexOf('if (retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing || savedIsTestOrder, eventAlbum: !!eventLink })) {\n      void startFinishing(placedRef.current!.id);\n      return;\n    }');
     const formPlan = src.indexOf('const p = placeOrderPlan({');
     expect(check).toBeGreaterThan(0);
     expect(check).toBeLessThan(formPlan);
