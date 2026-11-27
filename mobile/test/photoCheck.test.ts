@@ -26,8 +26,19 @@ describe('the photo check before an order is saved', () => {
     expect(firstUnopenable(used, uris, [ok('content://a'), ok('content://b'), { uri: 'content://c', readable: true, size: 0, width: 0, height: 0 }])).toEqual({ page: 'the cover', index: 2 });
   });
 
-  it('a photo whose size or header the phone just can\'t tell goes on, as before (no good photo is stopped)', () => {
-    expect(firstUnopenable(used, uris, [{ uri: 'content://a', readable: true, size: 0, width: 4000, height: 3000 }, { uri: 'content://b', readable: true, size: 2_000_000, width: 0, height: 0 }, ok('content://c')])).toBeNull();
+  // Mother, 2026-11-28: these three got through the first check, because the
+  // phone's photo list still gave a size, and stopped only after the order row.
+  it('a photo whose header can\'t be read, even when the phone\'s list still shows a size: that one', () => {
+    // Emptied, but the photo list not updated yet (its old size).
+    expect(firstUnopenable(used, uris, [ok('content://a'), { uri: 'content://b', readable: true, size: 275_896, width: 0, height: 0 }, ok('content://c')])).toEqual({ page: 'page 2', index: 1 });
+    // Broken: 51,200 random bytes.
+    expect(firstUnopenable(used, uris, [{ uri: 'content://a', readable: true, size: 51_200, width: 0, height: 0 }, ok('content://b'), ok('content://c')])).toEqual({ page: 'page 1', index: 0 });
+    // Only looks like a photo (a JPEG start, then text: 902 bytes).
+    expect(firstUnopenable(used, uris, [ok('content://a'), ok('content://b'), { uri: 'content://c', readable: true, size: 902, width: 0, height: 0 }])).toEqual({ page: 'the cover', index: 2 });
+  });
+
+  it('a good photo is never stopped: a size the phone can\'t tell goes on when the header is read', () => {
+    expect(firstUnopenable(used, uris, [{ uri: 'content://a', readable: true, size: 0, width: 4000, height: 3000 }, { uri: 'content://b', readable: true, size: 3_100_000, width: 3024, height: 4032 }, ok('content://c')])).toBeNull();
     // Not inspected at all (an older build): goes on.
     expect(firstUnopenable(used, uris, [])).toBeNull();
   });

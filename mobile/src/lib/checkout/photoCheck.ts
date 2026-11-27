@@ -6,15 +6,20 @@
    draws the frozen album). The check reads each photo's header only
    (modules/photo-files inspect: no pixels), so it is quick.
 
-   Only what is surely broken stops the order: a photo the phone can't open
-   at all, or one with no header and no bytes (a 0-byte file). A photo whose
-   size or header the phone just can't tell (0 = unknown) goes on, as before. */
+   What stops the order: a photo the phone can't open at all, or one whose
+   header the phone can't read (no width or height). The second covers a
+   0-byte file, a broken file, and a file that only looks like a photo, even
+   when the phone's photo list still shows its old size (Mother, 2026-11-28:
+   the first check trusted that size and let these through). The print files
+   open photos with the same Android decoders, so a photo whose header can't
+   be read can't be printed either. HEIC is read on Android 9 and newer.
+   The file's size is not used: the phone's list can be out of date. */
 import type { PhotoInspection } from '../../../modules/photo-files';
 
 export interface UsedPhoto { page: string; index: number }
 
 /** The first photo that surely can't be opened, else null. */
-export function firstUnopenable(used: readonly UsedPhoto[], uris: readonly string[], looks: readonly Pick<PhotoInspection, 'uri' | 'readable' | 'size' | 'width' | 'height'>[]): UsedPhoto | null {
+export function firstUnopenable(used: readonly UsedPhoto[], uris: readonly string[], looks: readonly Pick<PhotoInspection, 'uri' | 'readable' | 'width' | 'height'>[]): UsedPhoto | null {
   const byUri = new Map(looks.map((l) => [l.uri, l]));
   for (const u of used) {
     const uri = uris[u.index];
@@ -22,7 +27,7 @@ export function firstUnopenable(used: readonly UsedPhoto[], uris: readonly strin
     const l = byUri.get(uri);
     if (!l) continue;
     if (!l.readable) return u;
-    if (l.width <= 0 && l.height <= 0 && l.size <= 0) return u;
+    if (l.width <= 0 || l.height <= 0) return u;
   }
   return null;
 }
