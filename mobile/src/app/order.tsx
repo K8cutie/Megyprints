@@ -67,9 +67,10 @@ import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart
 import { useOptionalBuilder } from '../builder/BuilderProvider';
 import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
 import { TesterCodeGoneError } from '../lib/checkout/testerCode';
-import type { PlacedOrder } from '../lib/checkout/sendOrder';
+import { OrderAlreadySavedError, type PlacedOrder } from '../lib/checkout/sendOrder';
 import { finishToCopy, sameFinishNote, type CopiedFinish } from '../lib/checkout/sameFinish';
 import { lastFinishForAlbum } from '../lib/orders/myOrders';
+import { newOrderId } from '../lib/checkout/orderId';
 import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payAfterPlacing, placedOn, PRICE_MOVED, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
@@ -128,6 +129,8 @@ export default function OrderScreen() {
   const ownText = own?.text ?? null;
   // The order a try made: Place order again reuses it (never a second order).
   const placedRef = useRef<PlacedOrder | null>(null);
+  // The id the next new order is sent with, kept until an order is known saved (L1-47).
+  const orderIdRef = useRef<string | null>(null);
   // The files a try sent: never made or sent again (sendOrder `sent`).
   // The files this phone sent, known again when this order is finished on a
   // later visit (sentFiles.ts: the app closed on a stopped send, round 3).
@@ -429,6 +432,7 @@ export default function OrderScreen() {
         affiliateCode: eventLink || tester ? null : affiliate?.code ?? null,
         includedYears: price.includedYears,
         eventBookingId: eventLink && coveredByBooking ? eventLink.bookingId : null,
+        orderId: live && !finishing ? (orderIdRef.current ??= newOrderId()) : undefined,
       });
       setPlan(p);
       setPlacedAmount(price.payTotal);
@@ -557,6 +561,13 @@ export default function OrderScreen() {
             setStep('form');
             return;
           }
+          // The order an earlier try saved, its answer lost (L1-47): finish THAT one.
+          if (e instanceof OrderAlreadySavedError) {
+            placedRef.current = { id: e.orderId, order_number: '', status: 'pending_payment' };
+            setMessage(e.message); setStep('form');
+            void startFinishing(e.orderId);
+            return;
+          }
           // A memory video too big for the server, said before any order was made.
           if (e instanceof ClipTooBigError) { setMessage(tooBigClipMessage(album.pages, e.clips)); setStep('form'); return; }
           if (e instanceof TesterCodeGoneError) setTester(null);
@@ -634,7 +645,7 @@ export default function OrderScreen() {
         <Button label={FINISH_SENDING} busy={finishBusy} onPress={() => { void startFinishing(); }} testID="order-finish-sending" />
         {!!message && <Text style={styles.error} accessibilityRole="alert" testID="order-finish-error">{message}</Text>}
         {/* A new order is still possible (the album changed since, say): outlined. */}
-        <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-new-instead" />
+        <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; orderIdRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-new-instead" />
       </ScrollView>
     );
   }
@@ -655,7 +666,7 @@ export default function OrderScreen() {
       {retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing, eventAlbum: !!eventLink }) && placedRef.current && (
         <View style={styles.notice} testID="order-saved-note">
           <Text style={styles.noticeBody}>{savedOrderNote(placedRef.current.order_number)}</Text>
-          <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-saved-new-instead" />
+          <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; orderIdRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-saved-new-instead" />
         </View>
       )}
       {!!ownRowError && (

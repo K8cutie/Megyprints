@@ -135,6 +135,16 @@ export const COVER_MAKE_FAILED = "We couldn't make your album's cover on this ph
 export const PAGES_SEND_FAILED = "We couldn't send your album's pages. Your order is saved: check your internet, then tap Place order again.";
 /** No connection as the order is placed: plain words, not the phone's
  *  ("fetch failed: java.net.ConnectException…"). */
+/** Bug hunt L1-47: this order was saved by an earlier try whose answer was
+ *  lost (the insert with the same phone-chosen id was refused as a duplicate).
+ *  Checkout finishes that order from its row instead of making a second one. */
+export const ORDER_ALREADY_SAVED = 'Your order was already saved. Finishing it now.';
+export class OrderAlreadySavedError extends Error {
+  constructor(public readonly orderId: string) { super(ORDER_ALREADY_SAVED); this.name = 'OrderAlreadySavedError'; }
+}
+const isSameOrderAgain = (e: DbError, id: unknown): id is string =>
+  typeof id === 'string' && !!e && e.code === '23505' && /orders_pkey/.test(e.message);
+
 export const ORDER_OFFLINE = "We couldn't reach Megy Prints. Check your internet, then tap Place order again.";
 /** testerCode.ts claimTesterOrder's words. */
 export const TESTER_CLAIM_FAILED = "We couldn't finish your free tester order. Your order is saved: tap Place order again.";
@@ -189,6 +199,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
   if (!order) {
     onStep({ step: 'order' });
     const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status, quoted_amount, amount').single();
+    if (isSameOrderAgain(error, plan.orderRow.id)) throw new OrderAlreadySavedError(plan.orderRow.id as string);
     if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
     if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(String(plan.orderRow.tester_code ?? ''));
     // An affiliate code that stopped working, or this order can't take (0061): the database's words.

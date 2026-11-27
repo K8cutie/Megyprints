@@ -90,7 +90,7 @@ export function retryFinishesSavedOrder(o: { live: boolean; placed: { id: string
   return o.live && !!o.placed && !o.finishingTestOrder && !o.eventAlbum;
 }
 export const savedOrderNote = (orderNumber: string) =>
-  `Your order ${orderNumber} is saved. Place order finishes sending it as you placed it. Changes on this page don't change it. To change it, tap "${NEW_ORDER_INSTEAD}".`;
+  `Your order${orderNumber ? ` ${orderNumber}` : ''} is saved. Place order finishes sending it as you placed it. Changes on this page don't change it. To change it, tap "${NEW_ORDER_INSTEAD}".`;
 export const SAVED_ORDER_LOAD_FAILED = "We couldn't get your saved order from your account. Check your internet, then tap Place order again.";
 export const FINISH_LOAD_FAILED = "We couldn't get this order from your account. Check your internet, then tap Finish sending again.";
 /** All in, already paid: the end of Finish sending. */

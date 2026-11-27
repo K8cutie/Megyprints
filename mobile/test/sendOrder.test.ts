@@ -28,10 +28,7 @@ import { fixtureCheckoutAlbum } from '../src/lib/checkout/fixtureAlbum';
 import { placeOrderPlan, type OrderAlbumRow, type PlanInput } from '../src/lib/checkout/orderPayload';
 import { paymentSubmitPlan } from '../src/lib/checkout/payment';
 import { TesterCodeGoneError } from '../src/lib/checkout/testerCode';
-import {
-  COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, ORDER_OFFLINE, PAGES_SEND_FAILED, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
-  type ClipSender, type PlacedOrder, type SendDeps, type SendStep,
-} from '../src/lib/checkout/sendOrder';
+import { OrderAlreadySavedError, ORDER_ALREADY_SAVED, COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, ORDER_OFFLINE, PAGES_SEND_FAILED, sendOrder, sendPayment, TESTER_CLAIM_FAILED, type ClipSender, type PlacedOrder, type SendDeps, type SendStep } from '../src/lib/checkout/sendOrder';
 import { createOnlyUpload, isAlreadyExists, uploadTimeLimitMs } from '../src/lib/checkout/storage';
 import { MissingClipError } from '../src/lib/memories/clips';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
@@ -156,6 +153,32 @@ describe('a retry, and files already sent', () => {
     expect(rec.insertSelects).toEqual(['id, order_number, status, quoted_amount, amount']);
     expect(seen[0]).toMatchObject({ id: 'order-1', quoted_amount: 1355, amount: null });
     expect(r.order).toMatchObject({ quoted_amount: 1355 });
+  });
+
+  // Bug hunt L1-47: the answer to a saved insert was lost; Place order again.
+  const ID = '6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab';
+  it('the order is sent with the id the phone chose (left out: the database picks it, as the website does)', () => {
+    expect(placeOrderPlan(input({ orderId: ID })).orderRow.id).toBe(ID);
+    expect('id' in placeOrderPlan(input()).orderRow).toBe(false);
+  });
+
+  it('the same id refused again (orders_pkey) means "already saved": no second order, nothing sent, the app finishes that one', async () => {
+    fake.insertError = { code: '23505', message: 'duplicate key value violates unique constraint "orders_pkey"' };
+    const err = await sendOrder(placeOrderPlan(input({ orderId: ID })), deps()).then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(OrderAlreadySavedError);
+    expect((err as OrderAlreadySavedError).orderId).toBe(ID);
+    expect((err as Error).message).toBe(ORDER_ALREADY_SAVED);
+    expect(rec.inserts).toHaveLength(1);
+    expect(rec.uploads).toHaveLength(0);
+  });
+
+  it('another duplicate (not the order id), or an order with no phone-chosen id, is not mistaken for it', async () => {
+    fake.insertError = { code: '23505', message: 'duplicate key value violates unique constraint "orders_order_number_key"' };
+    const a = await sendOrder(placeOrderPlan(input({ orderId: ID })), deps()).then(() => null, (e: unknown) => e);
+    expect(a).not.toBeInstanceOf(OrderAlreadySavedError);
+    fake.insertError = { code: '23505', message: 'duplicate key value violates unique constraint "orders_pkey"' };
+    const b = await sendOrder(placeOrderPlan(input()), deps()).then(() => null, (e: unknown) => e);
+    expect(b).not.toBeInstanceOf(OrderAlreadySavedError);
   });
 
   it('a file already there is "done" by the website\'s own rule (storageUpload isAlreadyExists)', async () => {

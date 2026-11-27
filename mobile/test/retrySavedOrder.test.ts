@@ -47,7 +47,8 @@ describe('Place order again after a send that stopped once the order was saved',
     expect(src).toContain('setPlacedAmount(askedToPay(order) ?? price.payTotal);');
     expect(src).toContain("cover={fo?.cover ? fo.cover as CoverType : cover} material={fo?.material ? fo.material as MaterialType : material}");
     // Both "Place a new order instead" buttons forget the saved order.
-    expect(src.match(/placedRef\.current = null; setNewInstead\(true\)/g)).toHaveLength(2);
+    // ...and the id kept for it (L1-47), so the new order gets its own.
+    expect(src.match(/placedRef\.current = null; orderIdRef\.current = null; setNewInstead\(true\)/g)).toHaveLength(2);
     expect(src).toContain('testID="order-saved-note"');
   });
 });
