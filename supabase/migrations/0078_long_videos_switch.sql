@@ -1,5 +1,9 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0076_long_videos_switch.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0078_long_videos_switch.sql  (idempotent; safe to re-run)
+--  (was 0076 in PR #317; renumbered and rebuilt on 0076_mini_a4 by the bug
+--  hunt, 2026-11-27, F-00: 0076 was taken by 0076_mini_a4, and this file's
+--  price list said the Mini is always A5, so applied after 0076_mini_a4 no
+--  A4 Mini could be ordered.)
 --
 --  WHY (owner, 2026-11-23): "disable the longer videos first and put an on off
 --  switch for those features in the admin panel". The live project is on
@@ -19,9 +23,24 @@
 --    3. owner_pricing_model() says whether it is on; set_long_videos_on()
 --       switches it (owner only). The 3- and 5-minute prices are kept.
 --
---  Run AFTER 0075: the price list and owner view are 0075's, unchanged but
---  for this switch.
+--  Run AFTER 0076_mini_a4 (the guard below refuses otherwise): the price list
+--  and owner view are 0076_mini_a4's, unchanged but for this switch.
+--  Independent of 0077 (0077 changes only order_quote and the video offer).
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- ── Order guard (bug hunt F-00, 2026-11-27) ─────────────────────────────────
+-- The price functions are redefined whole by each change, so the last one
+-- applied wins. This file carries 0076_mini_a4's text; run before 0076 it would
+-- be overwritten by 0076, so it refuses.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'pricing_model'
+                    and column_name = 'mini_size') then
+    raise exception '0078 needs 0076_mini_a4 first (pricing_model.mini_size is missing)';
+  end if;
+end
+$$;
 
 -- ══════ 1. The switch ══════
 alter table public.store_settings add column if not exists long_videos_on boolean not null default false;
@@ -98,7 +117,8 @@ begin
 
   if coalesce((srow ->> 'mini_on')::boolean, false) and m.mini_shipping_fee is not null then
     mini := jsonb_build_object(
-      'size',          '5.8x8.3',
+      -- 0076: the Mini on sale, A5 or A4; an app offers only its own size.
+      'size',          m.mini_size,
       'cover',         'staple',
       'pages',         16,
       'price',         m.mini_price,
@@ -119,7 +139,7 @@ begin
     'hosting_reserve',     m.hosting_reserve,
     'hosting_tiers',       m.hosting_tiers,
     'hd_memories_price',   m.hd_memories_price,
-    -- 0076: only while the owner has them on; null = videos up to 2 minutes
+    -- 0078: only while the owner has them on; null = videos up to 2 minutes
     'long_video_prices',   case when coalesce((srow ->> 'long_videos_on')::boolean, false)
                                 then jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price) end,
     'free_shipping_value', ship,
@@ -178,7 +198,8 @@ begin
     'mini_hosting_reserve', m.mini_hosting_reserve,
     'mini24_price',         m.mini24_price,
     'mini24_package_price', m.mini24_package_price,
-    'mini24_cost',          m.mini24_cost
+    'mini24_cost',          m.mini24_cost,
+    'mini_size',            m.mini_size
   );
 end
 $$;
@@ -212,3 +233,8 @@ grant execute on function public.set_long_videos_on(boolean) to authenticated;
 -- Off: no longer-video prices in the list, and a 5-minute order pays no fee.
 select public.public_price_schedule() -> 'long_video_prices' as long_video_prices,
        (public.order_quote('8x8', 'softcover', 40, 3, null, false, null, 5) ->> 'long_fee') as five_min_fee;
+
+select 'the Mini in the price list is the size on sale (0076_mini_a4 kept)' as check,
+       (public.public_price_schedule() -> 'mini' ->> 'size')
+       is not distinct from (select mini_size from public.pricing_model where id = 1)
+       or (public.public_price_schedule() -> 'mini') is null as ok;
