@@ -208,6 +208,7 @@ until the next application (2026-11-09 at the earliest):
 - Upload to **Alpha**, paste `android-native/release/release-notes-<version>.txt`,
   then Publishing overview → **Send changes for review** (saving alone sends
   nothing). Post in the tester group what changed and what to try.
+- Day-by-day steps to production: [`docs/play-closed-test-checklist.md`](play-closed-test-checklist.md); the answers to paste into Apply for production: [`docs/play-production-application.md`](play-production-application.md).
 
 | Version | Code | Change inside the app |
 |---|---|---|
