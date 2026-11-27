@@ -15,6 +15,8 @@ const SOCIAL_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
 const quickLinks = [
   { label: 'Home', path: '/' },
   { label: 'Events', path: '/events' },
+  // PayMongo asks for prices in pesos on the website (2026-11-27).
+  { label: 'Prices', path: '/prices' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
   // Affiliates (0061): the page explains it and asks visitors to sign in.
