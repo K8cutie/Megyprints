@@ -2,8 +2,10 @@
    CARD, GCASH AND MAYA THROUGH PAYMONGO (owner, 2026-11-27), the app's side
    of the website's src/lib/payOnline.ts.
 
-   Off until the shop switches it on (store_settings.paymongo_on, 0077,
-   read through public_pay_options): no app release needed to turn it on.
+   Off until the shop switches it on (store_settings.paymongo_mode, 0077:
+   'owners' while testing, 'everyone' when live; read through
+   public_pay_options, which answers for the signed-in person): no app
+   release needed to turn it on.
    Paying opens PayMongo's own page in the phone's browser. The website's
    /api/pay makes that checkout for the order's own total (the app never
    sends an amount), and marks the order paid when PayMongo tells it. When
