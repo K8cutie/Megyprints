@@ -83,10 +83,7 @@ import type { VideoMinutes } from '@web/lib/pricing';
 import { dropEventLink, readEventLink, saveEventLink } from '../lib/events/albumEventLink';
 import * as EV from '../lib/events/eventDeal';
 import { ClipTooBigError, MissingClipError, missingClipMessage, tooBigClipMessage, type ClipQuality } from '../lib/memories/clips';
-import {
-  allSentBody, allSentTitle, FINISH_LOAD_FAILED, FINISH_SENDING, finishAlbum, finishEndsOnPayment, finishPlan,
-  listUnsentOrders, loadFinishOrder, NEW_ORDER_INSTEAD, unsentBody, unsentHeadline, type FinishOrderRow, type UnsentOrder,
-} from '../lib/checkout/unsentOrders';
+import { allSentBody, allSentTitle, FINISH_LOAD_FAILED, FINISH_SENDING, finishAlbum, finishEndsOnPayment, finishPlan, listUnsentOrders, loadFinishOrder, NEW_ORDER_INSTEAD, unsentBody, unsentHeadline, type FinishOrderRow, type UnsentOrder, retryFinishesSavedOrder, savedOrderNote, SAVED_ORDER_LOAD_FAILED } from '../lib/checkout/unsentOrders';
 import { isOrderBeingSent, LEAVE_SCREEN, LEAVE_SENDING_LINE, LEAVE_SENDING_TITLE, STAY_HERE } from '../lib/checkout/backgroundSend';
 import type { CheckoutAlbum } from '../lib/checkout/orderPayload';
 
@@ -412,6 +409,12 @@ export default function OrderScreen() {
       setMessage('Getting your album ready… Tap Place order again in a moment.');
       return;
     }
+    // A send that stopped after its order row was saved, this visit (L1-45):
+    // finish THAT order from what it froze, never from the form.
+    if (retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing, eventAlbum: !!eventLink })) {
+      void startFinishing(placedRef.current!.id);
+      return;
+    }
     try {
       const p = placeOrderPlan({
         userId,
@@ -440,14 +443,15 @@ export default function OrderScreen() {
   // Finish sending: the order read back with the album it froze, drawn from
   // this phone's photos, and sent on the SAME order: only what isn't in the
   // bucket yet goes up (unsentOrders.ts).
-  const startFinishing = async () => {
-    if (!unsent || !userId || !b || finishBusy) return;
-    if (!ownText) { setMessage('Getting your album ready… Tap Finish sending again in a moment.'); return; }
+  const startFinishing = async (savedId?: string) => {
+    const orderId = savedId ?? unsent?.order_id;
+    if (!orderId || !userId || !b || finishBusy) return;
+    if (!ownText) { setMessage(`Getting your album ready… Tap ${savedId ? 'Place order' : 'Finish sending'} again in a moment.`); return; }
     setMessage('');
     setFinishBusy(true);
     try {
-      const order = await loadFinishOrder(supabase as never, userId, unsent.order_id);
-      if (!order) { setMessage(FINISH_LOAD_FAILED); return; }
+      const order = await loadFinishOrder(supabase as never, userId, orderId);
+      if (!order) { setMessage(savedId ? SAVED_ORDER_LOAD_FAILED : FINISH_LOAD_FAILED); return; }
       const fa = finishAlbum(order, b.uploadedPhotos);
       const p = finishPlan(order, userId, price.ready ? price.includedYears : null);
       placedRef.current = { id: order.id, order_number: order.order_number, status: order.status };
@@ -457,7 +461,7 @@ export default function OrderScreen() {
       setPlan(p);
       setStep('placing');
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : FINISH_LOAD_FAILED);
+      setMessage(e instanceof Error && e.message ? e.message : savedId ? SAVED_ORDER_LOAD_FAILED : FINISH_LOAD_FAILED);
     } finally {
       setFinishBusy(false);
     }
@@ -630,7 +634,7 @@ export default function OrderScreen() {
         <Button label={FINISH_SENDING} busy={finishBusy} onPress={() => { void startFinishing(); }} testID="order-finish-sending" />
         {!!message && <Text style={styles.error} accessibilityRole="alert" testID="order-finish-error">{message}</Text>}
         {/* A new order is still possible (the album changed since, say): outlined. */}
-        <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; setNewInstead(true); setMessage(''); }} testID="order-new-instead" />
+        <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-new-instead" />
       </ScrollView>
     );
   }
@@ -648,6 +652,12 @@ export default function OrderScreen() {
       // (the form opened at the top, the words below the fold: beta round 2).
       onContentSizeChange={() => { if (!showFailure.current) return; showFailure.current = false; scrollRef.current?.scrollToEnd({ animated: false }); }}>
       {ordersOwn && <View testID="order-own-album" />}
+      {retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing, eventAlbum: !!eventLink }) && placedRef.current && (
+        <View style={styles.notice} testID="order-saved-note">
+          <Text style={styles.noticeBody}>{savedOrderNote(placedRef.current.order_number)}</Text>
+          <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-saved-new-instead" />
+        </View>
+      )}
       {!!ownRowError && (
         <View style={styles.notice} testID="order-not-saved">
           <Text style={styles.noticeBody}>{ownRowError}</Text>

@@ -82,6 +82,16 @@ export const UNSENT_NO_ALBUM = "This order didn't finish sending, and its album 
 /** A photo the order needs isn't on this phone. */
 export const FINISH_PHOTOS_MISSING = "Some photos this order needs aren't on this phone. Open Your orders on the phone you made the album on and tap Finish sending there.";
 /** The order couldn't be read back. */
+/** Bug hunt L1-45 (2026-11-27): a send that stopped after its order row was
+ *  saved, in the same checkout visit. Place order then finishes THAT order from
+ *  what it froze (its cover, paper, years, address, code and total), never from
+ *  the form, which may have been changed since; the form says so. */
+export function retryFinishesSavedOrder(o: { live: boolean; placed: { id: string } | null; finishingTestOrder: boolean; eventAlbum: boolean }): boolean {
+  return o.live && !!o.placed && !o.finishingTestOrder && !o.eventAlbum;
+}
+export const savedOrderNote = (orderNumber: string) =>
+  `Your order ${orderNumber} is saved. Place order finishes sending it as you placed it. Changes on this page don't change it. To change it, tap "${NEW_ORDER_INSTEAD}".`;
+export const SAVED_ORDER_LOAD_FAILED = "We couldn't get your saved order from your account. Check your internet, then tap Place order again.";
 export const FINISH_LOAD_FAILED = "We couldn't get this order from your account. Check your internet, then tap Finish sending again.";
 /** All in, already paid: the end of Finish sending. */
 export const allSentTitle = 'Your order is all sent';
