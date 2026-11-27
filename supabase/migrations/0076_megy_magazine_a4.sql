@@ -1,5 +1,8 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0076_megy_magazine_a4.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0076_megy_magazine_a4.sql  (idempotent; re-run only before
+--  0078 and 0079, or re-run them after it: it redefines the price functions
+--  they build on, so re-running it alone brings back the packs-only video fee
+--  and turns longer videos back on)
 --
 --  WHY (owner, 2026-11-27): "A5 stays, with its current prices, the A4 album
 --  becomes another product which is the gap between mini and the cheapest
@@ -25,9 +28,9 @@
 --
 --  Every other price and rule is unchanged (0075's text, == live 2026-11-27).
 --
---  ⚠ Open drafts that redefine these functions must carry the a4 lines too:
---  0070 (#317: public_price_schedule, owner_pricing_model) and 0073 (#327:
---  order_quote).
+--  Built on this file (each refuses to run before it): 0078 video sale (#327:
+--  order_quote) and 0079 longer-videos switch (#317: public_price_schedule,
+--  owner_pricing_model). 0077 is PayMongo (#341: no price functions).
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. Megy Magazine's numbers ══════

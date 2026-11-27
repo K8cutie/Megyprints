@@ -203,8 +203,9 @@ select pg_temp.log(
   (public.order_quote('8x8', 'hardboundLeather', 40, 0, null, false, null, null) ->> 'total')::int
     = (select (sizes -> '8x8' ->> 'price_hard')::int from public.pricing_model where id = 1),
   'an 8x8 hardcover still costs its set price (0074)', 'the 8x8 hardcover price moved');
-select pg_temp.log(jsonb_typeof(public.public_price_schedule() -> 'long_video_prices') = 'object',
-  'longer videos are still in the price list', 'longer videos disappeared from the price list');
+select pg_temp.log(jsonb_typeof(public.public_price_schedule() -> 'long_video_prices') = 'object'
+    or coalesce((select (to_jsonb(s) ->> 'long_videos_on')::boolean from public.store_settings s where s.id = 1), true) = false,
+  'longer videos are in the price list (or switched off by 0079)', 'longer videos disappeared from the price list while switched on');
 
 do $$
 declare report text; total integer; fails integer;
