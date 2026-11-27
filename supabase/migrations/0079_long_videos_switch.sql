@@ -1,9 +1,9 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0078_long_videos_switch.sql  (idempotent; safe to re-run)
---  (was 0076 in PR #317; renumbered and rebuilt on 0076_mini_a4 by the bug
---  hunt, 2026-11-27, F-00: 0076 was taken by 0076_mini_a4, and this file's
---  price list said the Mini is always A5, so applied after 0076_mini_a4 no
---  A4 Mini could be ordered.)
+--  MEGY PRINTS — 0079_long_videos_switch.sql  (idempotent; safe to re-run)
+--  (was 0076 in PR #317, then 0078 on 0076_mini_a4 (bug hunt F-00,
+--  2026-11-27); rebuilt the same day on 0076_megy_magazine_a4, where the A4
+--  booklet is Megy Magazine beside the A5 Mini. 0077 is PayMongo (#341), 0078
+--  the video sale (#327).)
 --
 --  WHY (owner, 2026-11-23): "disable the longer videos first and put an on off
 --  switch for those features in the admin panel". The live project is on
@@ -23,21 +23,23 @@
 --    3. owner_pricing_model() says whether it is on; set_long_videos_on()
 --       switches it (owner only). The 3- and 5-minute prices are kept.
 --
---  Run AFTER 0076_mini_a4 (the guard below refuses otherwise): the price list
---  and owner view are 0076_mini_a4's, unchanged but for this switch.
---  Independent of 0077 (0077 changes only order_quote and the video offer).
+--  Run AFTER 0076_megy_magazine_a4 (the guard below refuses otherwise): the
+--  price list and owner view are 0076's, unchanged but for this switch.
+--  Independent of 0078 (0078 changes only order_quote and the video offer).
+--  Run by hand only with psql -v ON_ERROR_STOP=1, or the guard's error is
+--  printed and the rest runs anyway (supabase db push stops on it).
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ── Order guard (bug hunt F-00, 2026-11-27) ─────────────────────────────────
 -- The price functions are redefined whole by each change, so the last one
--- applied wins. This file carries 0076_mini_a4's text; run before 0076 it would
--- be overwritten by 0076, so it refuses.
+-- applied wins. This file carries 0076_megy_magazine_a4's text; run before
+-- 0076 it would be overwritten by 0076, so it refuses.
 do $$
 begin
   if not exists (select 1 from information_schema.columns
                   where table_schema = 'public' and table_name = 'pricing_model'
-                    and column_name = 'mini_size') then
-    raise exception '0078 needs 0076_mini_a4 first (pricing_model.mini_size is missing)';
+                    and column_name = 'a4_price') then
+    raise exception '0079 needs 0076_megy_magazine_a4 first (pricing_model.a4_price is missing)';
   end if;
 end
 $$;
@@ -45,7 +47,7 @@ $$;
 -- ══════ 1. The switch ══════
 alter table public.store_settings add column if not exists long_videos_on boolean not null default false;
 
--- ══════ 2. The price list (0075's, longer videos only while on) ══════
+-- ══════ 2. The price list (0076's, longer videos only while on) ══════
 create or replace function public.public_price_schedule()
 returns jsonb
 language plpgsql
@@ -62,6 +64,7 @@ declare
   cmp_sizes  jsonb := '{}'::jsonb;
   compare    jsonb := null;
   mini       jsonb := null;
+  a4         jsonb := null;
   show_cmp   boolean;
   ship       numeric;
   reserve    numeric;
@@ -117,8 +120,7 @@ begin
 
   if coalesce((srow ->> 'mini_on')::boolean, false) and m.mini_shipping_fee is not null then
     mini := jsonb_build_object(
-      -- 0076: the Mini on sale, A5 or A4; an app offers only its own size.
-      'size',          m.mini_size,
+      'size',          '5.8x8.3',
       'cover',         'staple',
       'pages',         16,
       'price',         m.mini_price,
@@ -133,20 +135,37 @@ begin
     );
   end if;
 
+  -- 0076: Megy Magazine, the same booklet at A4, its own prices.
+  if coalesce((srow ->> 'a4_on')::boolean, false) and m.a4_shipping_fee is not null then
+    a4 := jsonb_build_object(
+      'size',          '8.3x11.7',
+      'cover',         'staple',
+      'pages',         16,
+      'price',         m.a4_price,
+      'package_price', m.a4_package_price,
+      'shipping_fee',  m.a4_shipping_fee,
+      'free_qr',       m.mini_free_qr,
+      'options',       jsonb_build_array(
+        jsonb_build_object('pages', 16, 'price', m.a4_price,    'package_price', m.a4_package_price),
+        jsonb_build_object('pages', 24, 'price', m.a4_24_price, 'package_price', m.a4_24_package_price))
+    );
+  end if;
+
   return jsonb_build_object(
     'min_pages',           m.min_pages,
     'sheet_rate',          sheet_rate,
     'hosting_reserve',     m.hosting_reserve,
     'hosting_tiers',       m.hosting_tiers,
     'hd_memories_price',   m.hd_memories_price,
-    -- 0078: only while the owner has them on; null = videos up to 2 minutes
+    -- 0079: only while the owner has them on; null = videos up to 2 minutes
     'long_video_prices',   case when coalesce((srow ->> 'long_videos_on')::boolean, false)
                                 then jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price) end,
     'free_shipping_value', ship,
     'compare_at',          compare,
     'disabled_sizes',      disabled,
     'sizes',               out_sizes,
-    'mini',                mini
+    'mini',                mini,
+    'a4',                  a4
   );
 end
 $$;
@@ -183,12 +202,12 @@ begin
     'hd_memories_price',    m.hd_memories_price,
     'video_3min_price',     m.video_3min_price,
     'video_5min_price',     m.video_5min_price,
-    'long_videos_on',       coalesce((srow ->> 'long_videos_on')::boolean, false),
     'shipping_allowance',   m.shipping_allowance,
     'compare_multiple',     m.compare_multiple,
     'compare_until',        to_char(m.compare_until, 'YYYY-MM-DD'),
     'sizes',                m.sizes,
     'price_multiple',       coalesce((srow ->> 'price_multiple')::numeric, 3),
+    'long_videos_on',       coalesce((srow ->> 'long_videos_on')::boolean, false),
     'mini_on',              coalesce((srow ->> 'mini_on')::boolean, false),
     'mini_price',           m.mini_price,
     'mini_package_price',   m.mini_package_price,
@@ -199,7 +218,14 @@ begin
     'mini24_price',         m.mini24_price,
     'mini24_package_price', m.mini24_package_price,
     'mini24_cost',          m.mini24_cost,
-    'mini_size',            m.mini_size
+    'a4_on',                coalesce((srow ->> 'a4_on')::boolean, false),
+    'a4_price',             m.a4_price,
+    'a4_package_price',     m.a4_package_price,
+    'a4_cost',              m.a4_cost,
+    'a4_24_price',          m.a4_24_price,
+    'a4_24_package_price',  m.a4_24_package_price,
+    'a4_24_cost',           m.a4_24_cost,
+    'a4_shipping_fee',      m.a4_shipping_fee
   );
 end
 $$;
@@ -234,7 +260,8 @@ grant execute on function public.set_long_videos_on(boolean) to authenticated;
 select public.public_price_schedule() -> 'long_video_prices' as long_video_prices,
        (public.order_quote('8x8', 'softcover', 40, 3, null, false, null, 5) ->> 'long_fee') as five_min_fee;
 
-select 'the Mini in the price list is the size on sale (0076_mini_a4 kept)' as check,
-       (public.public_price_schedule() -> 'mini' ->> 'size')
-       is not distinct from (select mini_size from public.pricing_model where id = 1)
-       or (public.public_price_schedule() -> 'mini') is null as ok;
+select 'the booklets in the price list are 0076''s: the Mini A5, Megy Magazine A4' as check,
+       (jsonb_typeof(public.public_price_schedule() -> 'mini') is distinct from 'object'
+         or (public.public_price_schedule() -> 'mini' ->> 'size') = '5.8x8.3')
+       and (jsonb_typeof(public.public_price_schedule() -> 'a4') is distinct from 'object'
+         or (public.public_price_schedule() -> 'a4' ->> 'size') = '8.3x11.7') as ok;

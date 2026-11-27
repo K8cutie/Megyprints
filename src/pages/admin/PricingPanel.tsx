@@ -150,7 +150,7 @@ export default function PricingPanel() {
     setTimeout(() => setSavedCmp(''), 3000);
   };
 
-  // The on/off switch (0076): off while the free plan's storage can't hold them.
+  // The on/off switch (0079): off while the free plan's storage can't hold them.
   const switchLong = async (on: boolean) => {
     setSwitchingLong(true); setLongOnSaid(''); setLongErr('');
     const err = await setLongVideosOn(on);

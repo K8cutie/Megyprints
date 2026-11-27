@@ -180,7 +180,7 @@ export async function setLongVideoPrices(threeMin: number, fiveMin: number): Pro
   return null;
 }
 
-/** Owner-only (definer RPC, 0076). Switches the 3- and 5-minute videos on or
+/** Owner-only (definer RPC, 0079). Switches the 3- and 5-minute videos on or
  *  off; off, every app and the website keep videos to 2 minutes. */
 export async function setLongVideosOn(on: boolean): Promise<string | null> {
   if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';

@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 /* ═══════════════════════════════════════════════════════════════════════════
    LONGER VIDEOS ON / OFF IN THE PRICING TAB (owner, 2026-11-23: "disable the
    longer videos first and put an on off switch for those features in the
-   admin panel"; 0076). It shows what is live, and a tap sends exactly that.
+   admin panel"; 0079). It shows what is live, and a tap sends exactly that.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const h = vi.hoisted(() => ({
@@ -84,7 +84,7 @@ describe('the longer-videos switch', () => {
     expect(host.textContent).toContain("Couldn't save: not authorized");
   });
 
-  it('a database before 0076 shows no switch', async () => {
+  it('a database before 0079 shows no switch', async () => {
     h.model = { ...MODEL };
     await open();
     expect($('long-videos-status')).toBeNull();

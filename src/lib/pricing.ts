@@ -63,7 +63,7 @@ export interface PricingModel {
    *  Absent before 0067. */
   video_3min_price?: number;
   video_5min_price?: number;
-  /** Longer videos on sale (0076; absent before it = on, as 0067 sold them). */
+  /** Longer videos on sale (0079; absent before it = on, as 0067 sold them). */
   long_videos_on?: boolean;
   /** Per size: pages per press sheet, hardcover cost and a flat surcharge.
    *  `price_soft` / `price_hard` (0074) are the owner's set prices for the
