@@ -1,4 +1,13 @@
--- 0073 — Video memories: ₱50 each, and a named sale with a pack price
+-- 0077 — Video memories: ₱50 each, and a named sale with a pack price
+-- (was 0073 in PR #327; renumbered and rebuilt on 0076_mini_a4 by the bug
+-- hunt, 2026-11-27, F-00 / F-01: 0073's order_quote was 0067's, so applied
+-- after 0075 / 0076 it dropped the 24-page Mini price (a 24-page Mini charged
+-- at the 16-page price) and knew only the A5 Mini (every A4 Mini order
+-- refused, MP022). This order_quote is 0076_mini_a4's, line for line, with
+-- only 0073's video-fee lines and 'qr_singles' changed.)
+--
+-- Run AFTER 0076_mini_a4 (the guard below refuses otherwise).
+--
 -- (owner, 2026-11-24: "the price of each video is 50 regular but its 3 for
 -- 100", "Christmas sale is urgency so end at December 31", "Yes, build it")
 --
@@ -29,6 +38,20 @@
 -- videoFee(), line for line. Only the two video-fee lines of 0067's
 -- order_quote() change (plus 'qr_singles' in the quote).
 --
+-- ── Order guard (bug hunt F-00, 2026-11-27) ─────────────────────────────────
+-- The price functions are redefined whole by each change, so the last one
+-- applied wins. This file carries 0076_mini_a4's text; run before 0076 it would
+-- be overwritten by 0076, so it refuses.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'pricing_model'
+                    and column_name = 'mini_size') then
+    raise exception '0077 needs 0076_mini_a4 first (pricing_model.mini_size is missing)';
+  end if;
+end
+$$;
+
 -- OLDER APPS (2.1.6 and before) don't know single videos: they still show
 -- "3 more for ₱100" until updated. The quote saved with each order is this
 -- price list's (orders_quote, 0055), never stopped by it.
@@ -236,12 +259,23 @@ begin
   end if;
 
   -- ── Megy Mini: a set price, shipping on top, its own free QR count ──
-  if p_size = '5.8x8.3' then
+  -- 0076: A4 or A5, priced only when it is the size on sale (mini.size).
+  if p_size in ('5.8x8.3', '8.3x11.7') then
     z := s -> 'mini';
-    if z is null or jsonb_typeof(z) <> 'object' or p_cover is distinct from 'staple' then
+    if z is null or jsonb_typeof(z) <> 'object' or p_cover is distinct from 'staple'
+       or (z ->> 'size') is distinct from p_size then
       return null;
     end if;
-    price   := (z ->> 'price')::integer;
+    -- 0075: the price for the order's page count (16 or 24); a list
+    -- without options (before 0075) sells 16 pages only.
+    if jsonb_typeof(z -> 'options') = 'array' then
+      select (o ->> 'price')::integer into price
+        from jsonb_array_elements(z -> 'options') o
+       where (o ->> 'pages') ~ '^[0-9]+$' and (o ->> 'pages')::integer = pages
+       limit 1;
+    elsif pages = 16 then
+      price := (z ->> 'price')::integer;
+    end if;
     ship    := (z ->> 'shipping_fee')::integer;
     free_qr := greatest(coalesce((z ->> 'free_qr')::integer, 0), 0);
     if price is null or ship is null then return null; end if;
@@ -250,6 +284,7 @@ begin
     qr_fee := (vf ->> 'fee')::integer;
     return jsonb_build_object(
       'product',         'mini',
+      'pages',           pages,
       'total',           price + ship + qr_fee + term + hd + long_fee,
       'album',           price,
       'shipping',        ship,
@@ -330,4 +365,14 @@ union all
 select 'anon reads the offer, can''t set a sale or call the fee',
        has_function_privilege('anon', 'public.public_video_offer()', 'execute')
        and not has_function_privilege('anon', 'public.set_video_sale(text, date)', 'execute')
-       and not has_function_privilege('anon', 'public.video_memory_fee(integer, jsonb)', 'execute');
+       and not has_function_privilege('anon', 'public.video_memory_fee(integer, jsonb)', 'execute')
+union all
+select 'the A4 Mini is still priced (16 pages, 3 videos) while it is the size on sale',
+       (select mini_size from public.pricing_model where id = 1) <> '8.3x11.7'
+       or (public.public_price_schedule() -> 'mini') is null
+       or (public.order_quote('8.3x11.7', 'staple', 16, 3, null, false, null, null) ->> 'total') is not null
+union all
+select 'the 24-page Mini keeps its own price',
+       (public.order_quote((select mini_size from public.pricing_model where id = 1), 'staple', 24, 2, null, false, null, null) ->> 'album')::integer
+       is not distinct from (select mini24_price from public.pricing_model where id = 1)
+       or (public.public_price_schedule() -> 'mini') is null;

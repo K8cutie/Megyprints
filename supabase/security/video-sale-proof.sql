@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — VIDEO SALE PROOF (0073; always rolled back)
+--  MEGY PRINTS — VIDEO SALE PROOF (0077, was 0073; always rolled back)
 --
 --  Proves, on the real schema:
 --    V1  the owner's decision is in: ₱50 a video, the Christmas sale (3 for
@@ -18,7 +18,7 @@
 --  One transaction that ENDS BY RAISING (the report is the error message).
 --  Makes a throwaway owner when the database has none (rolled back).
 --
---  HOW TO RUN (local test database, after 0073):
+--  HOW TO RUN (local test database, after 0077):
 --    docker exec -i supabase_db_megyprints_testers psql -U postgres < supabase/security/video-sale-proof.sql
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
@@ -58,7 +58,7 @@ select pg_temp.log(public.public_video_offer() = '{"single": 50, "pack": {"name"
 select pg_temp.log((public.order_quote('8x8', 'softcover', 40, 5, null, false) ->> 'qr_fee')::int = 100, 'V2 album, 5 videos (3 extra): ₱100');
 select pg_temp.log((public.order_quote('8x8', 'softcover', 40, 6, null, false) ->> 'qr_fee')::int = 150
                    and (public.order_quote('8x8', 'softcover', 40, 6, null, false) ->> 'qr_singles')::int = 1, 'V2 album, 6 videos (4 extra): ₱150 = a pack + 1 single');
-select pg_temp.log((public.order_quote('5.8x8.3', 'staple', 16, 3, null, false) ->> 'qr_fee')::int = 50,
+select pg_temp.log((public.order_quote((select mini_size from public.pricing_model where id = 1), 'staple', 16, 3, null, false) ->> 'qr_fee')::int = 50,
                    'V2 Megy Mini, 3 videos (1 extra): ₱50');
 
 -- V3 after the sale
