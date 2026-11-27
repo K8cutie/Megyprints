@@ -201,6 +201,16 @@ export async function setLongVideoPrices(threeMin: number, fiveMin: number): Pro
   return null;
 }
 
+/** Owner-only (definer RPC, 0079). Switches the 3- and 5-minute videos on or
+ *  off; off, every app and the website keep videos to 2 minutes. */
+export async function setLongVideosOn(on: boolean): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_long_videos_on', { p_on: on });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
 /** Owner-only (definer RPC, 0041). Sets the shipping built into every album
  *  price ("Free shipping" at checkout) and reloads the schedule. */
 export async function setShippingAllowance(next: number): Promise<string | null> {

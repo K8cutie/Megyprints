@@ -21,6 +21,19 @@
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
 
+-- 0079 (the switch) has longer videos OFF until the owner turns them on;
+-- this proof is about them on sale, so it turns them on (rolled back with
+-- the rest). Before 0079 there is no switch: they are always on.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_schema = 'public' and table_name = 'store_settings'
+                and column_name = 'long_videos_on') then
+    execute 'update public.store_settings set long_videos_on = true where id = 1';
+  end if;
+end
+$$;
+
 create temp table lv_log (n serial, line text);
 grant insert, select on lv_log to authenticated;
 grant usage on sequence lv_log_n_seq to authenticated;
@@ -70,8 +83,9 @@ begin
   perform set_config('request.jwt.claims', json_build_object('sub', current_setting('proof.c'), 'role', 'authenticated')::text, true);
   a5 := pg_temp.place('8x8', 'softcover', 40, 3, 5);
   perform pg_temp.log((a5.quote ->> 'long_fee')::int = 399 and a5.quoted_amount = (a5.quote ->> 'total')::int
-                      and (a5.quote ->> 'total')::int = (a5.quote ->> 'album')::int + 100 + 399,
-    format('L1 5 minutes: fee ₱%s, total ₱%s (album ₱%s + 1 pack ₱100 + ₱399)', a5.quote ->> 'long_fee', a5.quoted_amount, a5.quote ->> 'album'));
+                      and (a5.quote ->> 'qr_fee')::int > 0
+                      and (a5.quote ->> 'total')::int = (a5.quote ->> 'album')::int + (a5.quote ->> 'qr_fee')::int + 399,
+    format('L1 5 minutes: fee ₱%s, total ₱%s (album ₱%s + extra videos ₱%s + ₱399)', a5.quote ->> 'long_fee', a5.quoted_amount, a5.quote ->> 'album', a5.quote ->> 'qr_fee'));
   a3 := pg_temp.place('8x8', 'softcover', 40, 3, 3);
   perform pg_temp.log((a3.quote ->> 'long_fee')::int = 199 and a3.quoted_amount = a5.quoted_amount - 200,
     format('L2 3 minutes: fee ₱%s, total ₱%s', a3.quote ->> 'long_fee', a3.quoted_amount));
@@ -82,7 +96,10 @@ begin
   nv := pg_temp.place('8x8', 'softcover', 40, 0, 5);
   perform pg_temp.log((nv.quote ->> 'long_fee')::int = 0, format('L4 no videos, says 5 minutes: fee ₱%s', nv.quote ->> 'long_fee'));
   m5 := pg_temp.place('5.8x8.3', 'staple', 16, 3, 5);
-  perform pg_temp.log((m5.quote ->> 'long_fee')::int = 399 and m5.quoted_amount = 350 + 120 + 100 + 399,
+  -- The Mini's own price and the extra-video fee from its quote: the fee is a
+  -- ₱100 pack before 0078 and ₱50 a video after (video-sale-proof checks it).
+  perform pg_temp.log((m5.quote ->> 'long_fee')::int = 399
+                      and m5.quoted_amount = (m5.quote ->> 'album')::int + (m5.quote ->> 'shipping')::int + (m5.quote ->> 'qr_fee')::int + 399,
     format('L5 Megy Mini, 5 minutes: fee ₱%s, total ₱%s', m5.quote ->> 'long_fee', m5.quoted_amount));
   begin
     perform pg_temp.place('8x8', 'softcover', 40, 3, 4);
