@@ -30,7 +30,8 @@
 import type { SkImage, Skia } from '@shopify/react-native-skia/lib/commonjs/skia/types';
 import type { AlbumPage, AlbumSizePreset, CoverType, MaterialType } from '@web/pages/builder/types';
 import { bindingInchesFor } from '@web/pages/builder/binding';
-import { PRINT_FILE_BUDGET_BYTES } from '@web/pages/builder/printFileSpec';
+import { PRINT_FILE_BUDGET_BYTES, PRINT_PAGE_JPEG_QUALITY, PRINT_PAGE_MAX_SIDE } from '@web/pages/builder/printFileSpec';
+import { PagesTooBigError } from '../lib/checkout/sizeLimits';
 import { imposeAlbumSheets, imposeCoverSheet } from '@web/pages/builder/printSheetPdf';
 import { makeSheetsJpegZip, SHEET_JPEG_DPI, SHEET_JPEG_QUALITY, type SheetTools } from '@web/lib/pressSheetZip';
 import { sheetsNote, coverSheetNote, type PressOrder } from '@web/lib/pressSheetWords';
@@ -220,31 +221,56 @@ async function coverFile(c: FileContext, orderNumber: string | null): Promise<Ui
   });
 }
 
-/** "<order>.pdf", page by page; past the budget with sharp words, again with
- *  the words in the pictures (generateAlbumPdf's rule). */
+/** The smallest page picture a smaller try goes to: ~145 DPI on an 8x8's
+ *  page with bleed (8.25 in), still fine for photos at arm's length. */
+export const PRINT_PAGE_MIN_SIDE = 1200;
+/** The next try's longest side: the file's size goes with the pixels (side²),
+ *  so the side shrinks by the square root of how far over it is, with 10% room. */
+export function smallerSide(side: number, bytes: number, budgetBytes: number): number {
+  return Math.max(PRINT_PAGE_MIN_SIDE, Math.floor(side * Math.sqrt(budgetBytes / bytes) * 0.9));
+}
+
+/** "<order>.pdf", page by page. Past the budget with sharp words, again with
+ *  the words in the pictures (generateAlbumPdf's rule); still past it (a big
+ *  album, with or without words: bug hunt B-D7, a 191-page album made 77.7 MB
+ *  and live refuses anything over 50 MB), again with smaller page pictures,
+ *  at most twice; still past it, PagesTooBigError. */
 async function interiorFile(
   c: FileContext, onPage: (done: number, total: number, smaller: boolean) => void, budgetBytes = PRINT_FILE_BUDGET_BYTES,
-): Promise<{ bytes: Uint8Array; bakedWords: boolean }> {
+): Promise<{ bytes: Uint8Array; bakedWords: boolean; pageSide: number }> {
   const { album } = c;
   const bindingIn = bindingInchesFor(c.order.cover);
   const { wIn, hIn } = interiorPageInches(album.albumSize);
-  const build = async (bake: boolean): Promise<{ bytes: Uint8Array; anyWords: boolean }> => {
+  const build = async (bake: boolean, maxSide = PRINT_PAGE_MAX_SIDE, quality = PRINT_PAGE_JPEG_QUALITY): Promise<{ bytes: Uint8Array; anyWords: boolean }> => {
     const pdf = await PrintPdf.create({ pageOneRight: true });
     let anyWords = false;
     for (let i = 0; i < album.pages.length; i++) {
       const plan = printPlan(album, i, bindingIn);
       const page = `page ${i + 1}`;
-      const pic = await withPhotos(photosOf(plan), c.open, page, (photos) => drawnOn(page, (onMissing) => c.pictures.interiorPage(plan, photos, { bakeWords: bake, assets: c.assets.get, onMissing })));
+      const pic = await withPhotos(photosOf(plan), c.open, page, (photos) => drawnOn(page, (onMissing) => c.pictures.interiorPage(plan, photos, { bakeWords: bake, maxSide, quality, assets: c.assets.get, onMissing })));
       anyWords = anyWords || pic.words.length > 0;
       await pdf.addPage(pic, wIn, hIn);
-      onPage(i + 1, album.pages.length, bake);
+      onPage(i + 1, album.pages.length, bake || maxSide < PRINT_PAGE_MAX_SIDE);
       await breathe();
     }
     return { bytes: await pdf.save(), anyWords };
   };
   const first = await build(false);
-  if (first.bytes.length > budgetBytes && first.anyWords) return { bytes: (await build(true)).bytes, bakedWords: true };
-  return { bytes: first.bytes, bakedWords: false };
+  if (first.bytes.length <= budgetBytes) return { bytes: first.bytes, bakedWords: false, pageSide: PRINT_PAGE_MAX_SIDE };
+  let bake = false;
+  let made = first;
+  if (first.anyWords) {
+    bake = true;
+    made = await build(true);
+    if (made.bytes.length <= budgetBytes) return { bytes: made.bytes, bakedWords: true, pageSide: PRINT_PAGE_MAX_SIDE };
+  }
+  let side = PRINT_PAGE_MAX_SIDE;
+  for (let tries = 0; tries < 2 && side > PRINT_PAGE_MIN_SIDE; tries++) {
+    side = smallerSide(side, made.bytes.length, budgetBytes);
+    made = await build(bake, side, PRINT_PAGE_JPEG_QUALITY);
+    if (made.bytes.length <= budgetBytes) return { bytes: made.bytes, bakedWords: bake, pageSide: side };
+  }
+  throw new PagesTooBigError(made.bytes.length);
 }
 
 /** The two files checkout sends (the cover, then the pages), made only when

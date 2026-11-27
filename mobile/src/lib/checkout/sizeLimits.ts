@@ -1,0 +1,18 @@
+/* The upload size limit, said in plain words (bug hunt B-D7, 2026-11-28).
+   Live's Supabase plan refuses any file over 50 MB. A big album's pages file
+   (191 pages: 77.7 MB) was made and sent with no check, and the refusal was
+   read as a lost connection: three tries, then "check your internet". The
+   print files shrink the pages until they fit (print/printFiles.ts); if they
+   still can't, or storage refuses a file for its size, these are the words. */
+
+export const PAGES_TOO_BIG = "Your album's pages are too big to send in one file. Your order is saved: remove a few pages, or message us and we'll help.";
+
+/** The pages file is still over the upload budget after every smaller try. */
+export class PagesTooBigError extends Error {
+  constructor(public readonly bytes: number) { super(PAGES_TOO_BIG); this.name = 'PagesTooBigError'; }
+}
+
+/** Storage refusing a file for its size: no try after it can pass, and it is not the internet. */
+export function isTooLargeUpload(message: string): boolean {
+  return /exceeded the maximum allowed size|payload too large|entity too large|\b413\b/i.test(message);
+}

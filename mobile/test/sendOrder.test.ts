@@ -32,6 +32,7 @@ import { OrderAlreadySavedError, ORDER_ALREADY_SAVED, COVER_MAKE_FAILED, COVER_S
 import { createOnlyUpload, isAlreadyExists, uploadTimeLimitMs } from '../src/lib/checkout/storage';
 import { MissingClipError } from '../src/lib/memories/clips';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
+import { PAGES_TOO_BIG } from '../src/lib/checkout/sizeLimits';
 
 jest.mock('@web/lib/supabase', () => jest.requireActual('./helpers/fakeSupabase').supabaseModule);
 jest.mock('@web/lib/storageUpload', () => jest.requireActual('./helpers/fakeSupabase').storageUploadModule);
@@ -153,6 +154,19 @@ describe('a retry, and files already sent', () => {
     expect(rec.insertSelects).toEqual(['id, order_number, status, quoted_amount, amount']);
     expect(seen[0]).toMatchObject({ id: 'order-1', quoted_amount: 1355, amount: null });
     expect(r.order).toMatchObject({ quoted_amount: 1355 });
+  });
+
+  // Bug hunt B-D7: storage refusing the pages file for its size is not the internet, and no try after it can pass.
+  it('the pages file refused for its size (live takes 50 MB a file): the size words at once, no more tries', async () => {
+    const d = deps({
+      upload: async (bucket, path) => {
+        rec.uploads.push({ bucket, path, contentType: '', opts: {} });
+        return /cover/.test(path) ? null : { message: 'The object exceeded the maximum allowed size' };
+      },
+    });
+    await expect(sendOrder(placeOrderPlan(input()), d)).rejects.toThrow(PAGES_TOO_BIG);
+    expect(d.waits).toEqual([]);
+    expect(rec.uploads.filter((u) => !/cover/.test(u.path))).toHaveLength(1);
   });
 
   // Bug hunt L1-47: the answer to a saved insert was lost; Place order again.

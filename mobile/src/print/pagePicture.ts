@@ -94,8 +94,8 @@ export class PagePictures {
   /** One interior page for "<order>.pdf". `assets`: the pictures the page
    *  names by address (a QR code, a sticker); `onMissing` hears of one that
    *  can't be had. */
-  interiorPage(plan: PagePlan, photos: PhotoSource, opts: { bakeWords?: boolean } & Pick<DrawOptions, 'assets' | 'onMissing'> = {}): PrintPicture {
-    const { bakeWords, ...draw } = opts;
+  interiorPage(plan: PagePlan, photos: PhotoSource, opts: { bakeWords?: boolean; maxSide?: number; quality?: number } & Pick<DrawOptions, 'assets' | 'onMissing'> = {}): PrintPicture {
+    const { bakeWords, maxSide = PRINT_PAGE_MAX_SIDE, quality = PRINT_PAGE_JPEG_QUALITY, ...draw } = opts;
     // One drawing: the page's photos are prepared once for both its drawings.
     return this.drawer.drawing(() => {
       const { trim, words } = bakeWords || !planHasWords(plan)
@@ -106,7 +106,7 @@ export class PagePictures {
       trim.dispose();
       const PW = page300.width(), PH = page300.height();
       try {
-        const jpeg = this.jpeg(page300, PRINT_PAGE_MAX_SIDE, PRINT_PAGE_JPEG_QUALITY);
+        const jpeg = this.jpeg(page300, maxSide, quality);
         return { jpeg, words: words.map((p) => ({ png: p.png, x: (p.x + b) / PW, y: (p.y + b) / PH, w: p.w / PW, h: p.h / PH })) };
       } finally {
         page300.dispose();

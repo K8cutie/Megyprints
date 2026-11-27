@@ -42,6 +42,7 @@ import { ORDER_ID, planClipCodes, type PlaceOrderPlan, type PlanStep } from './o
 import type { SentFiles } from './sentFiles';
 import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
+import { isTooLargeUpload, PAGES_TOO_BIG } from './sizeLimits';
 import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from '@web/lib/orderCodes';
 import { ClipTooBigError, MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
 import { bookingErrorMessage } from '../events/eventDeal';
@@ -228,7 +229,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
         onStep({ step: 'pages', done: 0, total: 0, smaller: false });
         const bytes = await deps.makePages((done, total, smaller) => onStep({ step: 'pages', done, total, smaller }));
         onStep({ step: 'sending' });
-        await sendTried(() => upload(step.bucket, path, bytes, { contentType: step.contentType }), wait, PAGES_SEND_FAILED);
+        await sendTried(() => upload(step.bucket, path, bytes, { contentType: step.contentType }), wait, PAGES_SEND_FAILED, PAGES_TOO_BIG);
         deps.sent?.add(path);
       }
     } else if (step.kind === 'upsert') {
@@ -300,10 +301,11 @@ async function sendCover(step: Extract<PlanStep, { kind: 'upload' }>, path: stri
 
 /** A file already made, sent: 3 tries, as the cover (a dropped connection
  *  or a 502 on one try is often gone on the next); `failed` after the last. */
-async function sendTried(send: () => Promise<{ message: string } | null>, wait: (ms: number) => Promise<void>, failed: string): Promise<void> {
+async function sendTried(send: () => Promise<{ message: string } | null>, wait: (ms: number) => Promise<void>, failed: string, tooBig?: string): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     const error = await send().catch((e: unknown) => ({ message: e instanceof Error ? e.message : String(e) }));
     if (!error) return;
+    if (tooBig && isTooLargeUpload(error.message)) throw new Error(tooBig);
     if (attempt > COVER_RETRY_WAITS_MS.length) throw new Error(failed);
     await wait(COVER_RETRY_WAITS_MS[attempt - 1]);
   }

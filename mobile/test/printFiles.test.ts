@@ -18,7 +18,8 @@ import { sheetPlan } from '@web/pages/builder/printSheet';
 import { sideJpegName, coverJpegName } from '@web/lib/pressSheetWords';
 import { jpegDpi } from '@web/lib/jpegZip';
 import { getTemplateById } from '@web/pages/builder/pageTemplates';
-import { makePrintFiles, NotDrawnError, PhotoNotOpenedError, type OpenPhoto, type PrintTools, type PrintAlbum } from '../src/print/printFiles';
+import { makePrintFiles, NotDrawnError, PhotoNotOpenedError, type OpenPhoto, type PrintTools, type PrintAlbum, smallerSide, PRINT_PAGE_MIN_SIDE } from '../src/print/printFiles';
+import { PAGES_TOO_BIG, PagesTooBigError } from '../src/lib/checkout/sizeLimits';
 import { SheetRaster } from '../src/print/sheetRaster';
 import { savePrintFiles, printFileNames } from '../src/print/saveFiles';
 import { headlessPrintTools, readStoredZip } from './print/headlessPrint';
@@ -190,7 +191,9 @@ describe('the print files the app makes', () => {
 
 describe('when the app can’t make a file the website’s way', () => {
   it('past the upload budget, the words go into the page pictures (the website’s second pass)', async () => {
-    const small = await makePrintFiles({ ...album(), coverFront: null }, ORDER, opener(), tools, undefined, { when: WHEN, budgetBytes: 1 });
+    // A budget the sharp-words file misses and the baked one fits (budget 1 now ends in PAGES_TOO_BIG, below).
+    const sharp = await makePrintFiles({ ...album(), coverFront: null }, ORDER, opener(), tools, undefined, { when: WHEN });
+    const small = await makePrintFiles({ ...album(), coverFront: null }, ORDER, opener(), tools, undefined, { when: WHEN, budgetBytes: sharp.interiorPdf.length - 1 });
     expect(small.bakedWords).toBe(true);
     expect(await seeThrough(small.interiorPdf)).toBe(0);
     expect(small.coverPdf).toBeNull();
@@ -231,4 +234,32 @@ describe('when the app can’t make a file the website’s way', () => {
     pg.drawText('hello', { x: 10, y: 10, font: await doc.embedFont(StandardFonts.Helvetica) });
     await expect(new SheetRaster(Sk).toJpegs(await doc.save(), { dpi: 72, quality: 90 })).rejects.toThrow(/sheetRaster/);
   });
+});
+
+/* Bug hunt B-D7 (2026-11-28): a 191-page album made a 77.7 MB pages file, sent
+   with no check; live refuses anything over 50 MB. The pages now get smaller
+   until they fit, with or without words, and say so plainly if they can't. */
+describe('a pages file past the upload budget, with or without words', () => {
+  it('the next try shrinks the page pictures by the square root of the overshoot, with room, never under the floor', () => {
+    expect(smallerSide(1800, 77_700_000, 45 * 1024 * 1024)).toBe(Math.floor(1800 * Math.sqrt((45 * 1024 * 1024) / 77_700_000) * 0.9));
+    expect(smallerSide(1800, 100 * 1024 * 1024, 45 * 1024 * 1024)).toBeGreaterThanOrEqual(PRINT_PAGE_MIN_SIDE);
+    expect(smallerSide(1300, 1_000_000_000, 45 * 1024 * 1024)).toBe(PRINT_PAGE_MIN_SIDE);
+  });
+
+  it('an album with no words that is over the budget is made again with smaller pictures, until it fits', async () => {
+    const plain = album();
+    plain.pages = plain.pages.map((p) => ({ ...p, textElements: [] }) as AlbumPage);
+    const full = await makePrintFiles({ ...plain, coverFront: null }, ORDER, opener(), tools, undefined, { when: WHEN });
+    const budget = Math.floor(full.interiorPdf.length * 0.7);
+    const fitted = await makePrintFiles({ ...plain, coverFront: null }, ORDER, opener(), tools, undefined, { when: WHEN, budgetBytes: budget });
+    expect(fitted.interiorPdf.length).toBeLessThanOrEqual(budget);
+    expect(fitted.bakedWords).toBe(false);
+  }, 600_000);
+
+  it('still over after every try: plain words, not "check your internet"', async () => {
+    await expect(makePrintFiles({ ...album(), coverFront: null }, ORDER, opener(), tools, undefined, { when: WHEN, budgetBytes: 1 }))
+      .rejects.toThrow(PagesTooBigError);
+    await expect(makePrintFiles({ ...album(), coverFront: null }, ORDER, opener(), tools, undefined, { when: WHEN, budgetBytes: 1 }))
+      .rejects.toThrow(PAGES_TOO_BIG);
+  }, 600_000);
 });
