@@ -1,12 +1,14 @@
 -- 0077 — Video memories: ₱50 each, and a named sale with a pack price
--- (was 0073 in PR #327; renumbered and rebuilt on 0076_mini_a4 by the bug
--- hunt, 2026-11-27, F-00 / F-01: 0073's order_quote was 0067's, so applied
--- after 0075 / 0076 it dropped the 24-page Mini price (a 24-page Mini charged
--- at the 16-page price) and knew only the A5 Mini (every A4 Mini order
--- refused, MP022). This order_quote is 0076_mini_a4's, line for line, with
--- only 0073's video-fee lines and 'qr_singles' changed.)
+-- (was 0073 in PR #327; renumbered and rebuilt by the bug hunt, 2026-11-27,
+-- F-00 / F-01: 0073's order_quote was 0067's, so applied after 0075 / 0076 it
+-- dropped the 24-page Mini price (a 24-page Mini charged at the 16-page
+-- price) and knew no A4 booklet. Rebuilt again the same day on
+-- 0076_megy_magazine_a4, where the A4 booklet is Megy Magazine, its own
+-- product beside the A5 Mini (owner: "the A4 album becomes another
+-- product"). This order_quote is 0076_megy_magazine_a4's, line for line,
+-- with only 0073's video-fee lines and 'qr_singles' changed.)
 --
--- Run AFTER 0076_mini_a4 (the guard below refuses otherwise).
+-- Run AFTER 0076_megy_magazine_a4 (the guard below refuses otherwise).
 --
 -- (owner, 2026-11-24: "the price of each video is 50 regular but its 3 for
 -- 100", "Christmas sale is urgency so end at December 31", "Yes, build it")
@@ -40,14 +42,14 @@
 --
 -- ── Order guard (bug hunt F-00, 2026-11-27) ─────────────────────────────────
 -- The price functions are redefined whole by each change, so the last one
--- applied wins. This file carries 0076_mini_a4's text; run before 0076 it would
--- be overwritten by 0076, so it refuses.
+-- applied wins. This file carries 0076_megy_magazine_a4's text; run before
+-- 0076 it would be overwritten by 0076, so it refuses.
 do $$
 begin
   if not exists (select 1 from information_schema.columns
                   where table_schema = 'public' and table_name = 'pricing_model'
-                    and column_name = 'mini_size') then
-    raise exception '0077 needs 0076_mini_a4 first (pricing_model.mini_size is missing)';
+                    and column_name = 'a4_price') then
+    raise exception '0077 needs 0076_megy_magazine_a4 first (pricing_model.a4_price is missing)';
   end if;
 end
 $$;
@@ -259,9 +261,9 @@ begin
   end if;
 
   -- ── Megy Mini: a set price, shipping on top, its own free QR count ──
-  -- 0076: A4 or A5, priced only when it is the size on sale (mini.size).
+  -- 0076: the Megy Mini (A5) from "mini", Megy Magazine (A4) from "a4".
   if p_size in ('5.8x8.3', '8.3x11.7') then
-    z := s -> 'mini';
+    z := case when p_size = '8.3x11.7' then s -> 'a4' else s -> 'mini' end;
     if z is null or jsonb_typeof(z) <> 'object' or p_cover is distinct from 'staple'
        or (z ->> 'size') is distinct from p_size then
       return null;
@@ -367,12 +369,17 @@ select 'anon reads the offer, can''t set a sale or call the fee',
        and not has_function_privilege('anon', 'public.set_video_sale(text, date)', 'execute')
        and not has_function_privilege('anon', 'public.video_memory_fee(integer, jsonb)', 'execute')
 union all
-select 'the A4 Mini is still priced (16 pages, 3 videos) while it is the size on sale',
-       (select mini_size from public.pricing_model where id = 1) <> '8.3x11.7'
-       or (public.public_price_schedule() -> 'mini') is null
-       or (public.order_quote('8.3x11.7', 'staple', 16, 3, null, false, null, null) ->> 'total') is not null
+select 'Megy Magazine (A4) is still priced (16 pages, 3 videos) while it is on sale',
+       jsonb_typeof(public.public_price_schedule() -> 'a4') is distinct from 'object'
+       or (public.order_quote('8.3x11.7', 'staple', 16, 3, null, false, null, null) ->> 'album')::integer
+          is not distinct from (select a4_price from public.pricing_model where id = 1)
 union all
-select 'the 24-page Mini keeps its own price',
-       (public.order_quote((select mini_size from public.pricing_model where id = 1), 'staple', 24, 2, null, false, null, null) ->> 'album')::integer
+select 'the 24-page Mini (A5) keeps its own price',
+       (public.order_quote('5.8x8.3', 'staple', 24, 2, null, false, null, null) ->> 'album')::integer
        is not distinct from (select mini24_price from public.pricing_model where id = 1)
-       or (public.public_price_schedule() -> 'mini') is null;
+       or (public.public_price_schedule() -> 'mini') is null
+union all
+select 'and the 24-page Megy Magazine its own',
+       jsonb_typeof(public.public_price_schedule() -> 'a4') is distinct from 'object'
+       or (public.order_quote('8.3x11.7', 'staple', 24, 2, null, false, null, null) ->> 'album')::integer
+          is not distinct from (select a4_24_price from public.pricing_model where id = 1);

@@ -58,8 +58,12 @@ select pg_temp.log(public.public_video_offer() = '{"single": 50, "pack": {"name"
 select pg_temp.log((public.order_quote('8x8', 'softcover', 40, 5, null, false) ->> 'qr_fee')::int = 100, 'V2 album, 5 videos (3 extra): ₱100');
 select pg_temp.log((public.order_quote('8x8', 'softcover', 40, 6, null, false) ->> 'qr_fee')::int = 150
                    and (public.order_quote('8x8', 'softcover', 40, 6, null, false) ->> 'qr_singles')::int = 1, 'V2 album, 6 videos (4 extra): ₱150 = a pack + 1 single');
-select pg_temp.log((public.order_quote((select mini_size from public.pricing_model where id = 1), 'staple', 16, 3, null, false) ->> 'qr_fee')::int = 50,
+select pg_temp.log((public.order_quote('5.8x8.3', 'staple', 16, 3, null, false) ->> 'qr_fee')::int = 50,
                    'V2 Megy Mini, 3 videos (1 extra): ₱50');
+update public.store_settings set a4_on = true where id = 1;
+select pg_temp.log((public.order_quote('8.3x11.7', 'staple', 24, 3, null, false) ->> 'qr_fee')::int = 50
+                   and (public.order_quote('8.3x11.7', 'staple', 24, 3, null, false) ->> 'album')::int = (select a4_24_price from public.pricing_model where id = 1),
+                   'V2 Megy Magazine (A4), 24 pages, 3 videos (1 extra): its own price + ₱50');
 
 -- V3 after the sale
 update public.pricing_model set video_sale_until = (now() at time zone 'Asia/Manila')::date - 1 where id = 1;
