@@ -11,8 +11,9 @@
    (lib/checkout/phoneSend.ts); for the test album it shows what it would
    send (the receipt upload and submit_payment_proof) in a test panel.
    ══════════════════════════════════════════════════════════════════════════ */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { openBrowserAsync } from 'expo-web-browser';
 import { PAY_WITHIN_MESSAGE } from '@web/lib/orderExpiry';
 import { Tick } from '../../home/homeIcons';
 import { Button } from '../Button';
@@ -23,6 +24,7 @@ import { payByLine, type OpenOrder } from '../../lib/checkout/openOrder';
 import { ORDER_ID } from '../../lib/checkout/orderPayload';
 import { paymentSubmitPlan, referenceProblem, type PaymentSubmitPlan } from '../../lib/checkout/payment';
 import { peso } from '../../lib/checkout/price';
+import { PAY_ONLINE_NOTE, loadPayOnline, payOnlineUrl, waitForPaid } from '../../lib/checkout/payOnline';
 import { pickReceipt, receiptLabel, type PickedReceipt } from '../../lib/checkout/receipt';
 import { sitePage } from '../../lib/checkout/site';
 import { colors, space } from '../../lib/theme';
@@ -69,6 +71,40 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
   };
   const [sending, setSending] = useState(false);
   const [payError, setPayError] = useState('');
+
+  // Card, GCash and Maya through PayMongo (0077), only for a real order with
+  // a saved total, and only while the shop has it switched on. Off: the step
+  // is the bank-transfer QR exactly as before.
+  const [payOnline, setPayOnline] = useState(false);
+  const [onlineBusy, setOnlineBusy] = useState(false);
+  const [onlineMsg, setOnlineMsg] = useState('');
+  const [onlineError, setOnlineError] = useState('');
+  const orderId = order?.id ?? null;
+  useEffect(() => {
+    if (!live || !orderId) return;
+    let alive = true;
+    void loadPayOnline().then((on) => { if (alive) setPayOnline(on); });
+    return () => { alive = false; };
+  }, [live, orderId]);
+  const showOnline = payOnline && live && !!order && amount !== null;
+  const payNow = async () => {
+    if (!order) return;
+    setOnlineBusy(true);
+    setOnlineError('');
+    setOnlineMsg('Opening the payment page…');
+    try {
+      const url = await payOnlineUrl(order.id);
+      await openBrowserAsync(url);
+      setOnlineMsg('Checking your payment…');
+      if (await waitForPaid(order.id)) { setOnlineMsg(''); onPaid?.(null); return; }
+      setOnlineMsg("We haven't seen your payment yet. If you paid, it shows in Your orders in a few minutes.");
+    } catch (e) {
+      setOnlineMsg('');
+      setOnlineError(e instanceof Error ? e.message : "We couldn't open the payment page. Please try again.");
+    } finally {
+      setOnlineBusy(false);
+    }
+  };
   const sentIt = async () => {
     const bad = referenceProblem(payRef);
     if (bad) { setRefError(bad); return; }
@@ -105,9 +141,20 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
       <Text style={[styles.h1, styles.center]}>{amount !== null ? `Send ${amountLabel}` : `Pay order ${order?.order_number ?? ''}`}</Text>
       {order && (
         <Text style={[styles.small, styles.center]} testID="pay-order-placed">
-          Order <Text style={styles.orderNo}>{order.order_number}</Text> is placed.{'\n'}<Text style={styles.taupe}>Pay by bank transfer to finish.</Text>
+          Order <Text style={styles.orderNo}>{order.order_number}</Text> is placed.{'\n'}<Text style={styles.taupe}>{showOnline ? 'Pay by card, GCash, Maya or bank transfer to finish.' : 'Pay by bank transfer to finish.'}</Text>
         </Text>
       )}
+
+      {showOnline && (
+        <View style={styles.card} testID="pay-online">
+          <Button label={`Pay ${amountLabel} by card, GCash or Maya`} busy={onlineBusy} onPress={() => { void payNow(); }} testID="pay-online-button" />
+          <Text style={[styles.tiny, styles.center]}>You pay on PayMongo's secure page, then come back here.</Text>
+          <Text style={[styles.tiny, styles.center]} testID="pay-online-note">{PAY_ONLINE_NOTE}</Text>
+          {!!onlineMsg && <Text style={[styles.small, styles.center]} testID="pay-online-msg">{onlineMsg}</Text>}
+          {!!onlineError && <Text style={styles.error} accessibilityRole="alert" testID="pay-online-error">{onlineError}</Text>}
+        </View>
+      )}
+      {showOnline && <Text style={[styles.tiny, styles.center, styles.orLabel]} testID="pay-or-transfer">OR PAY BY BANK TRANSFER</Text>}
 
       <View style={styles.card}>
         {/* Who to pay, the QR, Copy for the order number, and the steps (PayCard). */}
@@ -127,7 +174,7 @@ export function PaymentStep({ amount, order, summary, onBack, backLabel = 'Back 
             autoComplete="off" autoCorrect={false} placeholder="e.g. 2026091012345678" maxLength={64} error={refError} testID="pay-reference" />
         </View>
 
-        <Button label={amount !== null ? `I've sent ${amountLabel}` : "I've sent the payment"} busy={sending} onPress={() => { void sentIt(); }} testID="pay-sent" />
+        <Button label={amount !== null ? `I've sent ${amountLabel}` : "I've sent the payment"} kind={showOnline ? 'plain' : 'main'} busy={sending} onPress={() => { void sentIt(); }} testID="pay-sent" />
         {!!payError && <Text style={styles.error} accessibilityRole="alert">{payError}</Text>}
         <Text style={[styles.tiny, styles.center]}>We confirm transfers in our bank app during business hours, then print. Nothing is charged automatically.</Text>
         {/* An order already placed: its own last day, as the website's Orders page says it. */}
@@ -196,6 +243,7 @@ const styles = StyleSheet.create({
   placedBadge: { alignSelf: 'center', width: 48, height: 48, borderRadius: 24, backgroundColor: PAY.peach, alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(184, 92, 56, 0.3)' },
   orderNo: { fontFamily: 'monospace', color: PAY.icon },
   taupe: { color: PAY.taupe },
+  orLabel: { fontWeight: '700', letterSpacing: 1 },
   noTotal: { gap: space.sm, alignSelf: 'stretch', marginTop: space.xs },
   receiptBox: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: space.sm },
   summary: { gap: space.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: space.sm },
