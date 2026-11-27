@@ -17,7 +17,7 @@
 
 import { supabase, supabaseConfigured } from './supabase';
 import type { AlbumSizePreset } from '../pages/builder/types';
-import { parseLaunchPrice, type LaunchPrice, type PriceSchedule, type PricingModel } from './pricing';
+import { parseLaunchPrice, parseVideoOffer, type LaunchPrice, type PriceSchedule, type PricingModel, type VideoOffer } from './pricing';
 
 let schedule: PriceSchedule | null = null;
 // Album sizes the owner has turned OFF (hidden from the customer size picker).
@@ -80,6 +80,26 @@ async function loadLaunchPrice(): Promise<LaunchPrice | null> {
   }
 }
 
+/** A database that doesn't have the function asked for (PostgREST's code, or
+ *  Postgres's), as opposed to one that couldn't be reached. */
+export function isMissingFunction(e: { code?: string; message?: string } | null | undefined): boolean {
+  return !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function/i.test(e.message ?? ''));
+}
+
+/** How extra videos are sold (public_video_offer, 0078). It sets what videos
+ *  cost, so it is part of the prices: a failed read is a failed load (no
+ *  price, tried again), and only a database before 0078 (no such function)
+ *  means the 0066 packs (video_offer null → videoOfferOf's legacy rule). */
+async function loadVideoOffer(): Promise<{ ok: true; offer: VideoOffer | null } | { ok: false }> {
+  try {
+    const { data, error } = await supabase.rpc('public_video_offer');
+    if (!error) return { ok: true, offer: parseVideoOffer(data) };
+    return isMissingFunction(error) ? { ok: true, offer: null } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 let inflight: Promise<void> | null = null;
 /** Load the customer price schedule (on app start, and again until it lands). */
 export function loadStoreSettings(): Promise<void> {
@@ -87,10 +107,11 @@ export function loadStoreSettings(): Promise<void> {
   if (inflight) return inflight;
   inflight = (async () => {
     try {
-      const [{ data, error }, launch] = await Promise.all([supabase.rpc('public_price_schedule'), loadLaunchPrice()]);
+      const [{ data, error }, launch, video] = await Promise.all([supabase.rpc('public_price_schedule'), loadLaunchPrice(), loadVideoOffer()]);
       if (error) { console.warn('price schedule load failed:', error.message); return; }
+      if (!video.ok) { console.warn('video prices did not load'); return; }
       if (data && typeof data === 'object') {
-        schedule = { ...(data as PriceSchedule), launch };
+        schedule = { ...(data as PriceSchedule), launch, video_offer: video.offer };
         if (Array.isArray(schedule.disabled_sizes)) {
           disabledSizes = schedule.disabled_sizes as AlbumSizePreset[];
         }
@@ -211,6 +232,33 @@ export async function loadOwnerLaunchPrice(): Promise<{ pct: number | null; unti
 export async function setLaunchPrice(pct: number | null, until: string | null): Promise<string | null> {
   if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
   const { error } = await supabase.rpc('set_launch_price', { p_pct: pct, p_until: until });
+  if (error) return error.message;
+  await loadStoreSettings();
+  return null;
+}
+
+/** Owner-only (pricing_model is owner-only, 0058). The video sale as set,
+ *  running or not, and the prices it sells at, for the Pricing panel; null
+ *  when it can't be read (not the owner, or a database before 0078). */
+export async function loadOwnerVideoSale(): Promise<{ name: string | null; until: string | null; single: number; packSize: number; packPrice: number } | null> {
+  if (!supabaseConfigured) return null;
+  try {
+    const { data, error } = await supabase.from('pricing_model')
+      .select('video_sale_name, video_sale_until, video_price, video_pack_size, video_pack_price').eq('id', 1).maybeSingle();
+    if (error || !data) return null;
+    const r = data as { video_sale_name: string | null; video_sale_until: string | null; video_price: number; video_pack_size: number; video_pack_price: number };
+    return { name: r.video_sale_name ?? null, until: r.video_sale_until ?? null, single: r.video_price, packSize: r.video_pack_size, packPrice: r.video_pack_price };
+  } catch {
+    return null;
+  }
+}
+
+/** Owner-only (definer RPC, 0078). Starts or changes the video sale — its
+ *  name and last day (YYYY-MM-DD) — or ends it with nulls. The SQL refuses an
+ *  end date past 6 months and a name over 30 letters. Reloads the schedule. */
+export async function setVideoSale(name: string | null, until: string | null): Promise<string | null> {
+  if (!supabaseConfigured) return 'Supabase not configured — change is local-only this session.';
+  const { error } = await supabase.rpc('set_video_sale', { p_name: name, p_until: until });
   if (error) return error.message;
   await loadStoreSettings();
   return null;
