@@ -60,7 +60,9 @@ export interface SendDb {
 
 /** A create-only upload: null when the file is in the bucket (now, or from
  *  an earlier try), else the storage error. */
-export type CreateOnlyUpload = (bucket: string, path: string, body: Uint8Array, opts: { contentType: string; cacheControl?: string }) => Promise<{ message: string } | null>;
+/** `reportExisting`: say when the file was already there (a receipt sent
+ *  before), instead of counting it as sent (bug hunt B-D4). */
+export type CreateOnlyUpload = (bucket: string, path: string, body: Uint8Array, opts: { contentType: string; cacheControl?: string; reportExisting?: boolean }) => Promise<{ message: string; alreadyThere?: boolean } | null>;
 
 export type SendStep =
   | { step: 'order' }
@@ -139,6 +141,10 @@ export const PAGES_SEND_FAILED = "We couldn't send your album's pages. Your orde
 /** Bug hunt L1-47: this order was saved by an earlier try whose answer was
  *  lost (the insert with the same phone-chosen id was refused as a duplicate).
  *  Checkout finishes that order from its row instead of making a second one. */
+/** Bug hunt B-D4 / B-D3: the payment step's words. */
+export const RECEIPT_ALREADY_KEPT = 'We already have a receipt for this order, so we kept that one. If it was the wrong picture, message us and send the right one there.';
+export const RECEIPT_OFFLINE = "We couldn't upload your receipt (no internet). You can still tap \"I've sent the payment\" when you're back online: we'll confirm from our bank app.";
+export const PAYMENT_OFFLINE = "We couldn't reach Megy Prints, so your payment isn't recorded yet. Check your internet, then tap \"I've sent\" again.";
 export const ORDER_ALREADY_SAVED = 'Your order was already saved. Finishing it now.';
 export class OrderAlreadySavedError extends Error {
   constructor(public readonly orderId: string) { super(ORDER_ALREADY_SAVED); this.name = 'OrderAlreadySavedError'; }
@@ -320,13 +326,18 @@ export async function sendPayment(plan: PaymentSubmitPlan, receipt: Uint8Array |
   let receiptError: string | null = null;
   if (plan.upload && receipt) {
     const { bucket, path, contentType, cacheControl } = plan.upload;
-    const error = await deps.upload(bucket, path, receipt, { contentType, cacheControl });
-    if (error) receiptError = `Could not upload your receipt (${error.message}). You can still tap "I've sent the payment" — we'll confirm from our bank app.`;
+    const error = await deps.upload(bucket, path, receipt, { contentType, cacheControl, reportExisting: true });
+    // A receipt was sent for this order before (one file per order, 0042): the
+    // first is kept, and said, never dropped quietly (bug hunt B-D4).
+    if (error?.alreadyThere) { proofPath = path; receiptError = RECEIPT_ALREADY_KEPT; }
+    else if (error) receiptError = isNoConnection(error.message) ? RECEIPT_OFFLINE : `Could not upload your receipt (${error.message}). You can still tap "I've sent the payment" — we'll confirm from our bank app.`;
     else proofPath = path;
   }
   const { error } = await deps.db.rpc(plan.rpc.name, { ...plan.rpc.args, p_proof_path: proofPath });
   // An order that didn't finish sending (0068, MP030): the database's own plain words.
   if (error && isOrderNotSentError(error)) throw new OrderNotSentError(error.message);
+  // No connection: plain words, not the phone's own error (bug hunt B-D3).
+  if (error && isNoConnection(error.message)) throw new Error(PAYMENT_OFFLINE);
   if (error) throw new Error(`Could not record your payment (${error.message}).`);
   return { receiptError };
 }

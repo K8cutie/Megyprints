@@ -459,7 +459,10 @@ describe('"I\'ve sent ₱X" sends what the website sends', () => {
     const d = deps();
     const r = await sendPayment(paymentSubmitPlan('order-1', ' 2026091012345678 ', png), new Uint8Array([9]), d);
     expect(r.receiptError).toBeNull();
-    expect(rec.uploads).toEqual(website.uploads);
+    // `reportExisting` only tells the app's own upload to say a receipt already
+    // there (bug hunt B-D4); storage.ts never sends it to storage.
+    expect(rec.uploads.map((u) => ({ ...u, opts: { ...(u.opts as Record<string, unknown>), reportExisting: undefined } }))).toEqual(website.uploads.map((u) => ({ ...u, opts: { ...(u.opts as Record<string, unknown>), reportExisting: undefined } })));
+    expect((rec.uploads[0].opts as Record<string, unknown>).reportExisting).toBe(true);
     expect(rec.rpcs).toEqual(website.rpcs);
   });
 
