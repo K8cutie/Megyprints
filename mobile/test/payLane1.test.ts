@@ -75,8 +75,8 @@ describe('the create-only upload', () => {
 });
 
 describe('room on the phone before an order is saved (B-D6)', () => {
-  it('under 300 MB free: the words, before any order row', () => {
-    expect(MIN_FREE_BYTES).toBe(300 * 1024 * 1024);
+  it('under 150 MB free: the words, before any order row', () => {
+    expect(MIN_FREE_BYTES).toBe(150 * 1024 * 1024);
     expect(lowSpaceWords(16 * 1024 * 1024)).toBe(PHONE_ALMOST_FULL);
     expect(lowSpaceWords(MIN_FREE_BYTES - 1)).toBe(PHONE_ALMOST_FULL);
     expect(lowSpaceWords(MIN_FREE_BYTES)).toBeNull();

@@ -240,20 +240,25 @@ async function coverFile(c: FileContext, orderNumber: string | null): Promise<Ui
   });
 }
 
-/** The smallest page picture a smaller try goes to: ~145 DPI on an 8x8's
- *  page with bleed (8.25 in), still fine for photos at arm's length. */
-export const PRINT_PAGE_MIN_SIDE = 1200;
+/** A smaller try never prints a page under this (the app's own "visibly soft"
+ *  line, photoQuality.ts): on an 8x8 page with bleed (8.25 in), 1,238 px. */
+export const PRINT_PAGE_MIN_DPI = 150;
+/** The smallest page picture for a page of `wIn` × `hIn` inches (bleed included). */
+export function minPageSide(wIn: number, hIn: number): number {
+  return Math.min(PRINT_PAGE_MAX_SIDE, Math.ceil(PRINT_PAGE_MIN_DPI * Math.max(wIn, hIn)));
+}
 /** The next try's longest side: the file's size goes with the pixels (side²),
- *  so the side shrinks by the square root of how far over it is, with 10% room. */
-export function smallerSide(side: number, bytes: number, budgetBytes: number): number {
-  return Math.max(PRINT_PAGE_MIN_SIDE, Math.floor(side * Math.sqrt(budgetBytes / bytes) * 0.9));
+ *  so the side shrinks by the square root of how far over it is, with 10% room,
+ *  never under `floor`. */
+export function smallerSide(side: number, bytes: number, budgetBytes: number, floor: number): number {
+  return Math.max(floor, Math.floor(side * Math.sqrt(budgetBytes / bytes) * 0.9));
 }
 
 /** "<order>.pdf", page by page. Past the budget with sharp words, again with
  *  the words in the pictures (generateAlbumPdf's rule); still past it (a big
  *  album, with or without words: bug hunt B-D7, a 191-page album made 77.7 MB
- *  and live refuses anything over 50 MB), again with smaller page pictures,
- *  at most twice; still past it, PagesTooBigError. */
+ *  and live refuses anything over 50 MB), again with smaller page pictures
+ *  (never under 150 DPI), at most twice; still past it, PagesTooBigError. */
 async function interiorFile(
   c: FileContext, onPage: (done: number, total: number, smaller: boolean) => void, budgetBytes = PRINT_FILE_BUDGET_BYTES,
 ): Promise<{ bytes: Uint8Array; bakedWords: boolean; pageSide: number }> {
@@ -284,8 +289,9 @@ async function interiorFile(
     if (made.bytes.length <= budgetBytes) return { bytes: made.bytes, bakedWords: true, pageSide: PRINT_PAGE_MAX_SIDE };
   }
   let side = PRINT_PAGE_MAX_SIDE;
-  for (let tries = 0; tries < 2 && side > PRINT_PAGE_MIN_SIDE; tries++) {
-    side = smallerSide(side, made.bytes.length, budgetBytes);
+  const floor = minPageSide(wIn, hIn);
+  for (let tries = 0; tries < 2 && side > floor; tries++) {
+    side = smallerSide(side, made.bytes.length, budgetBytes, floor);
     made = await build(bake, side, PRINT_PAGE_JPEG_QUALITY);
     if (made.bytes.length <= budgetBytes) return { bytes: made.bytes, bakedWords: bake, pageSide: side };
   }

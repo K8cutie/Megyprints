@@ -18,7 +18,7 @@ import { sheetPlan } from '@web/pages/builder/printSheet';
 import { sideJpegName, coverJpegName } from '@web/lib/pressSheetWords';
 import { jpegDpi } from '@web/lib/jpegZip';
 import { getTemplateById } from '@web/pages/builder/pageTemplates';
-import { makePrintFiles, NotDrawnError, PhotoNotOpenedError, type OpenPhoto, type PrintTools, type PrintAlbum, smallerSide, PRINT_PAGE_MIN_SIDE } from '../src/print/printFiles';
+import { makePrintFiles, NotDrawnError, PhotoNotOpenedError, type OpenPhoto, type PrintTools, type PrintAlbum, smallerSide, minPageSide, PRINT_PAGE_MIN_DPI } from '../src/print/printFiles';
 import { PAGES_TOO_BIG, PagesTooBigError } from '../src/lib/checkout/sizeLimits';
 import { SheetRaster } from '../src/print/sheetRaster';
 import { savePrintFiles, printFileNames } from '../src/print/saveFiles';
@@ -240,10 +240,16 @@ describe('when the app can’t make a file the website’s way', () => {
    with no check; live refuses anything over 50 MB. The pages now get smaller
    until they fit, with or without words, and say so plainly if they can't. */
 describe('a pages file past the upload budget, with or without words', () => {
-  it('the next try shrinks the page pictures by the square root of the overshoot, with room, never under the floor', () => {
-    expect(smallerSide(1800, 77_700_000, 45 * 1024 * 1024)).toBe(Math.floor(1800 * Math.sqrt((45 * 1024 * 1024) / 77_700_000) * 0.9));
-    expect(smallerSide(1800, 100 * 1024 * 1024, 45 * 1024 * 1024)).toBeGreaterThanOrEqual(PRINT_PAGE_MIN_SIDE);
-    expect(smallerSide(1300, 1_000_000_000, 45 * 1024 * 1024)).toBe(PRINT_PAGE_MIN_SIDE);
+  it('the next try shrinks the page pictures by the square root of the overshoot, with room, never under 150 DPI for the page', () => {
+    const floor8x8 = minPageSide(8.25, 8.25);
+    expect(PRINT_PAGE_MIN_DPI).toBe(150);
+    expect(floor8x8).toBe(1238);
+    expect(smallerSide(1800, 77_700_000, 45 * 1024 * 1024, floor8x8)).toBe(Math.floor(1800 * Math.sqrt((45 * 1024 * 1024) / 77_700_000) * 0.9));
+    expect(smallerSide(1300, 1_000_000_000, 45 * 1024 * 1024, floor8x8)).toBe(floor8x8);
+    // Small pages have room to spare; a page so big that 150 DPI needs more than 1,800 px is never shrunk.
+    expect(minPageSide(6.25, 4.25)).toBe(938);
+    expect(minPageSide(11.75, 8.25)).toBe(1763);
+    expect(minPageSide(13, 9)).toBe(1800);
   });
 
   it('an album with no words that is over the budget is made again with smaller pictures, until it fits', async () => {
