@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import {
   UNPAID_ORDER_DAYS, UNPAID_ORDER_LIMIT, UNPAID_LIMIT_SQLSTATE, UnpaidLimitError, isUnpaidLimitError, PAY_WITHIN_MESSAGE, payByDate,
+  DELIVERED_FILES_KEEP_DAYS,
 } from './orderExpiry';
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -115,5 +116,37 @@ describe('the payment screen says the window', () => {
   });
   it('and it is plain', () => {
     expect(PAY_WITHIN_MESSAGE).toBe(`Please pay within ${UNPAID_ORDER_DAYS} days. After that this order closes by itself. Your album stays saved, and you can order it again.`);
+  });
+});
+
+/* Delivered orders' print files go after DELIVERED_FILES_KEEP_DAYS (0064).
+   The database owns the number; the Privacy Policy and the admin say it. */
+const deliveredMigration = readFileSync(resolve(__dirname, '../../supabase/migrations/0064_delivered_print_files_cleanup.sql'), 'utf8');
+const privacyPage = readFileSync(resolve(__dirname, '../pages/Privacy.tsx'), 'utf8');
+
+describe('delivered orders keep their print files for the database\'s number of days', () => {
+  it('90 days, the same number as the migration', () => {
+    expect(DELIVERED_FILES_KEEP_DAYS).toBe(90);
+    expect(deliveredMigration).toMatch(new RegExp(`function public\\.delivered_files_keep_days\\(\\)[\\s\\S]*?select ${DELIVERED_FILES_KEEP_DAYS} \\$\\$`));
+  });
+  it('the Privacy Policy says it from the shared number, not a typed one', () => {
+    expect(privacyPage).toContain('We delete this file {DELIVERED_FILES_KEEP_DAYS} days after your album is delivered');
+    expect(privacyPage).toContain("from '../lib/orderExpiry'");
+  });
+  it('the nightly job never passes its own number of days (the database decides)', () => {
+    expect(endpoint).toMatch(/rpc\('orders_due_for_delivered_file_purge', \{ p_limit: PURGE_BATCH \}\)/);
+    // Only comments may say the number; the code never carries its own.
+    const code = endpoint.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+    expect(code).not.toMatch(/\b90\b/);
+  });
+  it('memory videos are never part of the delivered cleanup', () => {
+    const fn = endpoint.slice(endpoint.indexOf('async function purgeDeliveredOrder'), endpoint.indexOf('export default async function handler'));
+    expect(fn).not.toMatch(/CLIP_BUCKET|order_clip_files_to_purge/);
+  });
+  it('event albums and copy sources are left alone, and going back to printing is refused', () => {
+    expect(deliveredMigration).toMatch(/o\.event_booking_id is null/);
+    expect(deliveredMigration).toMatch(/o\.copy_of_order_id is null/);
+    expect(deliveredMigration).toMatch(/not exists \(select 1 from public\.orders c where c\.copy_of_order_id = o\.id\)/);
+    expect(deliveredMigration).toMatch(/errcode = 'MP011'/);
   });
 });

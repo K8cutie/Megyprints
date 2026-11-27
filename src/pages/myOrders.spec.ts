@@ -246,6 +246,10 @@ describe('a second copy starts from the first', () => {
     const cards = [...host.querySelectorAll('[data-testid="order-card"]')];
     expect(cards[0].querySelector('[data-testid="order-again"]')?.getAttribute('href')).toBe('/builder?album=album-9&order=again');
     expect(cards[1].querySelector('[data-testid="order-again"]')).toBeNull();
+    // A delivered order says how a reprint works (its print file is deleted 90 days after delivery, 0064).
+    expect(cards[0].querySelector('[data-testid="order-again-note"]')?.textContent?.trim())
+      .toBe('Want another copy? Your album is still saved, and we print it again from the photos on the phone or computer you made it on.');
+    expect(cards[1].querySelector('[data-testid="order-again-note"]')).toBeNull();
   });
   it('checkout prefills only when this tab had no form, and says so (source guard)', () => {
     const src = readFileSync(resolve(__dirname, 'Order.tsx'), 'utf8');

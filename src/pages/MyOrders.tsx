@@ -173,6 +173,13 @@ function OrderCard({ order, focused, coverNeeded, onChanged }: { order: MyOrder;
       {/* A second copy: the album as it is now, through the Order door (its
           checks and save), straight to checkout (RC; round 3: it opened the
           editor on page 1, with no order button on screen). */}
+      {/* Delivered: the shop's print file goes 90 days after delivery (0064),
+          so a reprint is a new order from the photos the album was made with. */}
+      {order.album_id && order.status === 'delivered' && (
+        <p className="mt-3 text-xs text-medium" data-testid="order-again-note">
+          Want another copy? Your album is still saved, and we print it again from the photos on the phone or computer you made it on.
+        </p>
+      )}
       {order.album_id && !track.awaitingPayment && (
         <Link to={`/builder?album=${order.album_id}&order=again`} data-testid="order-again"
           className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-peach text-xs font-semibold text-cocoa hover:bg-blush">

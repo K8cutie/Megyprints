@@ -12,7 +12,10 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
      · receipts (payment-proofs) are never touched;
      · one order's failure leaves that order unrecorded (tomorrow retries it)
        and doesn't stop the others;
-     · a failed video lookup removes no videos and records nothing.
+     · a failed video lookup removes no videos and records nothing;
+     · long-delivered orders (0064): CLAIMED first, then only their print and
+       cover files, then the record; never their memory videos; a failed
+       list or removal is reported and never stops the rest of the night.
    The real thing ran end to end against a local stack:
    scripts/expire-orders-local-e2e.mjs.
    ══════════════════════════════════════════════════════════════════════════ */
@@ -32,6 +35,9 @@ const freshDb = () => ({
     'ord-b': { data: [], error: null },
   },
   claim: () => true,
+  deliveredDue: { data: [{ order_id: 'ord-d' }], error: null },
+  claimDelivered: () => true,
+  finishDeliveredErr: () => null,
   orphans: { data: [{ code: 'zzorphan', object_name: 'zzorphan.mp4' }], error: null },
   removeErr: () => null,
   finishErr: () => null,
@@ -46,6 +52,12 @@ const adminClient = () => ({
     const next = (v) => (v?.batches ? (v.batches.shift() ?? { data: [], error: null }) : v);
     if (name === 'orders_due_for_file_purge') return next(db.due);
     if (name === 'claim_order_file_purge') return { data: db.claim(args.p_order_id), error: null };
+    if (name === 'orders_due_for_delivered_file_purge') return next(db.deliveredDue);
+    if (name === 'claim_delivered_order_file_purge') return { data: db.claimDelivered(args.p_order_id), error: null };
+    if (name === 'finish_delivered_order_file_purge') {
+      const err = db.finishDeliveredErr(args.p_order_id);
+      return err ? { data: null, error: err } : { data: true, error: null };
+    }
     if (name === 'orphan_clip_files') return next(db.orphans);
     if (name === 'order_clip_files_to_purge') return db.clips[args.p_order_id] ?? { data: [], error: null };
     if (name === 'finish_orphan_clip_purge') {
@@ -136,7 +148,7 @@ describe('a night', () => {
   it('expires, then for each due order claims it, removes its PDFs, then the videos the database lists, then records it; then the unfinished-checkout videos', async () => {
     const res = await call();
     expect(res.code).toBe(200);
-    expect(res.body).toEqual({ expired: ['MP-2026-OLD0001'], purged: 2, skipped: 0, videos: 2, orphans: 1, errors: [], more: false });
+    expect(res.body).toEqual({ expired: ['MP-2026-OLD0001'], purged: 2, skipped: 0, videos: 2, delivered: 1, delivered_skipped: 0, orphans: 1, errors: [], more: false });
     expect(clientsMade).toEqual(['service-test']);
     expect(log).toEqual([
       'rpc:expire_unpaid_orders',
@@ -150,6 +162,10 @@ describe('a night', () => {
       'remove:print-pdfs:ord-b.pdf,ord-b-cover.pdf',
       'rpc:order_clip_files_to_purge:ord-b',
       'rpc:finish_order_file_purge:ord-b',
+      'rpc:orders_due_for_delivered_file_purge',
+      'rpc:claim_delivered_order_file_purge:ord-d',
+      'remove:print-pdfs:ord-d.pdf,ord-d-cover.pdf',
+      'rpc:finish_delivered_order_file_purge:ord-d',
       'rpc:orphan_clip_files',
       'remove:memory-clips:zzorphan.mp4',
       'rpc:finish_orphan_clip_purge:zzorphan',
@@ -255,6 +271,13 @@ describe('a night', () => {
     expect(res.body.orphans).toBe(mod.ORPHAN_BATCH);
     expect(log.filter((l) => l.startsWith('rpc:orphan_clip_files'))).toHaveLength(2);
   });
+  it('a full batch of delivered orders is followed by the next one, each tried once', async () => {
+    const ids = (from, n) => Array.from({ length: n }, (_, i) => ({ order_id: `del-${from + i}` }));
+    db.deliveredDue = { batches: [{ data: ids(0, mod.PURGE_BATCH), error: null }, { data: ids(mod.PURGE_BATCH, 4), error: null }] };
+    const res = await call();
+    expect(res.body.delivered).toBe(mod.PURGE_BATCH + 4);
+    expect(log.filter((l) => l === 'rpc:claim_delivered_order_file_purge:del-0')).toHaveLength(1);
+  });
   it('past the time budget it stops starting new orders', async () => {
     const realNow = Date.now;
     let t = 0;
@@ -264,5 +287,64 @@ describe('a night', () => {
       expect(res.body.more).toBe(true);
       expect(res.body.purged).toBeLessThan(2);
     } finally { Date.now = realNow; }
+  });
+});
+
+describe('delivered orders (0064): their print files go 90 days after delivery', () => {
+  it('only the print and cover files: never the memory videos (a printed QR keeps playing)', async () => {
+    await call();
+    expect(log).toContain('remove:print-pdfs:ord-d.pdf,ord-d-cover.pdf');
+    expect(log.some((l) => l.includes('order_clip_files_to_purge:ord-d'))).toBe(false);
+    expect(log.some((l) => l.startsWith('remove:memory-clips') && l.includes('ord-d'))).toBe(false);
+    expect(log.some((l) => l.startsWith('rpc:finish_order_file_purge:ord-d'))).toBe(false);
+  });
+  it('claimed before anything is removed, recorded after', async () => {
+    await call();
+    const claim = log.indexOf('rpc:claim_delivered_order_file_purge:ord-d');
+    const removal = log.indexOf('remove:print-pdfs:ord-d.pdf,ord-d-cover.pdf');
+    const record = log.indexOf('rpc:finish_delivered_order_file_purge:ord-d');
+    expect(claim).toBeGreaterThan(-1);
+    expect(claim).toBeLessThan(removal);
+    expect(removal).toBeLessThan(record);
+  });
+  it('an order the claim refuses (moved off Delivered since the list) is skipped untouched', async () => {
+    db.claimDelivered = () => false;
+    const res = await call();
+    expect(res.code).toBe(200);
+    expect(res.body.delivered).toBe(0);
+    expect(res.body.delivered_skipped).toBe(1);
+    expect(log.some((l) => l.includes('ord-d.pdf') || l.includes('finish_delivered_order_file_purge:ord-d'))).toBe(false);
+  });
+  it('its files failing to go: the order is not recorded, so tomorrow tries again', async () => {
+    db.removeErr = (bucket, names) => (bucket === 'print-pdfs' && names[0] === 'ord-d.pdf' ? { message: 'boom' } : null);
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(res.body.errors).toEqual([{ order_id: 'ord-d', error: 'print-pdfs: boom' }]);
+    expect(log).not.toContain('rpc:finish_delivered_order_file_purge:ord-d');
+  });
+  it('the record failing: reported', async () => {
+    db.finishDeliveredErr = () => ({ message: 'rows down' });
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(res.body.errors).toEqual([{ order_id: 'ord-d', error: 'record: rows down' }]);
+  });
+  it('the delivered list failing: reported, and the rest of the night still runs', async () => {
+    db.deliveredDue = { data: null, error: { message: 'down' } };
+    const res = await call();
+    expect(res.code).toBe(500);
+    expect(res.body.errors).toEqual([{ order_id: null, error: 'delivered list: down' }]);
+    expect(res.body.purged).toBe(2);
+    expect(log).toContain('rpc:finish_orphan_clip_purge:zzorphan');
+  });
+  it('nothing delivered long enough ago: no claim, no removal', async () => {
+    db.deliveredDue = { data: [], error: null };
+    const res = await call();
+    expect(res.body.delivered).toBe(0);
+    expect(log.some((l) => l.startsWith('rpc:claim_delivered_order_file_purge'))).toBe(false);
+  });
+  it('the unpaid cleanup failing to list does not reach the delivered files either', async () => {
+    db.due = { data: null, error: { message: 'down' } };
+    await call();
+    expect(log.some((l) => l.includes('delivered'))).toBe(false);
   });
 });
