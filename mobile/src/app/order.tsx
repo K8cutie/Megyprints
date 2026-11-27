@@ -37,7 +37,7 @@ import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, includedVideosV
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
-import { isMiniSize, MINI_COVER, MINI_NAME, MINI_PAPER } from '@web/lib/megyMini';
+import { bookletName, bookletPaper, isMiniSize, MINI_COVER } from '@web/lib/megyMini';
 
 /** The Megy Mini's one cover (lib/megyMini): never offered for an album. */
 const MINI_COVER_CHOICE: (typeof COVERS)[number] = {
@@ -253,6 +253,8 @@ export default function OrderScreen() {
   const tooFew = photosShortBy(photosIn, albumSize, pageCount) > 0;
   // MEGY MINI (lib/megyMini): its own cover (staples), its own price + shipping.
   const mini = isMiniSize(albumSize);
+  // Its name: "Megy Mini" (A5) or "Megy Magazine" (A4).
+  const bookName = bookletName(albumSize);
 
   // THE PRESS: a cover too big for the shop's sheet isn't offered (shared printSheet).
   const coverChoices = mini ? [MINI_COVER_CHOICE] : COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount, { material }));
@@ -628,7 +630,7 @@ export default function OrderScreen() {
   }
 
   /* ══════════════ FORM ══════════════ */
-  const sizeName = mini ? `${MINI_NAME} · ${MINI_PAPER}` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
+  const sizeName = mini ? `${bookName} · ${bookletPaper(albumSize)}` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
   const materialName = MATERIALS.find((m) => m.type === material)?.name ?? material;
   const coverName = mini ? MINI_COVER_CHOICE.name : COVERS.find((c) => c.type === cover)?.name ?? cover;
   // An order that didn't finish sending is never "pay that order" (0068).
@@ -747,7 +749,7 @@ export default function OrderScreen() {
         {!price.mini && <Row label="Shipping" value="Free" good testID="order-shipping" />}
         {!eventLink && tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
         {/* A Megy Mini takes no affiliate discount (0065): the line says so, with no amount. */}
-        {!eventLink && !tester && affiliate && price.ready && <Row label={affiliateLine(affiliate, mini)} value={mini ? '' : `−${peso(price.total - price.payTotal)}`} good testID="order-affiliate-line" />}
+        {!eventLink && !tester && affiliate && price.ready && <Row label={affiliateLine(affiliate, mini && bookName)} value={mini ? '' : `−${peso(price.total - price.payTotal)}`} good testID="order-affiliate-line" />}
         <View style={styles.totalRow}>
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
@@ -767,11 +769,11 @@ export default function OrderScreen() {
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
             test album writes nothing, so it checks the code's shape only. */}
-        {!eventLink && price.ready && <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} onAffiliate={setAffiliate} mini={mini}
+        {!eventLink && price.ready && <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} onAffiliate={setAffiliate} mini={mini && bookName}
           check={(typed) => (live && userId ? checkCheckoutCode(typed) : checkTesterCodeOffline(typed, !!userId))}
           signedIn={!!userId} onSignIn={signIn} />}
         <View style={styles.included} testID="order-included">
-          <Text style={styles.strongSmall}>Included with your {mini ? MINI_NAME : 'album'}</Text>
+          <Text style={styles.strongSmall}>Included with your {mini ? bookName : 'album'}</Text>
           {!mini && <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>}
           {mini
             ? <Text style={styles.small}>✓ {price.freeVideos} video memories</Text>
@@ -802,7 +804,7 @@ export default function OrderScreen() {
             {eventLink
               ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
               : mini
-                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. {videoOfferSentence(videoOffer)}</>
+                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {bookName}. {videoOfferSentence(videoOffer)}</>
                 : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. {videoOfferSentence(videoOffer)}</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
@@ -814,7 +816,7 @@ export default function OrderScreen() {
       ) : asking ? null : (
         <>
           <Button
-            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.payTotal, miniOff: price.miniOff })}
+            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.payTotal, miniOff: price.miniOff, miniName: bookName })}
             busy={!price.ready && (prices.loading || prices.retrying)}
             onPress={onPlace}
             testID="order-place"

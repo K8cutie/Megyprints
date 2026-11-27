@@ -994,8 +994,8 @@ const SIZE_ORIENTATION: { size: AlbumSizePreset; orientation: PageTemplate['orie
   { size: '6x8', orientation: 'portrait' },
   { size: S1158, orientation: 'landscape' },
   { size: S8511, orientation: 'portrait' },
-  { size: '5.8x8.3', orientation: 'portrait' },  // A5, the Megy Mini until 2026-11-27
-  { size: '8.3x11.7', orientation: 'portrait' }, // A4, the Megy Mini
+  { size: '5.8x8.3', orientation: 'portrait' },  // A5, the Megy Mini
+  { size: '8.3x11.7', orientation: 'portrait' }, // A4, Megy Magazine
 ];
 
 /** Physical safe-area inches per size (album inches × the 0.04 margin each side). */

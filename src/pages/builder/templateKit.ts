@@ -52,8 +52,8 @@ export const CANVAS_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
   '8x8':    { w: 2400, h: 2400 },
   '11.5x8': { w: 3450, h: 2400 },
   '8.5x11': { w: 2550, h: 3300 },
-  '5.8x8.3': { w: 1748, h: 2480 },  // A5, the Megy Mini until 2026-11-27 (lib/megyMini)
-  '8.3x11.7': { w: 2480, h: 3508 }, // A4, the Megy Mini (lib/megyMini)
+  '5.8x8.3': { w: 1748, h: 2480 },  // A5, the Megy Mini (lib/megyMini)
+  '8.3x11.7': { w: 2480, h: 3508 }, // A4, Megy Magazine (lib/megyMini)
 };
 
 /** Standard photo aspect ratios (width / height) */
@@ -76,9 +76,9 @@ export const ALBUM_INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '8x8':    { w: 8,    h: 8  },
   '11.5x8': { w: 11.5, h: 8  },
   '8.5x11': { w: 8.5,  h: 11 },
-  // A5 (148 x 210 mm), the Megy Mini until 2026-11-27: exact, so its frames print to the millimetre.
+  // A5 (148 x 210 mm), the Megy Mini: exact, so its frames print to the millimetre.
   '5.8x8.3': { w: 148 / 25.4, h: 210 / 25.4 },
-  // A4 (210 x 297 mm), the Megy Mini.
+  // A4 (210 x 297 mm), Megy Magazine.
   '8.3x11.7': { w: 210 / 25.4, h: 297 / 25.4 },
 };
 

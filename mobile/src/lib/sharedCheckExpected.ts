@@ -14,7 +14,7 @@ export const SHARED_CHECK_EXPECTED: Record<string, string> = {
   // 9 QR memories: 2 included, 7 extra = 3 packs of 3 at ₱100 (2026-11-19; was 2 × ₱20).
   breakdown: '3 lines, total 765',
   // + 12, the Megy Mini's own layouts (miniTemplates, 2026-11-17); its first ones stay, retired.
-  // + 40, the A4 Mini's video-memory chip layouts (2026-11-27), as A5 has.
+  // + 40, Megy Magazine's (A4) video-memory chip layouts (2026-11-27), as A5 has.
   templates: '766',
   'templates-by-size': '8x8: 28, 6x6: 22, 8x6: 38, 6x8: 38, 6x4: 11',
   quotes: '818',

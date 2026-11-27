@@ -13,7 +13,7 @@
 
 import { MIN_ALBUM_PAGES } from './densities';
 import type { AlbumPage } from './types';
-import { isMiniSize, minPhotosFor, maxPhotosFor, MINI_NAME } from '../../lib/megyMini';
+import { bookletName, isMiniSize, minPhotosFor, maxPhotosFor } from '../../lib/megyMini';
 
 /** One photo for every page of the shortest album. */
 export const MIN_ALBUM_PHOTOS = MIN_ALBUM_PAGES;
@@ -60,7 +60,7 @@ export function addMoreLabel(short: number): string {
 export function tooFewToMakeMessage(have: number, size?: string | null, miniPages?: number): string {
   const short = photosShortBy(have, size, miniPages);
   if (isMiniSize(size)) {
-    return `A ${MINI_NAME} needs at least ${minPhotosFor(size, miniPages)} photos, one for every page. You have ${have}: add ${short} more and I'll make it.`;
+    return `A ${bookletName(size)} needs at least ${minPhotosFor(size, miniPages)} photos, one for every page. You have ${have}: add ${short} more and I'll make it.`;
   }
   return `Albums need at least ${MIN_ALBUM_PHOTOS} photos, one for every page. You have ${have}: add ${short} more and I'll make your album.`;
 }
@@ -69,7 +69,7 @@ export function tooFewToMakeMessage(have: number, size?: string | null, miniPage
 export function tooFewToOrderMessage(have: number, size?: string | null, miniPages?: number): string {
   const short = photosShortBy(have, size, miniPages);
   if (isMiniSize(size)) {
-    return `Your ${MINI_NAME} has ${have} ${photoWord(have)}. It needs at least ${minPhotosFor(size, miniPages)} to print, so add ${short} more before you order.`;
+    return `Your ${bookletName(size)} has ${have} ${photoWord(have)}. It needs at least ${minPhotosFor(size, miniPages)} to print, so add ${short} more before you order.`;
   }
   return `Your album has ${have} ${photoWord(have)}. Albums need at least ${MIN_ALBUM_PHOTOS} to print, so add ${short} more before you order.`;
 }

@@ -392,9 +392,10 @@ describe('Megy Mini press sheets (folded and stapled)', () => {
     expect(spineIn).toBeCloseTo(0, 3);
   });
 
-  /* A4 (owner, 2026-11-27: "lets make megy mini as an a4"): one open spread a
-     side, turned a quarter, so 16 pages take 4 sheets and 24 take 6. */
-  it('lays a 16-page A4 Mini on 4 sheets, one turned spread a side, and a 24-page one on 6', async () => {
+  /* MEGY MAGAZINE, the A4 booklet (owner, 2026-11-27: "the A4 album becomes
+     another product"): one open spread a side, turned a quarter, so 16 pages
+     take 4 sheets and 24 take 6. */
+  it('lays a 16-page Megy Magazine (A4) on 4 sheets, one turned spread a side, and a 24-page one on 6', async () => {
     for (const [pages, sheets] of [[16, 4], [24, 6]] as const) {
       drawn.length = 0;
       const { bytes, plan } = await imposeAlbumSheets(await albumPdf('8.3x11.7', pages, 0.125, true), '8.3x11.7', 'MP-A4', T);
@@ -402,7 +403,7 @@ describe('Megy Mini press sheets (folded and stapled)', () => {
       const out = await PDFDocument.load(bytes);
       expect(out.getPageCount()).toBe(2 * sheets);
       for (const pg of out.getPages()) expect([pg.getWidth(), pg.getHeight()]).toEqual([12.5 * 72, 19 * 72]);
-      expect(drawn).toContain(`MP-A4 · Megy Mini · sheet 1 of ${sheets} · front`);
+      expect(drawn).toContain(`MP-A4 · Megy Magazine · sheet 1 of ${sheets} · front`);
       expect(drawn).toContain(`fold 1 · pages ${pages} | 1`);
       expect(drawn).toContain(`fold ${sheets} · pages ${pages / 2 + 2} | ${pages / 2 - 1}`);
       expect(drawn.filter((t) => /^\d+$/.test(t))).toEqual([]);

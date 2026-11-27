@@ -4635,14 +4635,22 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.
 
-### Release notes 2.1.8 (code 118: 2.1.7 + where each photo was taken + the A4 Megy Mini at 16 or 24 pages; draft, check against the app on upload day)
+### Release notes 2.1.9 (code 119: 2.1.8 + Megy Magazine, the A4 booklet; draft, check against the app on upload day)
 
     <en-US>
-    • Megy Mini is now A4, twice the page size: 16 pages ₱450, 24 pages ₱550
+    • New: Megy Magazine, a bigger A4 booklet with 2 videos: 16 pages ₱599, 24 pages ₱699
+    </en-US>
+
+Owner 2026-11-27: "A5 stays, with its current prices, the A4 album becomes another product which is the gap between mini and the cheapest album"; "₱599 / ₱699". Shipping (₱120) is on top, as the Mini's. Its prices need 0076 (#339) applied and `store_settings.a4_on` true before the upload. If 2.1.8 was never uploaded, upload 2.1.9 alone with the 2.1.8 lines added.
+
+### Release notes 2.1.8 (code 118: 2.1.7 + where each photo was taken + the 24-page Megy Mini; draft, check against the app on upload day)
+
+    <en-US>
+    • Megy Mini now comes in 24 pages too, for ₱449
     • Megy keeps photos from the same place together on your pages
     </en-US>
 
-Lines: #336 (the app reads each photo's location, as the website does; owner 2026-11-26: "Yes, add it", "put it on 2.1.8"). Only photos that carry a location are grouped by place; others go by time, as before. The 24-page Mini: #318 (owner 2026-11-26: "mini24 should already be live make it live. add it to 2.1.8 update"); its prices need 0075 (#316) live, which goes before the upload. 2.1.7 was uploaded when 2.1.8 was started (owner: "2.1.7 is already up"), so its lines are not repeated. The A4 Mini (owner 2026-11-27: "lets make megy mini as an a4 and price it at 450 and 550 respectively. Plus shipping."): its line is true only once the database sells A4 (0076's go-live update, the day 2.1.8 is live); until then 2.1.8 shows no Mini. Add any other 2.1.8 lines here on upload day.
+Lines: #336 (the app reads each photo's location, as the website does; owner 2026-11-26: "Yes, add it", "put it on 2.1.8"). Only photos that carry a location are grouped by place; others go by time, as before. The 24-page Mini: #318 (owner 2026-11-26: "mini24 should already be live make it live. add it to 2.1.8 update"); its prices need 0075 (#316) live, which goes before the upload. 2.1.7 was uploaded when 2.1.8 was started (owner: "2.1.7 is already up"), so its lines are not repeated. Add any other 2.1.8 lines here on upload day.
 
 ### Release notes 2.1.7 (code 117: 2.1.6 + the launch price + the Christmas video sale + the order tag + the placing notice; check against the app on upload day)
 

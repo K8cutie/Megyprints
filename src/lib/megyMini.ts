@@ -1,39 +1,40 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   MEGY MINI: the A4 booklet with staples, sold next to the albums, at 16 or
+   MEGY MINI: the A5 booklet with staples, sold next to the albums, at 16 or
    24 pages (owner, 2026-11-23: "24 pages at 449", "an additional a second
-   staple offering": one product, "Megy Mini, 16 or 24 pages"; 2026-11-27:
-   "lets make megy mini as an a4 and price it at 450 and 550 respectively.
-   Plus shipping." It was A5 until then.)
+   staple offering": one product, "Megy Mini, 16 or 24 pages").
 
    Owner, 2026-11-16: "Megy Mini along side the regular albums", "as an item
    not part of a package 350+shipping", "2 QR videos free for megy mini".
-   The print shop calls the format a "catalogue": A4 pages, 180gsm glossy
-   inside, a 260gsm cover, folded and stapled (saddle-stitched), no spine.
+   The print shop calls the format a "catalogue": 180gsm glossy pages inside,
+   a 260gsm cover, folded and stapled (saddle-stitched), no spine.
 
-   One place for what makes a book a Megy Mini, read by the website and the
-   app alike (it is in src/shared/sharedModules.ts). The price list
-   (public_price_schedule().mini, migration 0062) carries its price, shipping
-   fee and free videos; it is there only while the owner has Megy Mini on.
+   MEGY MAGAZINE: the same booklet at A4, its own product (owner, 2026-11-27:
+   "A5 stays, with its current prices, the A4 album becomes another product
+   which is the gap between mini and the cheapest album"; "₱599 / ₱699").
+   Same pages (16 or 24), staples, free videos and layouts, only bigger; its
+   own prices, sold beside the Mini. "Magazine" is what PH shops call an A4
+   stapled photo book.
 
-   A Mini is an album row like any other, told apart by its size: A4 is
-   '8.3x11.7' (a "WxH" name, because several places read the width off the
-   name) and is never offered as an album size (sizeOffer). Its cover is
-   'staple'. The database refuses anything else (0062: MP020, MP021, MP022).
+   One place for what makes a book a stapled booklet, read by the website and
+   the app alike (it is in src/shared/sharedModules.ts). The price list
+   carries each one's prices, shipping fee and free videos, there only while
+   the owner has it on: public_price_schedule().mini (A5, 0062) and .a4 (0076).
+   Older apps read only .mini, so they keep selling the A5 Mini as before.
 
-   THE A5 MINI (2026-11-16 to 11-27) was '5.8x8.3'. A5 and A4 are the same
-   shape (a sheet halved keeps its shape), so a Mini made at A5 opens as A4
-   with the same layouts, photos and words, only bigger (retiredSizes
-   MOVED_SIZES). The price list says which size is on sale (mini.size), and an
-   app offers the Mini only when that is its own size (miniOfferOf), so an
-   older A5 app hides it once A4 is on sale instead of selling A5 at A4's
-   price. A5 orders placed before still print as A5.
+   A booklet is an album row like any other, told apart by its size: A5 is
+   '5.8x8.3' and A4 '8.3x11.7' ("WxH" names, because several places read the
+   width off the name); neither is ever offered as an album size (sizeOffer).
+   Its cover is 'staple'. The database refuses anything else (MP020-MP022).
+   In code, "Mini" (isMiniSize, miniPages...) means either booklet; the
+   size picks the name, paper and price list (bookletName, bookletPaper,
+   miniOfferOf).
 
    ITS PAGES: 16 (4 folded sheets) or 24 (6). A stapled booklet's pages come
-   in fours; an open A4 spread takes a whole side of a press sheet, so a press
-   sheet carries 4 pages (it carried 8 at A5). The price list names the page counts on sale
-   (mini.options); one without them (before 0070) sells 16 only. Before the
-   Mini is made, the customer's choice is kept on the phone (MINI_PAGES_KEY,
-   like the occasion); once made, its pages say it (miniPagesOfAlbum).
+   in fours. An A5 press sheet carries 8 pages, an A4 one 4 (one open spread
+   a side, turned). The price list names the page counts on sale (options);
+   one without them (before 0070) sells 16 only. Before the booklet is made,
+   the customer's choice is kept on the phone (MINI_PAGES_KEY, like the
+   occasion); once made, its pages say it (miniPagesOfAlbum).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset, CoverType } from '../pages/builder/types';
@@ -41,13 +42,14 @@ import { MIN_ALBUM_PAGES } from '../pages/builder/densities';
 import type { KeyValueStore } from '../shared/platform';
 
 export const MINI_NAME = 'Megy Mini';
-/** A4 portrait, 210 × 297 mm. */
-export const MINI_SIZE: AlbumSizePreset = '8.3x11.7';
-/** The A5 Mini's size (148 × 210 mm), sold until 2026-11-27: its albums open
- *  as A4 (retiredSizes), and its orders still print as A5. */
-export const OLD_MINI_SIZE: AlbumSizePreset = '5.8x8.3';
-/** "A4", for the Mini's own words. */
-export const MINI_PAPER = 'A4';
+/** A5 portrait, 148 × 210 mm: the Megy Mini. */
+export const MINI_SIZE: AlbumSizePreset = '5.8x8.3';
+/** The A4 booklet's own name (owner, 2026-11-27: "another product"). */
+export const A4_NAME = 'Megy Magazine';
+/** A4 portrait, 210 × 297 mm: Megy Magazine. */
+export const A4_SIZE: AlbumSizePreset = '8.3x11.7';
+/** The stapled booklets, smallest first. */
+export const BOOKLET_SIZES: readonly AlbumSizePreset[] = [MINI_SIZE, A4_SIZE];
 export const MINI_COVER: CoverType = 'staple';
 /** The page counts a Mini is made at: 4 or 6 sheets folded in half and stapled. */
 export const MINI_PAGE_OPTIONS = [16, 24] as const;
@@ -75,7 +77,7 @@ export interface MiniOption {
   package_price: number;
 }
 
-/** What public_price_schedule().mini carries while Megy Mini is on sale.
+/** What public_price_schedule().mini (or .a4) carries while it is on sale.
  *  pages / price / package_price are the 16-page Mini's (what 2.1.5 and
  *  before read); `options` is every page count on sale, 16 first. */
 export interface MiniOffer {
@@ -89,9 +91,19 @@ export interface MiniOffer {
   options: MiniOption[];
 }
 
-/** A Megy Mini's size: A4, or the A5 it was before (old albums and orders). */
+/** A stapled booklet's size: the Megy Mini's A5 or Megy Magazine's A4. */
 export function isMiniSize(size: unknown): boolean {
-  return size === MINI_SIZE || size === OLD_MINI_SIZE;
+  return size === MINI_SIZE || size === A4_SIZE;
+}
+
+/** The booklet's name for its size: "Megy Mini" (A5) or "Megy Magazine" (A4). */
+export function bookletName(size: unknown): string {
+  return size === A4_SIZE ? A4_NAME : MINI_NAME;
+}
+
+/** The booklet's paper for its size: "A5" or "A4". */
+export function bookletPaper(size: unknown): 'A5' | 'A4' {
+  return size === A4_SIZE ? 'A4' : 'A5';
 }
 
 export function isMiniCover(cover: unknown): boolean {
@@ -177,13 +189,18 @@ const whole = (v: unknown): number | null => {
   return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
 };
 
-/** The Mini offer from a price list, or null when Megy Mini isn't on sale
- *  (off, no shipping fee, an older database, or anything malformed). */
-export function miniOfferOf(schedule: { mini?: unknown } | null | undefined): MiniOffer | null {
-  const m = schedule?.mini;
+/** A booklet's offer from a price list (the Megy Mini's, or Megy Magazine's
+ *  when `size` is A4), or null when it isn't on sale (off, no shipping fee,
+ *  an older database, or anything malformed). */
+export function miniOfferOf(
+  schedule: { mini?: unknown; a4?: unknown } | null | undefined,
+  size: AlbumSizePreset = MINI_SIZE,
+): MiniOffer | null {
+  if (!isMiniSize(size)) return null;
+  const m = size === A4_SIZE ? schedule?.a4 : schedule?.mini;
   if (!m || typeof m !== 'object') return null;
   const o = m as Record<string, unknown>;
-  if (o.size !== MINI_SIZE || o.cover !== MINI_COVER) return null;
+  if (o.size !== size || o.cover !== MINI_COVER) return null;
   const pages = whole(o.pages);
   const price = whole(o.price);
   const packagePrice = whole(o.package_price);
@@ -205,7 +222,7 @@ export function miniOfferOf(schedule: { mini?: unknown } | null | undefined): Mi
     options.sort((a, b) => a.pages - b.pages);
   }
   return {
-    size: MINI_SIZE,
+    size,
     cover: MINI_COVER,
     pages,
     price,
@@ -216,7 +233,7 @@ export function miniOfferOf(schedule: { mini?: unknown } | null | undefined): Mi
   };
 }
 
-/** The page counts on sale, 16 first ([] when Megy Mini isn't). */
+/** The page counts on sale, 16 first ([] when the booklet isn't). */
 export function miniPagesOnSale(offer: MiniOffer | null | undefined): MiniPages[] {
   return offer ? offer.options.map((o) => o.pages) : [];
 }
@@ -250,25 +267,26 @@ export function miniPagesForPhotos(count: number, onSale: readonly number[] = [M
 export function miniSuggestion(count: number, onSale: readonly number[] = [MINI_PAGES]): string {
   const fits = miniPagesForPhotos(count, onSale);
   if (fits != null) {
-    return `Or make a ${MINI_NAME}: ${fits} ${MINI_PAPER} pages, and your ${count} photos fit.`;
+    return `Or make a ${MINI_NAME}: ${fits} A5 pages, and your ${count} photos fit.`;
   }
-  return `Or make a ${MINI_NAME}: it needs only ${MINI_MIN_PHOTOS} photos for its ${MINI_PAGES} ${MINI_PAPER} pages.`;
+  return `Or make a ${MINI_NAME}: it needs only ${MINI_MIN_PHOTOS} photos for its ${MINI_PAGES} A5 pages.`;
 }
 
-/** A Mini named with its page count past the usual 16: "24-page Megy Mini". */
-function miniNamed(pages: unknown): string {
+/** A booklet named with its page count past the usual 16: "24-page Megy Mini". */
+export function miniNamed(pages: unknown, size: unknown = MINI_SIZE): string {
   const n = miniPagesOf(pages);
-  return n === MINI_PAGES ? MINI_NAME : `${n}-page ${MINI_NAME}`;
+  const name = bookletName(size);
+  return n === MINI_PAGES ? name : `${n}-page ${name}`;
 }
 
-/** Why a Mini of `pages` pages can't be made from this many photos, or null when it can. */
-export function miniPhotoProblem(count: number, pages: unknown = MINI_PAGES): string | null {
+/** Why a booklet of `pages` pages can't be made from this many photos, or null when it can. */
+export function miniPhotoProblem(count: number, pages: unknown = MINI_PAGES, size: unknown = MINI_SIZE): string | null {
   const { min, max } = miniPhotoRange(pages);
   if (count < min) {
-    return `A ${miniNamed(pages)} needs at least ${min} photos. Add ${min - count} more.`;
+    return `A ${miniNamed(pages, size)} needs at least ${min} photos. Add ${min - count} more.`;
   }
   if (count > max) {
-    return `A ${miniNamed(pages)} holds up to ${max} photos. Remove ${count - max}, or make an album instead.`;
+    return `A ${miniNamed(pages, size)} holds up to ${max} photos. Remove ${count - max}, or make an album instead.`;
   }
   return null;
 }

@@ -6,21 +6,20 @@
    and no white mats (the 6x8 album's layouts it used before, re-cut for A5,
    left an empty box on about half its pages). Words can still go ON a photo.
 
-   Every frame is an A-shape. An A4 page (the Mini's since 2026-11-27; it was
-   A5, the same shape, so these are the same layouts made bigger) halved is an
-   A5 landscape frame; halved again, an A6 portrait frame; again, an A7 small
-   landscape frame. A sheet of paper keeps its shape when it is halved (√2),
-   so every frame is one of two shapes, about 1.41 wide or 0.71 tall, and a
-   phone (4:3) or a camera (3:2) photo loses at most about 6% to the frame:
+   Every frame is an A-shape. An A5 page halved is an A6 landscape frame;
+   halved again, an A7 portrait frame; again, an A8 small landscape frame. A
+   sheet of paper keeps its shape when it is halved (√2), so every frame is
+   one of two shapes, about 1.41 wide or 0.71 tall, and a phone (4:3) or a
+   camera (3:2) photo loses at most about 6% to the frame:
 
-       Full page (A4)            1 portrait
-       Two landscapes            2 A5
-       Landscape over two        A5 over two A6 (and the other way up)
+       Full page (A5)            1 portrait
+       Two landscapes            2 A6
+       Landscape over two        A6 over two A7 (and the other way up)
          portraits
-       Four portraits            four A6
-       Landscape over portrait   A5 over an A6 and two A7 (and the other way up)
+       Four portraits            four A7
+       Landscape over portrait   A6 over an A7 and two A8 (and the other way up)
          + two small
-       Landscape over four small A5 over four A7
+       Landscape over four small A6 over four A8
 
    A-shapes alone can't fill every roll: whatever the mix, a page of them
    keeps (photos − 1 + landscape frames) a multiple of 3, so two rolls in three
@@ -39,15 +38,17 @@
 import type { PageTemplate, PhotoRatio, TemplateMargin, TemplateSlot } from './types';
 import { fill, gutterFrac } from './templateKit';
 
-/** The Mini's page, A4; A5 Minis made before 2026-11-27 keep resolving these
- *  (they open as A4: retiredSizes). Fractions of the page, so one set serves both. */
-const MINI = '8.3x11.7' as const;
-const OLD_MINI = '5.8x8.3' as const;
-const W_IN = 210 / 25.4;
-const H_IN = 297 / 25.4;
+const MINI = '5.8x8.3' as const;
+/** Megy Magazine's A4 (lib/megyMini) takes the same layouts: they are fractions
+ *  of the page, and A4 is A5's shape, so its frames are the same, only bigger
+ *  (the gaps too). Measured on A5, so the Megy Mini's pages stay exactly as
+ *  they were. */
+const A4 = '8.3x11.7' as const;
+const W_IN = 148 / 25.4;
+const H_IN = 210 / 25.4;
 const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
 
-/** The ratio a landscape frame (A5, A7: 1.41) and a portrait frame (A6, the
+/** The ratio a landscape frame (A6, A8: 1.41) and a portrait frame (A7, the
  *  page: 0.71) declare: the camera ratio nearest their shape. */
 export const MINI_WIDE: PhotoRatio = '3:2';
 export const MINI_TALL: PhotoRatio = '2:3';
@@ -71,7 +72,7 @@ function t(id: string, name: string, category: PageTemplate['category'], target:
   return {
     id, name, category, slotCount: slots.length, margin: ZERO,
     orientation: target === MINI_TALL ? 'portrait' : 'landscape',
-    targetRatio: target, albumSizes: [MINI, OLD_MINI], fullBleed: true, slots,
+    targetRatio: target, albumSizes: [MINI, A4], fullBleed: true, slots,
   };
 }
 
@@ -87,10 +88,9 @@ const fourSmall = (y: number) => [
   wide(0, y + quarterH + gy, halfW, quarterH), wide(right, y + quarterH + gy, halfW, quarterH),
 ];
 
-/* THIRD_ROW, drawn on A5 and the same fractions on A4: the row is 80 of the
-   page's 210 mm high (A4: 113 of 297); in it a portrait 54 of 148 mm wide
-   (A4: 77 mm, 3 in, over the 2 in print floor) and a landscape beside it; the
-   landscape above or below takes the rest of the page. Shapes 1.15 / 0.68 / 1.16. */
+/* THIRD_ROW: the row is 80 mm high; in it a 54 mm portrait (2.1 in, over
+   the 2 in print floor) and a 92.5 mm landscape; the landscape above or below
+   takes the rest of the page (148 x 128.5 mm). Shapes 1.15 / 0.68 / 1.16. */
 const NEAR_WIDE: PhotoRatio = '4:3';
 const rowH = 80 / 210;
 const bigH = 1 - rowH - gy;

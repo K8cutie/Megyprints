@@ -29,14 +29,14 @@ export const BINDING_INCHES = 0.375;
  *  is drawn with 1/2" (frames are fractions of the safe area, so they follow). */
 export const HARDBOUND_BINDING_INCHES = 0.5;
 
-/** The Megy Mini (A4, lib/megyMini) is stapled through its fold (saddle-
+/** A stapled booklet (the Megy Mini's A5, Megy Magazine's A4; lib/megyMini) is stapled through its fold (saddle-
  *  stitched): it opens flat, and its middle spread already runs one photo
  *  across the fold. So its pages keep NO allowance there and photos run to
  *  the fold (owner, 2026-11-17: "im trying to avoid pages with lots of free
  *  spaces since the pages for mini are very few"; it was the softcover's 3/8",
  *  a white strip beside every full page). */
 export const MINI_FOLD_INCHES = 0;
-/** The Mini's sizes: A4, and A5 before 2026-11-27 (lib/megyMini). */
+/** The stapled booklets' sizes: A4 and A5 (lib/megyMini). */
 const MINI_SIZE_KEYS: readonly string[] = ['8.3x11.7', '5.8x8.3'];
 
 /** The binding side allowance for an order's cover: 1/2" hardbound (every

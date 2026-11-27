@@ -8,11 +8,10 @@ import { saddleFolds, saddleFoldOf, saddleSheetPlan, PRESS_SHEET } from './print
 import { ALBUM_SIZES, type AlbumPage, type UploadedPhoto } from './types';
 import { ALBUM_INCHES, MIN_FRAME_INCHES } from './templateKit';
 import {
-  MINI_SIZE, OLD_MINI_SIZE, MINI_COVER, MINI_PAGES, MINI_MIN_PHOTOS, MINI_MAX_PHOTOS,
+  MINI_SIZE, MINI_COVER, MINI_PAGES, MINI_MIN_PHOTOS, MINI_MAX_PHOTOS,
   isMiniSize, bookPagesFor, minPhotosFor, maxPhotosFor, miniOfferOf, miniPhotoProblem,
 } from '../../lib/megyMini';
 import { miniPriceBreakdown, type PriceSchedule } from '../../lib/pricing';
-import { sheetsNote } from '../../lib/pressSheetWords';
 import { seedMathRandom, mulberry32 } from '../../test/seededRandom';
 
 seedMathRandom(); // same books every run (generateAlbum deals with Math.random)
@@ -43,37 +42,23 @@ const photoFills = (p: AlbumPage) => {
 };
 
 describe('Megy Mini: the product', () => {
-  it('is A4 with staples and 16 pages (owner, 2026-11-27: "lets make megy mini as an a4")', () => {
-    expect(MINI_SIZE).toBe('8.3x11.7');
+  it('is A5 with staples and 16 pages', () => {
+    expect(MINI_SIZE).toBe('5.8x8.3');
     expect(MINI_COVER).toBe('staple');
     expect(MINI_PAGES).toBe(16);
-    const a4 = ALBUM_SIZES.find((s) => s.preset === MINI_SIZE)!;
-    // 210 x 297 mm at 300 dpi
-    expect([a4.width, a4.height]).toEqual([2480, 3508]);
-    expect(ALBUM_INCHES[MINI_SIZE].w * 25.4).toBeCloseTo(210, 6);
-    expect(ALBUM_INCHES[MINI_SIZE].h * 25.4).toBeCloseTo(297, 6);
-  });
-
-  it('was A5 before, and an A5 Mini is still a Mini (old albums and orders)', () => {
-    expect(OLD_MINI_SIZE).toBe('5.8x8.3');
-    expect(isMiniSize(OLD_MINI_SIZE)).toBe(true);
-    const a5 = ALBUM_SIZES.find((s) => s.preset === OLD_MINI_SIZE)!;
+    const a5 = ALBUM_SIZES.find((s) => s.preset === MINI_SIZE)!;
+    // 148 x 210 mm at 300 dpi
     expect([a5.width, a5.height]).toEqual([1748, 2480]);
-    // the same shape: a sheet halved keeps its shape
-    expect(ALBUM_INCHES[OLD_MINI_SIZE].w / ALBUM_INCHES[OLD_MINI_SIZE].h).toBeCloseTo(ALBUM_INCHES[MINI_SIZE].w / ALBUM_INCHES[MINI_SIZE].h, 2);
-    // and the same layouts, so an A5 Mini opens as A4 with every page as it was
-    const ids = (s: typeof MINI_SIZE) => getTemplatesForAlbum(s).filter((t) => t.id.startsWith('mini-')).map((t) => t.id).sort();
-    expect(ids(OLD_MINI_SIZE)).toEqual(ids(MINI_SIZE));
-    expect(ids(MINI_SIZE).length).toBe(12);
+    expect(ALBUM_INCHES[MINI_SIZE].w * 25.4).toBeCloseTo(148, 6);
+    expect(ALBUM_INCHES[MINI_SIZE].h * 25.4).toBeCloseTo(210, 6);
   });
 
   it('is never offered as an album size', () => {
     expect(isSizeOfferableAmong(MINI_SIZE, [])).toBe(false);
-    expect(isSizeOfferableAmong(OLD_MINI_SIZE, [])).toBe(false);
     expect(offerableSizesAmong([]).map((s) => s.preset)).not.toContain(MINI_SIZE);
     // and every album size still is
     expect(offerableSizesAmong([]).map((s) => s.preset)).toEqual(
-      ALBUM_SIZES.map((s) => s.preset).filter((s) => s !== MINI_SIZE && s !== OLD_MINI_SIZE));
+      ALBUM_SIZES.map((s) => s.preset).filter((s) => !isMiniSize(s)));
   });
 
   it('has its own page and photo counts; albums keep theirs', () => {
@@ -165,11 +150,11 @@ describe('Megy Mini: the price (mirrors order_quote, 0062)', () => {
     min_pages: 40, sheet_rate: 66.25, hosting_reserve: 50,
     hosting_tiers: [{ years: 5, price: 0 }, { years: 10, price: 99 }],
     hd_memories_price: 49, disabled_sizes: [], sizes: {},
-    mini: { size: '8.3x11.7', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 },
+    mini: { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2 },
   } as unknown as PriceSchedule;
 
   it('reads the offer only when it is whole', () => {
-    expect(miniOfferOf(schedule)).toEqual({ size: '8.3x11.7', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2, options: [{ pages: 16, price: 350, package_price: 299 }] });
+    expect(miniOfferOf(schedule)).toEqual({ size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, package_price: 299, shipping_fee: 120, free_qr: 2, options: [{ pages: 16, price: 350, package_price: 299 }] });
     expect(miniOfferOf({ mini: null })).toBeNull();
     expect(miniOfferOf({})).toBeNull();
     expect(miniOfferOf(null)).toBeNull();
@@ -178,18 +163,12 @@ describe('Megy Mini: the price (mirrors order_quote, 0062)', () => {
     expect(miniOfferOf({ mini: { ...schedule.mini, size: '6x8' } })).toBeNull();
   });
 
-  it('is not on sale in this app while the price list still sells the A5 Mini (and an A5 app hides an A4 one)', () => {
-    // The price list names the size on sale; each app sells only its own, so
-    // neither sells a size at the other's price.
-    expect(miniOfferOf({ mini: { ...schedule.mini, size: OLD_MINI_SIZE } })).toBeNull();
-  });
-
   it('is the price + shipping, the two free videos included', () => {
     const offer = miniOfferOf(schedule)!;
     for (const qr of [0, 1, 2]) expect(miniPriceBreakdown(schedule, offer, qr).total).toBe(470);
     const b = miniPriceBreakdown(schedule, offer, 0);
     expect(b.items.map((i) => [i.label, i.amount])).toEqual([
-      ['Megy Mini — A4 · 16 pages · staples · 2 video memories included', 350],
+      ['Megy Mini — A5 · 16 pages · staples · 2 video memories included', 350],
       ['Shipping', 120],
     ]);
     expect(b.shipping).toBe(120);
@@ -228,46 +207,8 @@ describe('Megy Mini: the press sheet (folded and stapled)', () => {
     }
   });
 
-  it('A4: one spread a side, turned down the 19" side, full trim edges: 4 pages a sheet, 4 sheets', () => {
+  it('fits two A5 spreads a side on the 12.5 x 19 sheet with full trim edges: 8 pages a sheet, 2 sheets', () => {
     const { layout, sheets } = saddleSheetPlan(MINI_SIZE, 16);
-    expect(layout.rotated).toBe(true);
-    expect(layout.spreadsPerSide).toBe(1);
-    expect(layout.pagesPerSheet).toBe(4);
-    expect(sheets).toEqual([
-      { front: [{ left: 16, right: 1 }], back: [{ left: 2, right: 15 }] },
-      { front: [{ left: 14, right: 3 }], back: [{ left: 4, right: 13 }] },
-      { front: [{ left: 12, right: 5 }], back: [{ left: 6, right: 11 }] },
-      { front: [{ left: 10, right: 7 }], back: [{ left: 8, right: 9 }] },
-    ]);
-    const u = PRESS_SHEET.unprintableIn;
-    const s = layout.slots[0];
-    // turned: the A4 page's height runs across the sheet, the open spread down it
-    // (the print file's 300 dpi pixels: 3508 x 2 x 2480, within 0.1 mm)
-    expect(s.w * 25.4).toBeCloseTo(297, 0);
-    expect(s.h * 25.4).toBeCloseTo(420, 0);
-    expect(s.bleed).toEqual({ top: 0.125, right: 0.125, bottom: 0.125, left: 0.125 });
-    expect(s.x - s.bleed.left).toBeGreaterThanOrEqual(u - 1e-9);
-    expect(s.y - s.bleed.top).toBeGreaterThanOrEqual(u - 1e-9);
-    expect(s.x + s.w + s.bleed.right).toBeLessThanOrEqual(PRESS_SHEET.wIn - u + 1e-9);
-    expect(s.y + s.h + s.bleed.bottom).toBeLessThanOrEqual(PRESS_SHEET.hIn - u + 1e-9);
-    // about 1.4 mm to spare across, all of it: the tight fit the printer must hold
-    expect(layout.spareX * 25.4).toBeCloseTo(1.44, 1);
-    // it folds across its middle, between the two pages
-    expect(saddleFoldOf(layout, s)).toBeCloseTo(s.y + layout.trimW, 9);
-  });
-
-  it("tells the operator which Mini it is and how to finish its sheets", () => {
-    const plan = (sheets: number, pageCount: number) => ({ sheets, pageCount, layout: { leavesPerSheet: 1 } });
-    expect(sheetsNote({ page_count: 16, album_size: MINI_SIZE }, plan(4, 16), 'right')).toBe(
-      'Megy Mini A4: 4 sheets, both sides · flip on the long edge · one spread a side, turned: cut round its trim · fold it across the middle · nest them, fold 1 outermost · 2 staples through the fold');
-    expect(sheetsNote({ page_count: 16, album_size: OLD_MINI_SIZE }, plan(2, 16), 'right')).toMatch(
-      /^Megy Mini A5: 2 sheets, both sides · flip on the long edge · cut across between the two spreads/);
-    expect(sheetsNote({ page_count: 24, album_size: MINI_SIZE }, plan(4, 16), 'right')).toMatch(/Check: the print file has 16 pages, the order says 24\.$/);
-  });
-
-  it('A5 (orders from before 2026-11-27): two spreads a side on the 12.5 x 19 sheet with full trim edges: 8 pages a sheet, 2 sheets', () => {
-    const { layout, sheets } = saddleSheetPlan(OLD_MINI_SIZE, 16);
-    expect(layout.rotated).toBe(false);
     expect(layout.spreadsPerSide).toBe(2);
     expect(layout.pagesPerSheet).toBe(8);
     expect(sheets).toEqual([

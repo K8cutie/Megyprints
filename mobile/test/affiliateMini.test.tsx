@@ -16,14 +16,14 @@ const LIVE = {
   hosting_tiers: [{ price: 0, years: 5 }, { price: 99, years: 10 }, { price: 149, years: 15 }, { price: 199, years: 20 }],
   min_pages: 40, sheet_rate: 66.25,
   sizes: { '8x8': { hard_rate: 1075, pps: 4, soft_rate: 575 }, '6x6': { hard_rate: 900, pps: 12, soft_rate: 575 } },
-  mini: { size: '8.3x11.7', cover: 'staple', pages: 16, price: 350, free_qr: 2, shipping_fee: 120, package_price: 299 },
+  mini: { size: '5.8x8.3', cover: 'staple', pages: 16, price: 350, free_qr: 2, shipping_fee: 120, package_price: 299 },
 } as unknown as PriceSchedule;
 const ANNA = { code: 'ANNA', discount: 100 };
 const none = { qrCount: 0, hostingYears: null, hdMemories: false, tester: null } as const;
 
 describe('what the client pays with an affiliate code', () => {
   it('a Megy Mini: the full price (₱350 + ₱120 shipping), nothing off', () => {
-    const p = checkoutPrice(LIVE, { albumSize: '8.3x11.7', cover: 'softcover', pageCount: 16, ...none, affiliate: ANNA });
+    const p = checkoutPrice(LIVE, { albumSize: '5.8x8.3', cover: 'softcover', pageCount: 16, ...none, affiliate: ANNA });
     expect(p.mini).toBe(true);
     expect(p.total).toBe(470);
     expect(p.payTotal).toBe(470);
@@ -53,5 +53,5 @@ describe('the code box says what the code does', () => {
 
 it("the affiliate's terms say it", () => {
   expect(affiliateTerms({ on: true, ratePct: 10, discount: 100, windowDays: 30, minPayout: 500 }))
-    .toContain('A Megy Mini has no discount for your client, and you still earn 10% of its price.');
+    .toContain('A Megy Mini or Megy Magazine has no discount for your client, and you still earn 10% of its price.');
 });

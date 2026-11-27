@@ -29,7 +29,7 @@ import { DEFAULT_MATERIAL, type AlbumSizePreset, type CoverType, type MaterialTy
 import {
   PRESS_SHEET, sheetPlan, printSides, trimInches, coverOnSheet, saddleSheetPlan, saddleFoldOf, sheetLayout, type SheetPlan, type SheetPlacement, type SheetSlot, type Sides, type Turn,
 } from './printSheet';
-import { isMiniSize } from '../../lib/megyMini';
+import { bookletName, isMiniSize } from '../../lib/megyMini';
 import { LEGACY_LEAF_IN, coverWrapGeometry, isHardcover, leafInches, spineForLeaf, spineFromWrapWidth, spineLabel } from './coverGeometry';
 import { PAGE_ONE_RIGHT_MARK, type PageOneSide } from './binding';
 import type { TextPainter } from './textPainter';
@@ -331,7 +331,7 @@ async function imposeStapledSheets(src: ArrayBuffer | Uint8Array, size: AlbumSiz
   const { layout, sheets } = saddleSheetPlan(size, pages.length);
 
   const out = await PDFDocument.create();
-  out.setTitle(`${orderLabel} — Megy Mini press sheets`);
+  out.setTitle(`${orderLabel} — ${bookletName(size)} press sheets`);
   const words = writer(out, text);
 
   // A left page keeps its trim edge top, bottom and left; a right page top,
@@ -412,7 +412,7 @@ async function imposeStapledSheets(src: ArrayBuffer | Uint8Array, size: AlbumSiz
         }
       }
       const folds = spreads.map((sp, r) => `fold ${i * layout.spreadsPerSide + r + 1} · pages ${sp.left} | ${sp.right}`);
-      await drawSheetLabel(sheet, words, `${orderLabel} · Megy Mini · sheet ${i + 1} of ${sheets.length} · ${side}`, layout.slots.slice(0, spreads.length), folds);
+      await drawSheetLabel(sheet, words, `${orderLabel} · ${bookletName(size)} · sheet ${i + 1} of ${sheets.length} · ${side}`, layout.slots.slice(0, spreads.length), folds);
       sidesOut.push({ sheet: i + 1, side, placements: [] });
     }
   }

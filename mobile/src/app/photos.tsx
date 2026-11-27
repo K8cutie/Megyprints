@@ -35,7 +35,7 @@ import { photosOverBy, photosShortBy } from '@web/pages/builder/albumMinimum';
 import { inspectPhotos, releasePickedFiles } from '../../modules/photo-files';
 import { useBuilder } from '../builder/BuilderProvider';
 import { albumMade, KEEP_PAGES, keptToCarry, MADE_ALBUM_PHOTOS_MESSAGE, MADE_ALBUM_PHOTOS_NOTE, REMAKE_ALBUM, remakeQuestion, resizeMadeAlbum, saveStep, sizeTap, syncNote, syncPhotos, TO_COVER, type PhotoSync } from '../builder/albumFlow';
-import { MINI_INSTEAD, MINI_SIZE, miniOfferOf, miniPagesOnSale } from '@web/lib/megyMini';
+import { isMiniSize, MINI_INSTEAD, MINI_SIZE, miniOfferOf, miniPagesOnSale } from '@web/lib/megyMini';
 import { loadPriceSchedule, usePriceSchedule } from '../lib/checkout/priceSchedule';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { useGoToPreview } from '../builder/useGoToPreview';
@@ -86,7 +86,9 @@ export default function YourPhotos() {
   const loadSchedule = useCallback(() => loadPriceSchedule(supabase, supabaseConfigured), []);
   const prices = usePriceSchedule(loadSchedule);
   const miniOffer = miniOfferOf(prices.schedule);
-  const stepOpts = { miniOnSale: !!miniOffer, miniPages: builder.miniPages, miniPagesOnSale: miniPagesOnSale(miniOffer) };
+  // A booklet's own page counts on sale (Megy Magazine has its own list, .a4).
+  const ownOffer = isMiniSize(builder.albumSize) ? miniOfferOf(prices.schedule, builder.albumSize) : miniOffer;
+  const stepOpts = { miniOnSale: !!miniOffer, miniPages: builder.miniPages, miniPagesOnSale: miniPagesOnSale(ownOffer) };
   // A Megy Mini (16 to 40 photos, 24 to 60 at 24 pages) or an album (40 or
   // more): the album's size says.
   const picked = photoStep(draft.photos, builder.albumSize, stepOpts);
@@ -177,7 +179,7 @@ export default function YourPhotos() {
   const once = useOncePerVisit();
 
   const goOn = () => busyWhile(async () => {
-    // Too many photos for a Megy Mini: back to the sizes, to pick an album.
+    // Too many photos for a booklet: back to the sizes, to pick an album.
     if (step.main === 'size') { router.push('/album-size'); return true; }
     if (step.main !== 'next') { router.push('/pick-photos'); return true; }
     if (!(await putIn())) return false;

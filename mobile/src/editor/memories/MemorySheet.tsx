@@ -83,8 +83,8 @@ export function MemorySheet({ ctx, params, close }: SheetProps<MemorySheetParams
   // Longer videos (0067): up to 5 minutes when the price list sells them.
   const longPrices = longVideoPricesOf(schedule ?? {});
   const maxSeconds = maxVideoSecondsOf(schedule ?? {});
-  // The free videos: an album's FREE_QR_MEMORIES, a Megy Mini its own offer's.
-  const free = isMiniSize(builder.albumSize) ? (miniOfferOf(schedule)?.free_qr ?? MINI_FREE_QR) : FREE_QR_MEMORIES;
+  // The free videos: an album's FREE_QR_MEMORIES, a booklet its own offer's.
+  const free = isMiniSize(builder.albumSize) ? (miniOfferOf(schedule, builder.albumSize)?.free_qr ?? MINI_FREE_QR) : FREE_QR_MEMORIES;
   // THE POP-UP (owner's design 2026-10-26, re-asked 2026-11-24; the
   // Christmas sale drawn and approved the same day): when the next video is
   // the moment it costs money (lib/pricing videoPopupFor), it is said before

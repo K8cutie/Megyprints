@@ -191,18 +191,18 @@ describe('the 40-photo minimum (the website\'s own rule and words)', () => {
    offered "Make a Megy Mini instead"; the album's own way on stays the filled
    button. A Mini has its own step: 16 to 40 photos. */
 describe('the photos step and the Megy Mini', () => {
-  const MINI = '8.3x11.7';
+  const MINI = '5.8x8.3';
 
   it('an album with 16-39 photos: the Mini is offered, and the photos fit it', () => {
     const s = photoStep(range(0, 25), '8x8', { miniOnSale: true });
     expect(s).toMatchObject({ count: 25, short: 15, canGoOn: false, main: 'pick', mainLabel: 'Add 15 more photos', suggestMini: true });
-    expect(s.message).toBe('You have 25 photos. Albums need at least 40, one for every page: add 15 more to make your album. Or make a Megy Mini: 16 A4 pages, and your 25 photos fit.');
+    expect(s.message).toBe('You have 25 photos. Albums need at least 40, one for every page: add 15 more to make your album. Or make a Megy Mini: 16 A5 pages, and your 25 photos fit.');
   });
 
   it('an album with under 16 photos: the Mini is offered, and says it needs only 16', () => {
     const s = photoStep(range(0, 10), '8x8', { miniOnSale: true });
     expect(s.suggestMini).toBe(true);
-    expect(s.message).toMatch(/Or make a Megy Mini: it needs only 16 photos for its 16 A4 pages\.$/);
+    expect(s.message).toMatch(/Or make a Megy Mini: it needs only 16 photos for its 16 A5 pages\.$/);
   });
 
   it('no offer while the Mini is off, with no photos yet, or at 40 and more', () => {
