@@ -10,11 +10,13 @@ import TesterCodeSettings from './TesterCodeSettings';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
-import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
+import { SIZE_LABELS, costOf, perPageCost, sheetsFor, multiplePriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
 import MegyMiniPricing from './MegyMiniPricing';
 import LaunchPricing from './LaunchPricing';
+import VideoSalePricing from './VideoSalePricing';
+import SizePricing from './SizePricing';
 import { isMiniSize } from '../../lib/megyMini';
-import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
+import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setLongVideosOn, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
 const ORDER: AlbumSizePreset[] = ['6x4', '8x6', '6x8', '6x6', '8x8', '11.5x8', '8.5x11'];
 /** Sizes the picker offers. disabled_sizes can also name a size the app no
@@ -63,6 +65,8 @@ export default function PricingPanel() {
   const [savingLong, setSavingLong] = useState(false);
   const [savedLong, setSavedLong] = useState(false);
   const [longErr, setLongErr] = useState('');
+  const [switchingLong, setSwitchingLong] = useState(false);
+  const [longOnSaid, setLongOnSaid] = useState('');
 
   // ── Persisted shipping built into the price ("Free shipping", 0041) ──
   const [ship, setShip] = useState(0);
@@ -147,6 +151,18 @@ export default function PricingPanel() {
     setTimeout(() => setSavedCmp(''), 3000);
   };
 
+  // The on/off switch (0079): off while the free plan's storage can't hold them.
+  const switchLong = async (on: boolean) => {
+    setSwitchingLong(true); setLongOnSaid(''); setLongErr('');
+    const err = await setLongVideosOn(on);
+    setSwitchingLong(false);
+    if (err) { setLongErr(err); return; }
+    setModel((m) => (m ? { ...m, long_videos_on: on } : m));
+    setLongOnSaid(on
+      ? 'Saved. Longer videos are on: customers can add videos up to 5 minutes.'
+      : 'Saved. Longer videos are off: videos are up to 2 minutes again.');
+  };
+
   const saveLong = async () => {
     setSavingLong(true); setSavedLong(false); setLongErr('');
     const err = await setLongVideoPrices(long3, long5);
@@ -208,7 +224,7 @@ export default function PricingPanel() {
 
   const cost = costOf(model, size, bind, pages);
   const surcharge = model.sizes[size].surcharge;
-  const price = ownerPriceOf(model, size, bind, pages, mult); // marked-up cost + size premium
+  const price = multiplePriceOf(model, size, bind, pages, mult); // what-if: marked-up cost + size premium (ignores the set prices)
   // The shipping built into the price pays the courier — it is not profit.
   const shipIn = shippingAllowanceOf(model);
   const profit = price - cost - shipIn;
@@ -232,14 +248,17 @@ export default function PricingPanel() {
       {/* Tester code (0057): testers see the real price, the album is free */}
       <TesterCodeSettings />
 
+      {/* Album prices by size (0074) — what each album costs the customer */}
+      <SizePricing model={model} onSaved={setModel} />
+
       {/* Store price multiple — the PERSISTED setting that drives live checkout */}
       <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h3 className="font-display text-lg font-semibold text-dark">Store price multiple</h3>
             <p className="text-sm text-medium mt-0.5 max-w-lg">
-              This drives the <b>live checkout price</b> customers pay (production cost × this number).
-              Customers never see it. Distinct from the explore slider below.
+              Sets the price of <b>each extra sheet</b> (Bridgemedia&apos;s sheet cost × this number), and the price of any
+              size without its own price above. Customers never see it. Distinct from the explore slider below.
             </p>
           </div>
           <div className="flex items-end gap-3">
@@ -325,6 +344,11 @@ export default function PricingPanel() {
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-[220px]">
               <h4 className="font-semibold text-dark">Longer videos</h4>
+              {model.long_videos_on != null && (
+                <p className="text-xs font-semibold mt-1" data-testid="long-videos-status">
+                  {model.long_videos_on ? 'On now' : 'Off now'}
+                </p>
+              )}
               <p className="text-xs text-medium mt-1 leading-snug">
                 Videos are up to <b>2 minutes</b>. An album can have longer ones once: its longest video sets the price.
                 In 720p; HD is the HD price on top. Set a price to 0 to make it free.
@@ -349,6 +373,22 @@ export default function PricingPanel() {
               </button>
             </div>
           </div>
+          {model.long_videos_on != null && (
+            <div className="mt-3 flex items-center gap-2" role="radiogroup" aria-label="Longer videos on or off">
+              <button role="radio" aria-checked={model.long_videos_on} data-testid="long-videos-on"
+                disabled={switchingLong || model.long_videos_on} onClick={() => switchLong(true)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${model.long_videos_on ? 'bg-dark text-white border-dark' : 'border-line text-dark'}`}>
+                On
+              </button>
+              <button role="radio" aria-checked={!model.long_videos_on} data-testid="long-videos-off"
+                disabled={switchingLong || !model.long_videos_on} onClick={() => switchLong(false)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold border ${!model.long_videos_on ? 'bg-dark text-white border-dark' : 'border-line text-dark'}`}>
+                Off
+              </button>
+              <span className="text-xs text-medium">Off: every video is up to 2 minutes. The prices above are kept.</span>
+            </div>
+          )}
+          {longOnSaid && <p className="text-xs text-success mt-2 font-semibold" data-testid="long-videos-saved">{longOnSaid}</p>}
           {savedLong && <p className="text-xs text-success mt-2 font-semibold">Saved - longer videos now cost {peso(model.video_3min_price ?? 0)} (3 min) and {peso(model.video_5min_price ?? 0)} (5 min).</p>}
           {longErr && <p className="text-xs text-rust-deep mt-2">Couldn't save: {longErr}</p>}
         </div>
@@ -386,6 +426,9 @@ export default function PricingPanel() {
 
         {/* Launch price (0072): today's prices as % off a regular price, with an end date */}
         <LaunchPricing />
+
+        {/* Video memory sale (0078): ₱50 a video, a named sale with a pack price */}
+        <VideoSalePricing />
 
         {/* Crossed-out "was" price — the real old price, with an end date */}
         <div className="mt-5 pt-5 border-t border-sand-deep">
@@ -707,8 +750,8 @@ function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
               {prem > 0 && <span className="ml-1.5 text-[10px] font-sans text-cocoa">+{peso(prem)}</span>}
             </td>
             <td className="px-4 py-2.5 text-right text-dark">{peso(c)}</td>
-            <td className="px-4 py-2.5 text-right text-success">{peso(ownerPriceOf(model, k, bind, 40, 3))}</td>
-            <td className="px-4 py-2.5 text-right text-rust">{peso(ownerPriceOf(model, k, bind, 40, 5))}</td>
+            <td className="px-4 py-2.5 text-right text-success">{peso(multiplePriceOf(model, k, bind, 40, 3))}</td>
+            <td className="px-4 py-2.5 text-right text-rust">{peso(multiplePriceOf(model, k, bind, 40, 5))}</td>
             <td className="px-4 py-2.5 text-right text-medium">₱{cpp.toFixed(2)}</td>
           </tr>
         );
