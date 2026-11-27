@@ -156,6 +156,25 @@ export function photosOf(plan: PagePlan): number[] {
   return photosDrawn(plan);
 }
 
+/** Every photo the album's pages and cover draw, where each is used (the
+ *  pages' and the cover's own lists: photosOf, coverPhotos). For the check
+ *  before an order is saved (lib/checkout/photoCheck.ts, bug hunt B-D5). */
+export function photosUsed(album: PrintAlbum, order: Pick<PrintOrderSpecs, 'cover' | 'material'>, text: DrawTools['text']): { page: string; index: number }[] {
+  const out: { page: string; index: number }[] = [];
+  const bindingIn = bindingInchesFor(order.cover);
+  for (let i = 0; i < album.pages.length; i++) {
+    for (const index of photosOf(printPlan(album, i, bindingIn))) out.push({ page: `page ${i + 1}`, index });
+  }
+  if (album.coverFront) {
+    const plan = coverPlanFor({
+      albumSize: album.albumSize, pageCount: album.pages.length, cover: order.cover, material: order.material,
+      coverFront: album.coverFront, photoCount: album.photoCount, photoIds: album.photoIds, orderNumber: null,
+    }, text);
+    for (const index of coverPhotos(plan)) out.push({ page: 'the cover', index });
+  }
+  return out;
+}
+
 /** Run `draw` with photos `list` open, and let them all go after it. */
 async function withPhotos<T>(list: readonly number[], open: OpenPhoto, page: string, draw: (photos: PhotoSource) => T | Promise<T>): Promise<T> {
   const opened = new Map<number, SkImage>();
