@@ -1,6 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    MEGY MINI: the 16-page A5 booklet with staples, sold next to the albums.
 
+   MEGY MAGAZINE: the same booklet at A4, its own product (owner, 2026-11-27:
+   "A5 stays, with its current prices, the A4 album becomes another product
+   which is the gap between mini and the cheapest album"; "₱599 / ₱699").
+   Sold in the app beside the Mini from its own price list
+   (public_price_schedule().a4, 0076). The website never sells either; it
+   prints both (isMiniSize means either booklet; bookletName names it).
+
    Owner, 2026-11-16: "Megy Mini along side the regular albums", "as an item
    not part of a package 350+shipping", "2 QR videos free for megy mini".
    The print shop calls the format a "catalogue": A5 pages, 180gsm glossy
@@ -23,6 +30,10 @@ import { MIN_ALBUM_PAGES } from '../pages/builder/densities';
 export const MINI_NAME = 'Megy Mini';
 /** A5 portrait, 148 × 210 mm. */
 export const MINI_SIZE: AlbumSizePreset = '5.8x8.3';
+/** The A4 booklet's own name (owner, 2026-11-27: "another product"). */
+export const A4_NAME = 'Megy Magazine';
+/** A4 portrait, 210 × 297 mm: Megy Magazine. */
+export const A4_SIZE: AlbumSizePreset = '8.3x11.7';
 export const MINI_COVER: CoverType = 'staple';
 /** Always exactly this many pages: 4 sheets folded in half and stapled. */
 export const MINI_PAGES = 16;
@@ -48,8 +59,19 @@ export interface MiniOffer {
   free_qr: number;
 }
 
+/** A stapled booklet's size: the Megy Mini's A5 or Megy Magazine's A4. */
 export function isMiniSize(size: unknown): boolean {
-  return size === MINI_SIZE;
+  return size === MINI_SIZE || size === A4_SIZE;
+}
+
+/** The booklet's name for its size: "Megy Mini" (A5) or "Megy Magazine" (A4). */
+export function bookletName(size: unknown): string {
+  return size === A4_SIZE ? A4_NAME : MINI_NAME;
+}
+
+/** The booklet's paper for its size: "A5" or "A4". */
+export function bookletPaper(size: unknown): 'A5' | 'A4' {
+  return size === A4_SIZE ? 'A4' : 'A5';
 }
 
 export function isMiniCover(cover: unknown): boolean {

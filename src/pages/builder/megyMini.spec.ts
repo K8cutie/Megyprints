@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { isSizeOfferable, offerableAlbumSizes } from './albumSizeOptions';
 import { coverWrapGeometry, isHardcover, spineWidthInches, PRINTER_SPEC } from './coverGeometry';
 import { bindingInchesFor, BINDING_INCHES } from './binding';
-import { saddleFolds, saddleSheetPlan, PRESS_SHEET } from './printSheet';
+import { saddleFolds, saddleFoldOf, saddleSheetPlan, PRESS_SHEET } from './printSheet';
 import { ALBUM_SIZES } from './types';
 import { ALBUM_INCHES } from './templateKit';
 import {
-  MINI_SIZE, MINI_COVER, MINI_PAGES,
+  MINI_SIZE, MINI_COVER, MINI_PAGES, A4_SIZE, A4_NAME, bookletName, bookletPaper,
   isMiniSize, bookPagesFor, minPhotosFor, maxPhotosFor, miniOfferOf, miniPhotoProblem,
 } from '../../lib/megyMini';
 import { miniPriceBreakdown, type PriceSchedule } from '../../lib/pricing';
@@ -160,6 +160,39 @@ describe('Megy Mini: the press sheet (folded and stapled)', () => {
     }
     // the two spreads never overlap, and each folds down its middle
     expect(layout.slots[1].y - layout.slots[1].bleed.top).toBeGreaterThanOrEqual(layout.slots[0].y + layout.slots[0].h + layout.slots[0].bleed.bottom - 1e-9);
-    expect(layout.foldX).toBeCloseTo(layout.slots[0].x + layout.trimW, 9);
+    expect(saddleFoldOf(layout, layout.slots[0])).toBeCloseTo(layout.slots[0].x + layout.trimW, 9);
+  });
+});
+
+/* MEGY MAGAZINE (owner, 2026-11-27: "the A4 album becomes another product"):
+   the same booklet at A4, sold in the app beside the Mini. The website prints
+   it (printSheetPdf.spec: one turned spread a side) and never offers it. */
+describe('Megy Magazine: the A4 booklet beside the Mini', () => {
+  it('is A4, a booklet with its own name; the Mini stays A5', () => {
+    expect(A4_SIZE).toBe('8.3x11.7');
+    expect(MINI_SIZE).toBe('5.8x8.3');
+    expect(isMiniSize(A4_SIZE)).toBe(true);
+    expect(bookletName(A4_SIZE)).toBe(A4_NAME);
+    expect(A4_NAME).toBe('Megy Magazine');
+    expect(bookletName(MINI_SIZE)).toBe('Megy Mini');
+    expect([bookletPaper(MINI_SIZE), bookletPaper(A4_SIZE)]).toEqual(['A5', 'A4']);
+    expect(ALBUM_INCHES[A4_SIZE].w * 25.4).toBeCloseTo(210, 6);
+    expect(ALBUM_INCHES[A4_SIZE].h * 25.4).toBeCloseTo(297, 6);
+  });
+
+  it('is never offered as an album size on the website', () => {
+    expect(isSizeOfferable(A4_SIZE)).toBe(false);
+    expect(offerableAlbumSizes().map((s) => s.preset)).not.toContain(A4_SIZE);
+  });
+
+  it('bills in its own name (an A4 offer from the price list, 0076)', () => {
+    const schedule = { hosting_tiers: [{ years: 5, price: 0 }], hd_memories_price: 99 } as unknown as PriceSchedule;
+    const offer = { size: A4_SIZE, cover: MINI_COVER, pages: 16, price: 599, package_price: 549, shipping_fee: 120, free_qr: 2 };
+    const b = miniPriceBreakdown(schedule, offer, 0);
+    expect(b.items.map((i) => [i.label, i.amount])).toEqual([
+      ['Megy Magazine — A4 · 16 pages · staples · 2 video memories included', 599],
+      ['Shipping', 120],
+    ]);
+    expect(b.total).toBe(719);
   });
 });

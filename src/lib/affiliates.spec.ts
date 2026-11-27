@@ -196,7 +196,7 @@ describe("the affiliate's page", () => {
     expect(t).toContain('within 45 days');
     expect(t).toContain('at least ₱800');
     expect(t).toMatch(/coupon or deal sites/);
-    expect(t).toContain('A Megy Mini has no discount for your client, and you still earn 12% of its price.');
+    expect(t).toContain('A Megy Mini or Megy Magazine has no discount for your client, and you still earn 12% of its price.');
   });
 });
 
