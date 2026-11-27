@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
@@ -150,6 +150,14 @@ beforeEach(() => {
   host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
 });
 afterEach(async () => { await act(async () => { root.unmount(); }); host.remove(); vi.useRealTimers(); });
+// Home's GSAP ScrollTrigger keeps a 250 ms timer for the life of the page.
+// jsdom goes away when this file ends; a tick after that called
+// requestAnimationFrame, which was gone ("Unhandled error", the run failed
+// now and then). Stop it while the page is still here.
+afterAll(async () => {
+  const { ScrollTrigger } = await import('gsap/ScrollTrigger');
+  ScrollTrigger.disable();
+});
 
 describe('who sees it', () => {
   it('the Android app while testing: one filled button, first on Home, and what to do', async () => {

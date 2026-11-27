@@ -10,6 +10,7 @@ import {
 } from '../lib/eventBookings';
 import { ALBUM_SIZES } from './builder/types';
 import { EVENTS_CARD } from './homeCopy';
+import { EVENTS_ON, EVENTS_PAUSED } from '../lib/eventsSwitch';
 
 /* ══════════════════════════════════════════════════════════════════════════
    /events — Megyprints Events for 15 or more guests: what it is, how booking
@@ -46,6 +47,44 @@ export default function Events() {
       .catch((e: Error) => { if (alive) setErr(e.message); });
     return () => { alive = false; };
   }, [user, reloadTick]);
+
+  // While Events is off (lib/eventsSwitch.ts): it says so, takes no new
+  // request, and a signed-in host still sees the requests they sent.
+  if (!EVENTS_ON) {
+    return (
+      <div className="bg-cream min-h-screen">
+        <section className="max-w-3xl mx-auto px-4 pt-28 pb-10 text-center" data-testid="events-paused">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#9A4A2C]">Megyprints Events</p>
+          <h1 className="mt-2 font-display text-3xl sm:text-4xl font-bold text-dark leading-tight" data-testid="events-title">{EVENTS_PAUSED.title}</h1>
+          <p className="mt-4 text-medium leading-relaxed">{EVENTS_PAUSED.body}</p>
+          <Link to="/" data-testid="events-paused-albums"
+            className="mt-6 inline-flex items-center justify-center gap-1.5 px-8 py-3.5 bg-blush-pink text-white font-semibold rounded-xl hover:brightness-105 shadow-sm">
+            {EVENTS_PAUSED.cta} <ChevronRight size={18} />
+          </Link>
+        </section>
+        {(!user || (bookings && bookings.length > 0) || err) && (
+          <section className="max-w-3xl mx-auto px-4 pb-16">
+            <div className="flex items-center gap-2 mb-3">
+              <CalendarHeart className="text-blush-pink" size={20} />
+              <h2 className="font-display text-xl font-semibold text-dark">Your bookings</h2>
+            </div>
+            {!user && (
+              <p className="text-sm text-medium" data-testid="events-signed-out">
+                Already sent a request?{' '}
+                <button type="button" onClick={openLogin} className="underline font-semibold text-cocoa">Sign in to see it</button>.
+              </p>
+            )}
+            {err && <p className="text-sm text-red-500 mb-4">We couldn’t load your bookings: {err}</p>}
+            <div className="space-y-4">
+              {bookings?.map((b) => (
+                <BookingCard key={b.id} booking={b} focused={b.id === focusId} onChanged={() => setReloadTick((n) => n + 1)} />
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="bg-cream min-h-screen">

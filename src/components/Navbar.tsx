@@ -3,13 +3,15 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X } from 'lucide-react';
 import AuthNav from './AuthNav';
+import { EVENTS_ON } from '../lib/eventsSwitch';
 
+// Events only while it is on (lib/eventsSwitch.ts).
 const navLinks = [
   { label: 'Home', path: '/' },
   { label: 'Events', path: '/events' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
-];
+].filter((l) => EVENTS_ON || l.path !== '/events');
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
