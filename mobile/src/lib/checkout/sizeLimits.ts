@@ -16,3 +16,15 @@ export class PagesTooBigError extends Error {
 export function isTooLargeUpload(message: string): boolean {
   return /exceeded the maximum allowed size|payload too large|entity too large|\b413\b/i.test(message);
 }
+
+/* Bug hunt B-D6 (2026-11-28): with ~16 MB free, Place order made the order
+   row, then couldn't make the cover, and said "close your other apps": a half
+   order and the wrong reason. Making the print files needs room (the pages
+   file up to 45 MB, the cover, pictures on the way, a video's smaller copy),
+   so the space is checked BEFORE the order is saved. */
+export const MIN_FREE_BYTES = 300 * 1024 * 1024;
+export const PHONE_ALMOST_FULL = "Your phone is almost full. Free up some space (about 300 MB: delete a few videos or apps you don't use), then tap Place order again.";
+/** The words when the phone has too little room, else null (unknown room: go on). */
+export function lowSpaceWords(freeBytes: number | null | undefined): string | null {
+  return typeof freeBytes === 'number' && Number.isFinite(freeBytes) && freeBytes >= 0 && freeBytes < MIN_FREE_BYTES ? PHONE_ALMOST_FULL : null;
+}

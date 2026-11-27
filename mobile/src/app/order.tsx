@@ -71,6 +71,8 @@ import { OrderAlreadySavedError, type PlacedOrder } from '../lib/checkout/sendOr
 import { finishToCopy, sameFinishNote, type CopiedFinish } from '../lib/checkout/sameFinish';
 import { lastFinishForAlbum } from '../lib/orders/myOrders';
 import { newOrderId } from '../lib/checkout/orderId';
+import { lowSpaceWords } from '../lib/checkout/sizeLimits';
+import { Paths } from 'expo-file-system';
 import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payAfterPlacing, placedOn, PRICE_MOVED, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
@@ -129,6 +131,8 @@ export default function OrderScreen() {
   const ownText = own?.text ?? null;
   // The order a try made: Place order again reuses it (never a second order).
   const placedRef = useRef<PlacedOrder | null>(null);
+  // The phone's free space, read when an order is about to be made (B-D6); unknown: go on.
+  const roomWords = (): string | null => { try { return lowSpaceWords(Paths.availableDiskSpace); } catch { return null; } };
   // The id the next new order is sent with, kept until an order is known saved (L1-47).
   const orderIdRef = useRef<string | null>(null);
   // The files a try sent: never made or sent again (sendOrder `sent`).
@@ -412,6 +416,9 @@ export default function OrderScreen() {
       setMessage('Getting your album ready… Tap Place order again in a moment.');
       return;
     }
+    // Too little room on the phone to make the print files: said before any order is saved (B-D6).
+    const tooFull = live ? roomWords() : null;
+    if (tooFull) { setMessage(tooFull); return; }
     // A send that stopped after its order row was saved, this visit (L1-45):
     // finish THAT order from what it froze, never from the form.
     if (retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing, eventAlbum: !!eventLink })) {
@@ -451,6 +458,8 @@ export default function OrderScreen() {
     const orderId = savedId ?? unsent?.order_id;
     if (!orderId || !userId || !b || finishBusy) return;
     if (!ownText) { setMessage(`Getting your album ready… Tap ${savedId ? 'Place order' : 'Finish sending'} again in a moment.`); return; }
+    const tooFull = roomWords();
+    if (tooFull) { setMessage(tooFull.replace('Place order', savedId ? 'Place order' : 'Finish sending')); return; }
     setMessage('');
     setFinishBusy(true);
     try {
