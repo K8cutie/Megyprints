@@ -76,7 +76,8 @@ begin
      set mini_shipping_fee = 120, mini_price = 350, mini_package_price = 299, mini_free_qr = 2,
          mini24_price = 449, mini24_package_price = 399
    where id = 1;
-  update public.store_settings set mini_on = true where id = 1;
+  -- and Megy Magazine off, as 0076 leaves it
+  update public.store_settings set mini_on = true, a4_on = false where id = 1;
   perform pg_temp.as_user(v_c);
 end $$;
 
