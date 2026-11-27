@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — 0070_long_videos_switch.sql  (idempotent; safe to re-run)
+--  MEGY PRINTS — 0076_long_videos_switch.sql  (idempotent; safe to re-run)
 --
 --  WHY (owner, 2026-11-23): "disable the longer videos first and put an on off
 --  switch for those features in the admin panel". The live project is on
@@ -19,13 +19,14 @@
 --    3. owner_pricing_model() says whether it is on; set_long_videos_on()
 --       switches it (owner only). The 3- and 5-minute prices are kept.
 --
---  Run AFTER 0069.
+--  Run AFTER 0075: the price list and owner view are 0075's, unchanged but
+--  for this switch.
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. The switch ══════
 alter table public.store_settings add column if not exists long_videos_on boolean not null default false;
 
--- ══════ 2. The price list (0067's, longer videos only while on) ══════
+-- ══════ 2. The price list (0075's, longer videos only while on) ══════
 create or replace function public.public_price_schedule()
 returns jsonb
 language plpgsql
@@ -45,6 +46,8 @@ declare
   show_cmp   boolean;
   ship       numeric;
   reserve    numeric;
+  sheet_rate numeric;
+  base       numeric;
   k          text;
   v          jsonb;
 begin
@@ -58,16 +61,24 @@ begin
   disabled := coalesce(srow -> 'disabled_sizes', '[]'::jsonb);
   ship     := greatest(coalesce(m.shipping_allowance, 0), 0);
   reserve  := greatest(coalesce(m.hosting_reserve, 0), 0);
+  sheet_rate := m.sheet_cost * mult;
   show_cmp := m.compare_multiple is not null and m.compare_until is not null
               and m.compare_multiple > mult
               and m.compare_until >= (now() at time zone 'Asia/Manila')::date;
 
   for k, v in select * from jsonb_each(m.sizes) loop
+    -- The sheets in the smallest album, which a set price already pays for.
+    base := ceil(m.min_pages::numeric / (v ->> 'pps')::int) * sheet_rate + reserve;
     out_sizes := out_sizes || jsonb_build_object(k, jsonb_build_object(
       'pps',       (v ->> 'pps')::int,
-      -- shipping rides inside the rate: flat, never multiplied
-      'soft_rate', (m.soft_cover_cost + m.soft_bind_cost) * mult + (v ->> 'surcharge')::numeric + ship,
-      'hard_rate', (v ->> 'hb')::numeric * mult + (v ->> 'surcharge')::numeric + ship
+      -- A set price (0074) wins; otherwise the multiple. Shipping rides inside
+      -- the rate: flat, never multiplied.
+      'soft_rate', case when jsonb_typeof(v -> 'price_soft') = 'number'
+                        then (v ->> 'price_soft')::numeric - base
+                        else (m.soft_cover_cost + m.soft_bind_cost) * mult + (v ->> 'surcharge')::numeric + ship end,
+      'hard_rate', case when jsonb_typeof(v -> 'price_hard') = 'number'
+                        then (v ->> 'price_hard')::numeric - base
+                        else (v ->> 'hb')::numeric * mult + (v ->> 'surcharge')::numeric + ship end
     ));
     if show_cmp then
       cmp_sizes := cmp_sizes || jsonb_build_object(k, jsonb_build_object(
@@ -93,17 +104,22 @@ begin
       'price',         m.mini_price,
       'package_price', m.mini_package_price,
       'shipping_fee',  m.mini_shipping_fee,
-      'free_qr',       m.mini_free_qr
+      'free_qr',       m.mini_free_qr,
+      -- 0075: every page count on sale. The top-level pages/price above stay
+      -- the 16-page Mini, for app versions that read only those.
+      'options',       jsonb_build_array(
+        jsonb_build_object('pages', 16, 'price', m.mini_price,    'package_price', m.mini_package_price),
+        jsonb_build_object('pages', 24, 'price', m.mini24_price, 'package_price', m.mini24_package_price))
     );
   end if;
 
   return jsonb_build_object(
     'min_pages',           m.min_pages,
-    'sheet_rate',          m.sheet_cost * mult,
+    'sheet_rate',          sheet_rate,
     'hosting_reserve',     m.hosting_reserve,
     'hosting_tiers',       m.hosting_tiers,
     'hd_memories_price',   m.hd_memories_price,
-    -- 0070: only while the owner has them on; null = videos up to 2 minutes
+    -- 0076: only while the owner has them on; null = videos up to 2 minutes
     'long_video_prices',   case when coalesce((srow ->> 'long_videos_on')::boolean, false)
                                 then jsonb_build_object('3', m.video_3min_price, '5', m.video_5min_price) end,
     'free_shipping_value', ship,
@@ -159,7 +175,10 @@ begin
     'mini_shipping_fee',    m.mini_shipping_fee,
     'mini_free_qr',         m.mini_free_qr,
     'mini_cost',            m.mini_cost,
-    'mini_hosting_reserve', m.mini_hosting_reserve
+    'mini_hosting_reserve', m.mini_hosting_reserve,
+    'mini24_price',         m.mini24_price,
+    'mini24_package_price', m.mini24_package_price,
+    'mini24_cost',          m.mini24_cost
   );
 end
 $$;

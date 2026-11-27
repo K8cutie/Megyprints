@@ -4,7 +4,7 @@
    (owner) — fulfillment never sees the peso amount. */
 
 import { useState } from 'react';
-import { Loader2, Check, Download, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
+import { Loader2, Check, AlertTriangle, Receipt, Printer, FileImage } from 'lucide-react';
 import {
   type AdminOrder, type OrderPatch, ORDER_STATUSES, STATUS_LABELS, updateOrder, setOrderStatus, markOrderPaid, printFilesOf, quoteParts,
   reapplyHostingTerm, unsentMarkPaidQuestion, unsentNote,
@@ -12,7 +12,7 @@ import {
 import { peso } from '../../lib/eventBookings';
 import { supabase } from '../../lib/supabase';
 import {
-  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, downloadPrintFile, downloadCoverFile, orderSpine,
+  downloadAlbumSheets, downloadCoverSheet, downloadPressTestSheet, downloadSheetsAsJpeg, orderSpine,
 } from '../../lib/pressSheetFiles';
 
 export default function OrdersPanel({ orders, onChanged, canSeeFinancials, printReadyIds, coverReadyIds = null, unsent = null }: {
@@ -92,8 +92,8 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing, un
   // What a long download is doing ("Making the JPEG pictures: 3 of 25…").
   const [progress, setProgress] = useState<string | null>(null);
 
-  // The print files, as they are or laid out on the shop's 12.5 × 19 sheet
-  // (pressSheetFiles). None of them has a font.
+  // The print files, laid out on the shop's 12.5 × 19 sheet (pressSheetFiles).
+  // None of them has a font.
   const pressFile = async (make: (progress: (line: string) => void) => Promise<string>) => {
     setSaving(true); setErr(null); setNote(null); setProgress(null);
     try { setNote(await make(setProgress)); } catch (e) { setErr(e instanceof Error ? e.message : 'Could not make the sheet file.'); }
@@ -167,7 +167,7 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing, un
             </span>
             {o.copy_of_order_number && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-[#F1ECFF] text-[#7A5EC9]" data-testid="order-copy-of"
-                title="A guest's copy of an event album: print it from that order's files (Print PDF and Cover PDF here already do).">
+                title="A guest's copy of an event album: print it from that order's files (Print sheets, Cover sheet and Sheets as JPEG here already do).">
                 Copy of {o.copy_of_order_number}
               </span>
             )}
@@ -283,18 +283,9 @@ function OrderRow({ o, onChanged, canSeeFinancials, printReady, coverMissing, un
               <FileImage size={13} /> Sheets as JPEG
             </button>
           )}
-          {paid && (
-            <button onClick={() => pressFile(() => downloadPrintFile(o))} disabled={saving} data-testid="order-print-pdf"
-              className="h-8 px-3 rounded-lg bg-blush text-xs font-medium text-[#C98A5E] flex items-center gap-1 disabled:opacity-50">
-              <Download size={13} /> Print PDF
-            </button>
-          )}
-          {paid && (
-            <button onClick={() => pressFile(() => downloadCoverFile(o))} disabled={saving} data-testid="order-cover-pdf"
-              className="h-8 px-3 rounded-lg bg-[#F1ECFF] text-xs font-medium text-[#7A5EC9] flex items-center gap-1 disabled:opacity-50">
-              <Download size={13} /> Cover PDF
-            </button>
-          )}
+          {/* No loose-page downloads ("Print PDF" / "Cover PDF", removed 2026-11-23):
+              the press takes only the 12.5 × 19 sheet, and a file of loose
+              album-size pages beside these got opened as the printout. */}
           <select value={o.status} onChange={(e) => changeStatus(e.target.value as AdminOrder['status'])} disabled={saving}
             className="h-8 px-2 rounded-lg border border-line text-sm outline-none focus:border-peach bg-white">
             {ORDER_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}

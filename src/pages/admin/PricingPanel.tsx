@@ -10,8 +10,10 @@ import TesterCodeSettings from './TesterCodeSettings';
 import { QrCode } from 'lucide-react';
 import type { AlbumSizePreset } from '../builder/types';
 import { ALBUM_SIZES } from '../builder/types';
-import { SIZE_LABELS, costOf, perPageCost, sheetsFor, ownerPriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
+import { SIZE_LABELS, costOf, perPageCost, sheetsFor, multiplePriceOf, shippingAllowanceOf, manilaToday, type Binding, type PricingModel, hostingTiersOf } from '../../lib/pricing';
 import MegyMiniPricing from './MegyMiniPricing';
+import LaunchPricing from './LaunchPricing';
+import SizePricing from './SizePricing';
 import { isMiniSize } from '../../lib/megyMini';
 import { setPriceMultiple, getDisabledSizes, setDisabledSizes, loadOwnerPricingModel, setHostingReserve, setHostingTiers, setHdMemoriesPrice, setLongVideoPrices, setLongVideosOn, setShippingAllowance, setPriceCompare } from '../../lib/storeSettings';
 
@@ -148,7 +150,7 @@ export default function PricingPanel() {
     setTimeout(() => setSavedCmp(''), 3000);
   };
 
-  // The on/off switch (0070): off while the free plan's storage can't hold them.
+  // The on/off switch (0076): off while the free plan's storage can't hold them.
   const switchLong = async (on: boolean) => {
     setSwitchingLong(true); setLongOnSaid(''); setLongErr('');
     const err = await setLongVideosOn(on);
@@ -221,7 +223,7 @@ export default function PricingPanel() {
 
   const cost = costOf(model, size, bind, pages);
   const surcharge = model.sizes[size].surcharge;
-  const price = ownerPriceOf(model, size, bind, pages, mult); // marked-up cost + size premium
+  const price = multiplePriceOf(model, size, bind, pages, mult); // what-if: marked-up cost + size premium (ignores the set prices)
   // The shipping built into the price pays the courier — it is not profit.
   const shipIn = shippingAllowanceOf(model);
   const profit = price - cost - shipIn;
@@ -245,14 +247,17 @@ export default function PricingPanel() {
       {/* Tester code (0057): testers see the real price, the album is free */}
       <TesterCodeSettings />
 
+      {/* Album prices by size (0074) — what each album costs the customer */}
+      <SizePricing model={model} onSaved={setModel} />
+
       {/* Store price multiple — the PERSISTED setting that drives live checkout */}
       <div className="rounded-2xl border-2 border-rust/40 bg-warm-white px-5 py-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h3 className="font-display text-lg font-semibold text-dark">Store price multiple</h3>
             <p className="text-sm text-medium mt-0.5 max-w-lg">
-              This drives the <b>live checkout price</b> customers pay (production cost × this number).
-              Customers never see it. Distinct from the explore slider below.
+              Sets the price of <b>each extra sheet</b> (Bridgemedia&apos;s sheet cost × this number), and the price of any
+              size without its own price above. Customers never see it. Distinct from the explore slider below.
             </p>
           </div>
           <div className="flex items-end gap-3">
@@ -417,6 +422,9 @@ export default function PricingPanel() {
 
         {/* Megy Mini (0062): its own price, shipping on top, off until turned on */}
         <MegyMiniPricing model={model} onSaved={setModel} />
+
+        {/* Launch price (0072): today's prices as % off a regular price, with an end date */}
+        <LaunchPricing />
 
         {/* Crossed-out "was" price — the real old price, with an end date */}
         <div className="mt-5 pt-5 border-t border-sand-deep">
@@ -738,8 +746,8 @@ function PricingGroup({ bind, model }: { bind: Binding; model: PricingModel }) {
               {prem > 0 && <span className="ml-1.5 text-[10px] font-sans text-cocoa">+{peso(prem)}</span>}
             </td>
             <td className="px-4 py-2.5 text-right text-dark">{peso(c)}</td>
-            <td className="px-4 py-2.5 text-right text-success">{peso(ownerPriceOf(model, k, bind, 40, 3))}</td>
-            <td className="px-4 py-2.5 text-right text-rust">{peso(ownerPriceOf(model, k, bind, 40, 5))}</td>
+            <td className="px-4 py-2.5 text-right text-success">{peso(multiplePriceOf(model, k, bind, 40, 3))}</td>
+            <td className="px-4 py-2.5 text-right text-rust">{peso(multiplePriceOf(model, k, bind, 40, 5))}</td>
             <td className="px-4 py-2.5 text-right text-medium">₱{cpp.toFixed(2)}</td>
           </tr>
         );

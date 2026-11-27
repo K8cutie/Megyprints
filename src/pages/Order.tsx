@@ -14,7 +14,7 @@ import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, Albu
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, priceOf, compareAtPriceOf, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, QR_PACK_SENTENCE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, priceOf, crossedOutPrintOf, launchOf, launchLine, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, QR_PACK_SENTENCE, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -410,12 +410,15 @@ export default function Order() {
   // Shipping is built into the price (0041), so it is free here — the value
   // shown is what the schedule says is inside the price, never an extra charge.
   const freeShippingValue = schedule ? freeShippingValueOf(schedule) : 0;
-  // The crossed-out "was": this same order at the price we really charged
-  // before the drop (same add-ons). Null when there isn't one or it has ended.
-  const wasPrint = schedule ? compareAtPriceOf(schedule, albumSize, binding, pageCount) : null;
+  // The crossed-out total: while the launch price runs (owner, 2026-11-24),
+  // the album at its regular price; else the "was", this same order at the
+  // price we really charged before the drop. Add-ons at their own price either
+  // way. Null when there isn't one or it has ended.
+  const wasPrint = schedule ? crossedOutPrintOf(schedule, albumSize, binding, pageCount) : null;
   const wasTotal = schedule && wasPrint !== null
     ? wasPrint + (totalPrice - priceOf(schedule, albumSize, binding, pageCount))
     : null;
+  const launch = schedule && wasTotal !== null ? launchOf(schedule) : null;
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
   // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
   // charge nothing for a real album.
@@ -731,6 +734,8 @@ export default function Order() {
           coverDesign: printJob.coverDesign ?? DEFAULT_COVER_DESIGN,
           coverFront: printJob.coverFront,
           photos: printJob.photos,
+          // Printed on the back with a QR code that opens this order (orderTag.ts).
+          orderNumber: order.order_number,
         }, (e, attempt) => reportError(e, { path: 'checkout', step: 'cover_pdf', attempt, orderId: order.id, pages: printJob.pages.length }));
       } catch (e) {
         // Sending it is the connection; anything before that is this phone
@@ -1297,7 +1302,7 @@ export default function Order() {
                   </div>
                   {!eventLink && priceReady && !tester && !affiliate && wasTotal !== null && (
                     <p className="text-xs font-semibold text-success text-right" data-testid="order-savings">
-                      New lower price: you save ₱{(wasTotal - totalPrice).toLocaleString('en-PH')}
+                      {launch ? launchLine(launch) : `New lower price: you save ₱${(wasTotal - totalPrice).toLocaleString('en-PH')}`}
                     </p>
                   )}
                   {coveredByBooking && <p className="text-xs text-success text-right" data-testid="order-covered">Covered by your event booking</p>}

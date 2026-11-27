@@ -63,9 +63,13 @@ export interface PricingModel {
    *  Absent before 0067. */
   video_3min_price?: number;
   video_5min_price?: number;
-  /** Longer videos on sale (0070; absent before it = on, as 0067 sold them). */
+  /** Longer videos on sale (0076; absent before it = on, as 0067 sold them). */
   long_videos_on?: boolean;
-  sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number }>;
+  /** Per size: pages per press sheet, hardcover cost and a flat surcharge.
+   *  `price_soft` / `price_hard` (0074) are the owner's set prices for the
+   *  smallest album (min_pages), shipping and hosting included; a size without
+   *  one is priced by the multiple. */
+  sizes: Record<AlbumSizePreset, { pps: number; hb: number; surcharge: number; price_soft?: number | null; price_hard?: number | null }>;
   /** Shipping built into every album price (owner, 2026-10-08; migration
    *  0041), so checkout can say "Free shipping". Flat, added after the markup
    *  like the hosting reserve — never multiplied. Absent before 0041 → 0. */
@@ -126,6 +130,9 @@ export interface PriceSchedule {
   free_shipping_value?: number;
   /** The crossed-out "was" prices, while they run (0041). */
   compare_at?: CompareAt | null;
+  /** The launch price (0072), put here by the loaders from
+   *  public_launch_price(); absent or null = none. Read it through launchOf(). */
+  launch?: LaunchPrice | null;
   disabled_sizes: AlbumSizePreset[];
   sizes: Record<AlbumSizePreset, { pps: number; soft_rate: number; hard_rate: number }>;
   /** Megy Mini while it is on sale (0062); null or absent otherwise. Read it
@@ -303,6 +310,91 @@ export function compareAtPriceOf(
   const sheets = sheetsFor(schedule.sizes[size].pps, schedule.min_pages, pages);
   const was = Math.round(sheets * sheetRate + rate);
   return was > priceOf(schedule, size, binding, pages) ? was : null;
+}
+
+/* ── LAUNCH PRICE (owner, 2026-11-24: "Yes, 40% to Mar 31") ──────────────────
+   Megy Prints is a premium product. Today's album prices are its LAUNCH
+   price: N% off a regular price we really start charging the day after
+   `until`. The crossed-out number is that regular price, so the "% off" is
+   true for the album it sits on. Honest only while it ends: the database
+   (0072 set_launch_price) refuses an end date more than 6 months out, and
+   public_launch_price() stops sending it after `until` (Manila date).
+   Albums only: the Megy Mini keeps its own price with no % off, and the
+   add-ons (videos, HD, hosting years) are never discounted. While a launch
+   price runs it replaces the old "was" price (0041). */
+
+/** What public_launch_price() sends while a launch price runs. */
+export interface LaunchPrice {
+  /** Whole percent off the regular price, 1–90. */
+  pct: number;
+  /** The last day (Asia/Manila, YYYY-MM-DD) it runs. */
+  until: string;
+}
+
+/** A launch price as the database sent it, or null when it isn't one that
+ *  can be shown honestly (a whole % from 1 to 90 and a real end date). */
+export function parseLaunchPrice(data: unknown): LaunchPrice | null {
+  if (!data || typeof data !== 'object') return null;
+  const { pct, until } = data as { pct?: unknown; until?: unknown };
+  const p = Number(pct);
+  if (!Number.isInteger(p) || p < 1 || p > 90) return null;
+  if (typeof until !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(until)) return null;
+  return { pct: p, until };
+}
+
+/** The launch price running on `today` (Manila), or null. */
+export function launchOf(
+  schedule: Pick<PriceSchedule, 'launch'> | null | undefined,
+  today: string = manilaToday(),
+): LaunchPrice | null {
+  const l = parseLaunchPrice(schedule?.launch);
+  return l && today <= l.until ? l : null;
+}
+
+/** The regular price of the print (album + extra pages) while a launch price
+ *  runs: today's price is `pct`% off it, so regular = today ÷ (1 − pct/100).
+ *  Null when none runs, or the size isn't an album on the price list (the
+ *  Megy Mini never is). */
+export function launchRegularOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  const l = launchOf(schedule, today);
+  if (!l || !schedule.sizes?.[size]) return null;
+  const now = priceOf(schedule, size, binding, pages);
+  if (!Number.isFinite(now) || now <= 0) return null;
+  return Math.round(now / (1 - l.pct / 100));
+}
+
+/** The crossed-out price of the print: the launch price's regular price while
+ *  it runs, else the old "was" price (0041), else null. */
+export function crossedOutPrintOf(
+  schedule: PriceSchedule,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  today: string = manilaToday(),
+): number | null {
+  return launchRegularOf(schedule, size, binding, pages, today)
+    ?? compareAtPriceOf(schedule, size, binding, pages, today);
+}
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "March 31, 2027" from "2027-03-31" (written out: phones differ in the
+ *  date words they carry). */
+export function longDate(ymd: string): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return MONTHS[m - 1] ? `${MONTHS[m - 1]} ${d}, ${y}` : ymd;
+}
+
+/** The line under the total, the same in the app and on the website. */
+export function launchLine(l: LaunchPrice): string {
+  return `Launch price: ${l.pct}% off the album until ${longDate(l.until)}`;
 }
 
 /** What the pages past the included minimum add to the price. Pages print
@@ -514,10 +606,23 @@ export function perPageCost(model: PricingModel, size: AlbumSizePreset): number 
   return model.sheet_cost / model.sizes[size].pps;
 }
 
-/** The operator's view of the customer price, computed from the raw model at an
- *  arbitrary multiple (the Pricing panel's what-if slider). At the store's own
- *  multiple this must equal priceOf() on the schedule — see the spec. */
-export function ownerPriceOf(
+/** The owner's set price for a size and cover (0074): the smallest album
+ *  (min_pages), shipping and hosting included. null when that size is priced
+ *  by the multiple. */
+export function setPriceOf(
+  model: Pick<PricingModel, 'sizes'>,
+  size: AlbumSizePreset,
+  binding: Binding,
+): number | null {
+  const s = model.sizes[size];
+  const v = binding === 'hard' ? s?.price_hard : s?.price_soft;
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** The price the MULTIPLE alone would give, ignoring any set price: the
+ *  what-if tools in the Pricing panel (the explore slider, the 3× / 5×
+ *  reference sheet). */
+export function multiplePriceOf(
   model: PricingModel,
   size: AlbumSizePreset,
   binding: Binding,
@@ -528,6 +633,28 @@ export function ownerPriceOf(
     + model.sizes[size].surcharge
     + hostingReserveOf(model)
     + shippingAllowanceOf(model);
+}
+
+/** The operator's view of the customer price at a multiple. A size with a set
+ *  price (0074) costs exactly that at min_pages, and the multiple only prices
+ *  its extra sheets; any other size is the multiple formula. At the store's
+ *  own multiple this must equal priceOf() on the schedule — see the spec. The
+ *  set-price branch repeats scheduleFrom() + priceOf() step for step, so the
+ *  two round identically. */
+export function ownerPriceOf(
+  model: PricingModel,
+  size: AlbumSizePreset,
+  binding: Binding,
+  pages: number,
+  multiple: number,
+): number {
+  const set = setPriceOf(model, size, binding);
+  if (set === null) return multiplePriceOf(model, size, binding, pages, multiple);
+  const pps = model.sizes[size].pps;
+  const sheetRate = model.sheet_cost * multiple;
+  const reserve = hostingReserveOf(model);
+  const rate = set - (sheetsFor(pps, model.min_pages, model.min_pages) * sheetRate + reserve);
+  return Math.round(sheetsFor(pps, model.min_pages, pages) * sheetRate + rate) + reserve;
 }
 
 /** Pure mirror of public_price_schedule()'s arithmetic. Lives here so the spec
@@ -552,13 +679,18 @@ export function scheduleFrom(
     && (today === undefined || today <= until);
   const sizes = {} as PriceSchedule['sizes'];
   const compareSizes = {} as CompareAt['sizes'];
+  const sheetRate = model.sheet_cost * multiple;
   for (const key of Object.keys(model.sizes) as AlbumSizePreset[]) {
     const s = model.sizes[key];
     const soft = model.soft_cover_cost + model.soft_bind_cost;
+    // A set price (0074) wins: the rate that makes the smallest album cost it.
+    const base = sheetsFor(s.pps, model.min_pages, model.min_pages) * sheetRate + reserve;
+    const setSoft = setPriceOf(model, key, 'soft');
+    const setHard = setPriceOf(model, key, 'hard');
     sizes[key] = {
       pps: s.pps,
-      soft_rate: soft * multiple + s.surcharge + ship,
-      hard_rate: s.hb * multiple + s.surcharge + ship,
+      soft_rate: setSoft !== null ? setSoft - base : soft * multiple + s.surcharge + ship,
+      hard_rate: setHard !== null ? setHard - base : s.hb * multiple + s.surcharge + ship,
     };
     if (showCompare) {
       compareSizes[key] = {
@@ -569,7 +701,7 @@ export function scheduleFrom(
   }
   return {
     min_pages: model.min_pages,
-    sheet_rate: model.sheet_cost * multiple,
+    sheet_rate: sheetRate,
     hosting_reserve: model.hosting_reserve,
     hosting_tiers: model.hosting_tiers,
     hd_memories_price: model.hd_memories_price,

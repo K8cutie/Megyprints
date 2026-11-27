@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  priceOf, priceBreakdown, costOf, ownerPriceOf, scheduleFrom, extraPagesCharge,
+  priceOf, priceBreakdown, costOf, ownerPriceOf, multiplePriceOf, setPriceOf, scheduleFrom, extraPagesCharge, sheetsFor,
   qrMemoryCharge, countQrMemories, FREE_QR_MEMORIES, QR_PACK_SIZE, QR_PACK_PRICE, QR_PACK_OFFER, QR_PACK_SENTENCE, qrPacksLine,
   hostingTiersOf, hostingTermCharge, includedHostingYears, DEFAULT_HOSTING_TIERS,
   hdMemoriesPriceOf, hdMemoriesCharge, shippingAllowanceOf, freeShippingValueOf, compareAtPriceOf, manilaToday,
@@ -101,6 +101,83 @@ describe('schedule ↔ model agreement', () => {
       ) as PricingModel['sizes'],
     };
     expect(scheduleFrom(halfCost, 6)).toEqual(scheduleFrom(MODEL, 3));
+  });
+});
+
+// 0074: the owner sets an album price per size and cover (Admin → Pricing →
+// Album prices). The live prices of 2026-11-26 (+₱300 on every album).
+const SET: PricingModel = {
+  ...MODEL,
+  sizes: {
+    ...MODEL.sizes,
+    '6x4': { ...MODEL.sizes['6x4'], surcharge: 300, price_soft: 1078, price_hard: 1308 },
+    '6x6': { ...MODEL.sizes['6x6'], surcharge: 300, price_soft: 1139, price_hard: 1438 },
+    '8x6': { ...MODEL.sizes['8x6'], surcharge: 300, price_soft: 1200, price_hard: 1660 },
+    '6x8': { ...MODEL.sizes['6x8'], surcharge: 300, price_soft: 1200, price_hard: 1660 },
+    '8x8': { ...MODEL.sizes['8x8'], surcharge: 300, price_soft: 1505, price_hard: 1965 },
+  } as PricingModel['sizes'],
+};
+
+describe('album prices set per size (0074)', () => {
+  it('the schedule and the operator view still agree, for every size, cover, page count and multiple', () => {
+    for (const multiple of MULTIPLES)
+      for (const size of SIZE_KEYS)
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS)
+            expect(priceOf(scheduleFrom(SET, multiple), size, binding, pages))
+              .toBe(ownerPriceOf(SET, size, binding, pages, multiple));
+    // A set-price size agrees even at a multiple that isn't a quarter step
+    // (live is 2.3×), because both sides take the same steps.
+    for (const size of ['6x4', '6x6', '8x6', '6x8', '8x8'] as AlbumSizePreset[])
+      for (const binding of BINDINGS)
+        for (const pages of PAGE_COUNTS)
+          expect(priceOf(scheduleFrom(SET, 2.3), size, binding, pages))
+            .toBe(ownerPriceOf(SET, size, binding, pages, 2.3));
+  });
+
+  it('the smallest album costs exactly the set price, whatever the multiple', () => {
+    for (const multiple of [...MULTIPLES, 2.3]) {
+      const schedule = scheduleFrom(SET, multiple);
+      expect(priceOf(schedule, '8x8', 'hard', 40)).toBe(1965);
+      expect(priceOf(schedule, '8x8', 'soft', 40)).toBe(1505);
+      expect(priceOf(schedule, '6x4', 'soft', 40)).toBe(1078);
+      expect(priceOf(schedule, '6x6', 'hard', 40)).toBe(1438);
+      expect(priceOf(schedule, '8x6', 'soft', 20)).toBe(1200); // under the minimum pays the minimum
+    }
+  });
+
+  it('extra pages still cost the one sheet rate on top of a set price', () => {
+    const schedule = scheduleFrom(SET, 2.3);
+    const sheets = sheetsFor(4, 40, 60) - sheetsFor(4, 40, 40);
+    expect(priceOf(schedule, '8x8', 'hard', 60)).toBe(Math.round(1965 - 50 + sheets * schedule.sheet_rate) + 50);
+    expect(priceOf(schedule, '8x8', 'hard', 60)).toBe(2270); // 1965 + 5 sheets at ₱60.95, rounded
+  });
+
+  it('a size with no set price is priced exactly as before', () => {
+    for (const multiple of MULTIPLES)
+      for (const size of ['11.5x8', '8.5x11'] as AlbumSizePreset[])
+        for (const binding of BINDINGS)
+          for (const pages of PAGE_COUNTS)
+            expect(ownerPriceOf(SET, size, binding, pages, multiple)).toBe(ownerPriceOf(MODEL, size, binding, pages, multiple));
+  });
+
+  it('the what-if price (multiplePriceOf) ignores set prices', () => {
+    expect(multiplePriceOf(SET, '8x8', 'hard', 40, 3)).toBe(ownerPriceOf({ ...SET, sizes: { ...SET.sizes, '8x8': { pps: 4, hb: 350, surcharge: 300 } } }, '8x8', 'hard', 40, 3));
+    expect(multiplePriceOf(SET, '8x8', 'hard', 40, 3)).not.toBe(1965);
+  });
+
+  it('reads a set price only when it is a real number', () => {
+    expect(setPriceOf(SET, '8x8', 'hard')).toBe(1965);
+    expect(setPriceOf(SET, '11.5x8', 'hard')).toBeNull();
+    const odd = { sizes: { '8x8': { pps: 4, hb: 350, surcharge: 0, price_hard: null, price_soft: Number.NaN } } } as unknown as PricingModel;
+    expect(setPriceOf(odd, '8x8', 'hard')).toBeNull();
+    expect(setPriceOf(odd, '8x8', 'soft')).toBeNull();
+  });
+
+  it('the schedule never carries a set price, a cost or the multiple', () => {
+    const json = JSON.stringify(scheduleFrom(SET, 2.3));
+    for (const leak of ['price_soft', 'price_hard', 'price_multiple', 'sheet_cost', 'hb', 'surcharge'])
+      expect(json).not.toContain(leak);
   });
 });
 

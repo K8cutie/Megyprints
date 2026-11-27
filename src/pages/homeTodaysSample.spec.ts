@@ -44,6 +44,12 @@ const h = vi.hoisted(() => {
   // GSAP's ScrollTrigger reads these when Home loads (jsdom has neither).
   window.matchMedia ??= ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
   (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
+  // ScrollTrigger's own timer can fire after jsdom is torn down and call
+  // requestAnimationFrame, which jsdom never had: an unhandled error that
+  // fails the run after every test passed (CI, 2026-11-26). Set on the Node
+  // global, so it outlives the teardown.
+  (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame ??= (cb: () => void) => setTimeout(cb, 16);
+  (globalThis as { cancelAnimationFrame?: unknown }).cancelAnimationFrame ??= (id: ReturnType<typeof setTimeout>) => clearTimeout(id);
   return { native: true, testing: true, user: null as { id: string } | null, vis: 'visible' as DocumentVisibilityState, update: (async () => 'latest') as (note: unknown) => Promise<string> };
 });
 vi.mock('../lib/nativeShell', () => ({ isNativeShell: () => h.native }));

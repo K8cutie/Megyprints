@@ -16,6 +16,12 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 vi.hoisted(() => {
   window.matchMedia ??= ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, onchange: null, dispatchEvent: () => false })) as unknown as typeof window.matchMedia;
   (globalThis as { IntersectionObserver?: unknown }).IntersectionObserver = class { observe() {} unobserve() {} disconnect() {} takeRecords() { return []; } };
+  // ScrollTrigger's own timer can fire after jsdom is torn down and call
+  // requestAnimationFrame, which jsdom never had: an unhandled error that fails
+  // the run after every test passed (CI on #316, 2026-11-26; homeTodaysSample
+  // has the same). Set on the Node global, so it outlives the teardown.
+  (globalThis as { requestAnimationFrame?: unknown }).requestAnimationFrame ??= (cb: () => void) => setTimeout(cb, 16);
+  (globalThis as { cancelAnimationFrame?: unknown }).cancelAnimationFrame ??= (id: ReturnType<typeof setTimeout>) => clearTimeout(id);
 });
 vi.mock('../lib/authContext', () => ({ useAuth: () => ({ user: { id: 'u1' }, loading: false }) }));
 vi.mock('../lib/supabase', () => ({ supabase: { from: () => ({}) }, supabaseConfigured: false }));

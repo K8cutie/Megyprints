@@ -14,6 +14,7 @@ import MyMemories from './pages/MyMemories';
 import MyOrders from './pages/MyOrders';
 import Events from './pages/Events';
 import EventBook from './pages/EventBook';
+import OrderScan from './pages/OrderScan';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Code-split the two heavy routes so their weight never lands on Home or the
@@ -98,6 +99,10 @@ export default function App() {
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/memories" element={<ProtectedRoute><MyMemories /></ProtectedRoute>} />
           <Route path="/orders" element={<ProtectedRoute><MyOrders /></ProtectedRoute>} />
+          {/* The QR code on every album's back cover (orderTag.ts): the shop to
+              the order in Admin, the customer to Your orders, anyone else only
+              the number. Open to visitors, so it can ask them to sign in. */}
+          <Route path="/o/:number" element={<OrderScan />} />
           {/* Open to visitors: it explains the program and asks them to sign in to apply. */}
           <Route path="/affiliate" element={<Affiliate />} />
         </Route>
