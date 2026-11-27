@@ -2,14 +2,19 @@
    ensure your terms of service state that all users declare themselves to be
    of legal age". There were no terms at all, only the privacy policy. Written
    in plain words, to match how Megyprints really works; every promise here is
-   one the shop already keeps. Reachable at /#/terms. */
+   one the shop already keeps. Reachable at /#/terms.
+
+   "You answer for what is in your album" (owner, 2026-11-22: "at 300
+   printouts a day we are no longer capable of checking each page"): the
+   customer confirms the rights, we say we don't check every page, and a
+   claim over an album's content is theirs to answer and pay for. */
 
 import { Link } from 'react-router-dom';
 import { LegalPage, LegalSection } from '../components/LegalPage';
 import { LEGAL_CONTACT, MIN_AGE } from '../lib/legal';
 import { UNPAID_ORDER_DAYS } from '../lib/orderExpiry';
 
-const UPDATED = 'October 2026';
+const UPDATED = 'November 2026';
 
 const mail = <a className="text-rust underline" href={`mailto:${LEGAL_CONTACT}`}>{LEGAL_CONTACT}</a>;
 
@@ -37,7 +42,8 @@ export default function Terms() {
           and to play a QR memory video you add.
         </p>
         <p>
-          Only use photos you took yourself or have permission to use. If a photo shows other
+          Only use photos you took yourself or have permission to use. This goes for everything
+          you put in your album: pictures, artwork, logos and words. If a photo shows other
           people, make sure they are okay with it being printed.
         </p>
       </LegalSection>
@@ -52,6 +58,27 @@ export default function Terms() {
           <li>other people's photos or artwork that you don't have the right to use</li>
         </ul>
         <p>We may cancel an order, or close an account, that breaks these rules.</p>
+      </LegalSection>
+
+      <LegalSection title="You answer for what is in your album">
+        <p data-testid="terms-rights">
+          When you place an order, you confirm that <b>everything in your album is yours, or its
+          owner lets you print it</b>.
+        </p>
+        <p>
+          We print what you send us. We print many albums a day, and we do not check every page.
+          We cannot know who owns a photo. Printing your album does not mean we checked it, or
+          agreed that you may use what is in it.
+        </p>
+        <p>
+          If someone makes a claim against Megyprints because of something in your album, for
+          example that a photo is theirs, you agree to answer for it and to pay back what it costs
+          us, including lawyers' fees.
+        </p>
+        <p>
+          Is your photo or artwork in an album without your permission? Email {mail}. We will look
+          into it, and we may stop the order and take down its QR memory video.
+        </p>
       </LegalSection>
 
       <LegalSection title="Ordering and paying">
