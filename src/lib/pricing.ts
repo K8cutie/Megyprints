@@ -23,7 +23,7 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 import type { AlbumSizePreset } from '../pages/builder/types';
-import type { MiniOffer } from './megyMini';
+import { bookletName, bookletPaper, type MiniOffer } from './megyMini';
 
 export type Binding = 'soft' | 'hard';
 
@@ -37,8 +37,9 @@ export const MIN_PAGES = 40;
 export const SIZE_LABELS: Record<AlbumSizePreset, string> = {
   '6x4': '6×4', '8x6': '8×6', '6x8': '6×8', '6x6': '6×6',
   '8x8': '8×8', '11.5x8': '11.5×8', '8.5x11': '8.5×11',
-  // The Megy Mini's page (lib/megyMini): never an album size.
+  // The booklets' pages (lib/megyMini): never album sizes. A5 = Megy Mini, A4 = Megy Magazine.
   '5.8x8.3': 'A5',
+  '8.3x11.7': 'A4',
 };
 
 /** Owner-only view of the cost model — the shape of owner_pricing_model(). */
@@ -130,6 +131,9 @@ export interface PriceSchedule {
   free_shipping_value?: number;
   /** The crossed-out "was" prices, while they run (0041). */
   compare_at?: CompareAt | null;
+  /** How extra videos are sold (0078), put here by the loaders from
+   *  public_video_offer(); absent = the 0066 packs. Read it through videoOfferOf(). */
+  video_offer?: VideoOffer | null;
   /** The launch price (0072), put here by the loaders from
    *  public_launch_price(); absent or null = none. Read it through launchOf(). */
   launch?: LaunchPrice | null;
@@ -418,38 +422,212 @@ export interface PriceLine { label: string; amount: number }
 export interface PriceBreakdown { items: PriceLine[]; total: number }
 
 // ── Video memories (living-memory QRs) ──────────────────────────────────────
-// Owner, 2026-11-19: "2 free video memory, once they see that add they'd want
-// more … 3 videos per 100 php". Every album includes FREE_QR_MEMORIES (a Megy
-// Mini: its own offer's free_qr); past those, videos come in packs of
-// QR_PACK_SIZE for QR_PACK_PRICE: 1–3 extra = ₱100, 4–6 = ₱200, and so on.
-// Counted per QR code (hosted clip or pasted link alike). The database prices
-// the order the same way (0066 order_quote; orderQuote.spec holds them equal).
+// Owner, 2026-11-19: "2 free video memory … 3 videos per 100 php" (0066).
+// Then 2026-11-24 (0078): "the price of each video is 50 regular but its 3 for
+// 100", and "Christmas sale is urgency so end at December 31": an extra video
+// is ₱50, and while a sale runs any 3 are ₱100 (33% off). The price list
+// carries it as `video_offer` (public_video_offer(), put on the schedule by
+// the loaders). A list from before 0078 has none, and then the 0066 rule
+// holds: packs of 3 for ₱100, no single videos. Every album includes
+// FREE_QR_MEMORIES (a Megy Mini: its own offer's free_qr). Counted per QR code
+// (hosted clip or pasted link alike). The database prices the order the same
+// way (0078 video_memory_fee; videoOffer.spec holds them equal).
 export const FREE_QR_MEMORIES = 2;
 export const QR_PACK_SIZE = 3;
 export const QR_PACK_PRICE = 100;
 
-/** Packs of QR_PACK_SIZE needed for `count` QR memories, `free` included. */
+/** A sale's pack: `size` videos for `price`, named, with a last day. */
+export interface VideoPack { size: number; price: number; name: string | null; until: string | null }
+/** How extra videos are sold: one at a time for `single`, and a pack while a sale runs. */
+export interface VideoOffer { single: number | null; pack: VideoPack | null }
+
+/** The 0066 rule, for a price list from before 0078: packs of 3 for ₱100, always. */
+export const LEGACY_VIDEO_OFFER: VideoOffer = {
+  single: null,
+  pack: { size: QR_PACK_SIZE, price: QR_PACK_PRICE, name: null, until: null },
+};
+
+const wholeFrom = (n: number, min: number) => Number.isInteger(n) && n >= min;
+
+/** The offer as public_video_offer() sent it, or null when it isn't one that
+ *  can be shown honestly. A pack counts only when it really costs less than
+ *  its videos one by one, and has a name and a last day (a sale ends). */
+export function parseVideoOffer(data: unknown): VideoOffer | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as { single?: unknown; pack?: unknown };
+  const single = Number(d.single);
+  if (!wholeFrom(single, 1)) return null;
+  let pack: VideoPack | null = null;
+  if (d.pack && typeof d.pack === 'object') {
+    const p = d.pack as { size?: unknown; price?: unknown; name?: unknown; until?: unknown };
+    const size = Number(p.size);
+    const price = Number(p.price);
+    const name = typeof p.name === 'string' && p.name.trim() ? p.name.trim() : null;
+    const until = typeof p.until === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.until) ? p.until : null;
+    if (wholeFrom(size, 2) && wholeFrom(price, 1) && price < size * single && name && until) pack = { size, price, name, until };
+  }
+  return { single, pack };
+}
+
+/** The offer on `today` (Manila): the price list's, its sale gone the day
+ *  after its last day; a price list from before 0078: the 0066 packs. */
+export function videoOfferOf(
+  schedule: { video_offer?: unknown } | null | undefined,
+  today: string = manilaToday(),
+): VideoOffer {
+  const o = parseVideoOffer(schedule?.video_offer);
+  if (!o) return LEGACY_VIDEO_OFFER;
+  return o.pack && o.pack.until && today > o.pack.until ? { single: o.single, pack: null } : o;
+}
+
+/** What `extra` videos past the free ones cost: the cheapest way to buy them.
+ *  In a sale, whole packs first, the rest one by one, unless the rest would
+ *  cost as much as a pack (then one more pack: same price, more room). The
+ *  database's video_memory_fee() is this, line for line. */
+export interface VideoFee { fee: number; packs: number; singles: number }
+export function videoFee(extra: number, offer: VideoOffer = LEGACY_VIDEO_OFFER): VideoFee {
+  const e = Math.max(0, Math.floor(extra));
+  const { single, pack } = offer;
+  if (single === null) {
+    const size = pack?.size ?? QR_PACK_SIZE;
+    const packs = Math.ceil(e / size);
+    return { fee: packs * (pack?.price ?? QR_PACK_PRICE), packs, singles: 0 };
+  }
+  if (!pack) return { fee: e * single, packs: 0, singles: e };
+  let packs = Math.floor(e / pack.size);
+  let singles = e % pack.size;
+  if (singles > 0 && singles * single >= pack.price) { packs += 1; singles = 0; }
+  return { fee: packs * pack.price + singles * single, packs, singles };
+}
+
+/** Packs of QR_PACK_SIZE needed for `count` QR memories, `free` included (the 0066 rule). */
 export function qrPacksFor(count: number, free: number = FREE_QR_MEMORIES): number {
   const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
   return Math.ceil(extra / QR_PACK_SIZE);
 }
 
 /** Pesos owed for `count` QR memories on one album (or a Mini, with its own `free`). */
-export function qrMemoryCharge(count: number, free: number = FREE_QR_MEMORIES): number {
-  return qrPacksFor(count, free) * QR_PACK_PRICE;
+export function qrMemoryCharge(count: number, free: number = FREE_QR_MEMORIES, offer: VideoOffer = LEGACY_VIDEO_OFFER): number {
+  return videoFee(Math.floor(count) - Math.max(0, Math.floor(free)), offer).fee;
 }
 
-/** The bill's line for extra videos: "2 included, 4 extra (2 packs of 3 × ₱100)". */
+/** The bill's line for extra videos (the 0066 rule): "2 included, 4 extra (2 packs of 3 × ₱100)". */
 export function qrPacksLine(count: number, free: number): string {
   const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
   const packs = qrPacksFor(count, free);
   return `${free} included, ${extra} extra (${packs} ${packs === 1 ? 'pack' : 'packs'} of ${QR_PACK_SIZE} × ₱${QR_PACK_PRICE})`;
 }
 
-/** How extra videos are sold, in a few words: "3 more for ₱100". */
+/** The bill's line for extra videos under any offer:
+ *  "2 included, 4 extra (Christmas sale: 1 × 3 for ₱100 + 1 × ₱50)". */
+export function videoBillLine(count: number, free: number, offer: VideoOffer = LEGACY_VIDEO_OFFER): string {
+  if (offer.single === null) return qrPacksLine(count, free);
+  const extra = Math.max(0, Math.floor(count) - Math.max(0, Math.floor(free)));
+  const f = videoFee(extra, offer);
+  const parts: string[] = [];
+  if (f.packs > 0 && offer.pack) parts.push(`${f.packs} × ${offer.pack.size} for ₱${offer.pack.price}`);
+  if (f.singles > 0) parts.push(`${f.singles} × ₱${offer.single}`);
+  const sale = f.packs > 0 && offer.pack?.name ? `${offer.pack.name}: ` : '';
+  return `${free} included, ${extra} extra (${sale}${parts.join(' + ')})`;
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+/** "December 31" from "2026-12-31". */
+export function monthDay(ymd: string): string {
+  const [, m, d] = ymd.split('-').map(Number);
+  return MONTH_NAMES[m - 1] ? `${MONTH_NAMES[m - 1]} ${d}` : ymd;
+}
+
+/** How extra videos are sold, in a few words: "3 more for ₱100" (0066). */
 export const QR_PACK_OFFER = `${QR_PACK_SIZE} more for ₱${QR_PACK_PRICE}`;
-/** The same as a sentence, after "2 … included": "Add more in packs of 3 for ₱100." */
+/** The same as a sentence, after "2 … included": "Add more in packs of 3 for ₱100." (0066) */
 export const QR_PACK_SENTENCE = `Add more in packs of ${QR_PACK_SIZE} for ₱${QR_PACK_PRICE}.`;
+
+/** After "2 memories included · ": "more ₱50 each, or 3 for ₱100 until December 31". */
+export function videoOfferShort(offer: VideoOffer): string {
+  if (offer.single === null) return QR_PACK_OFFER;
+  const p = offer.pack;
+  return p && p.until ? `more ₱${offer.single} each, or ${p.size} for ₱${p.price} until ${monthDay(p.until)}` : `more ₱${offer.single} each`;
+}
+
+/** After "2 living-memory QRs included — …": the same as a sentence. */
+export function videoOfferSentence(offer: VideoOffer): string {
+  if (offer.single === null) return QR_PACK_SENTENCE;
+  const p = offer.pack;
+  return p && p.until && p.name
+    ? `Add more for ₱${offer.single} each, or ${p.size} for ₱${p.price} in the ${p.name} until ${monthDay(p.until)}.`
+    : `Add more for ₱${offer.single} each.`;
+}
+
+/** What the free videos are worth at the single price ("2 free videos (₱100
+ *  value)"), or null on a price list with no single price. */
+export function includedVideosValue(free: number, offer: VideoOffer): number | null {
+  return offer.single === null ? null : Math.max(0, Math.floor(free)) * offer.single;
+}
+
+/* ── THE POP-UP (owner's design 2026-10-26: "they click on the golden button
+   and a pop-up appears"; re-asked 2026-11-24 after a Mini took a 3rd video
+   with no word; the Christmas sale drawn and approved the same day) ────────
+   Adding a video when `used` are already on the album: is this the moment
+   the next video costs money? Then the customer is told before they pick.
+   In a sale: right after the free videos, and each time a pack fills (the
+   videos in between fit a pack already counted). No sale: once, right after
+   the free videos. Both buttons go on to pick a video; what they pay is
+   worked out from the count at checkout, never more than the pop-up said. */
+export interface VideoPopup {
+  /** The sale's name on the tag ("Christmas sale"), or null. */
+  tag: string | null;
+  title: string;
+  /** The pack's price at the single price, crossed out; the sale price; the % off. */
+  was: number | null;
+  now: number | null;
+  pct: number | null;
+  line: string;
+  /** The filled button, and the second one (null: none). */
+  main: string;
+  second: string | null;
+  no: string;
+}
+
+export function videoPopupFor(used: number, free: number, offer: VideoOffer): VideoPopup | null {
+  const u = Math.max(0, Math.floor(used));
+  const f = Math.max(0, Math.floor(free));
+  if (u < f) return null;
+  const { single, pack } = offer;
+  const first = u === f;
+  if (single === null) {
+    const size = pack?.size ?? QR_PACK_SIZE;
+    const price = pack?.price ?? QR_PACK_PRICE;
+    if ((u - f) % size !== 0) return null;
+    return {
+      tag: null,
+      title: first ? `You've used your ${f} free videos` : `Your ${u - f} extra videos are used`,
+      was: null, now: null, pct: null,
+      line: `Add ${size} more video memories for ₱${price}. You pay it with your album at checkout.`,
+      main: `Add ${size} more · ₱${price}`, second: null, no: 'Not now',
+    };
+  }
+  if (pack && pack.until) {
+    if ((u - f) % pack.size !== 0) return null;
+    const was = pack.size * single;
+    return {
+      tag: pack.name,
+      title: `Get ${pack.size} more video memories`,
+      was, now: pack.price, pct: Math.round(100 * (1 - pack.price / was)),
+      line: `${first ? `You've used your ${f} free videos.` : `You've used ${u} videos.`} Each extra video is ₱${single}, but until ${monthDay(pack.until)} you get ${pack.size} for ₱${pack.price}. You pay with your album at checkout.`,
+      main: `Get ${pack.size} for ₱${pack.price}`, second: `Get 1 for ₱${single}`, no: 'Not now',
+    };
+  }
+  if (!first) return null;
+  return {
+    tag: null,
+    title: `You've used your ${f} free videos`,
+    was: null, now: null, pct: null,
+    line: `Each extra video is ₱${single}. You pay with your album at checkout.`,
+    main: `Get 1 for ₱${single}`, second: null, no: 'Not now',
+  };
+}
 
 /** Structural view of a page for counting — both QR homes: a QR slot on a
  *  photo layout (`qrFills`) and a QR in a combo/caption box (`textSlotQr`). */
@@ -490,7 +668,8 @@ export function priceBreakdown(
   const sizeLabel = SIZE_LABELS[size];
   const minPages = schedule.min_pages;
   const printTotal = priceOf(schedule, size, binding, pages);
-  const qrCharge = qrMemoryCharge(qrMemories);
+  const videoOffer = videoOfferOf(schedule);
+  const qrCharge = qrMemoryCharge(qrMemories, FREE_QR_MEMORIES, videoOffer);
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
   const longCharge = longVideoCharge(schedule, videoMinutes, qrMemories);
@@ -519,7 +698,7 @@ export function priceBreakdown(
 
   if (qrCharge > 0) {
     items.push({
-      label: `Living-memory QR · ${qrPacksLine(qrMemories, FREE_QR_MEMORIES)}`,
+      label: `Living-memory QR · ${videoBillLine(qrMemories, FREE_QR_MEMORIES, videoOffer)}`,
       amount: qrCharge,
     });
   }
@@ -555,19 +734,20 @@ export function miniPriceBreakdown(
   videoMinutes: number | null = null,
 ): PriceBreakdown & { shipping: number } {
   const free = Math.max(0, Math.floor(offer.free_qr));
-  const qrCharge = qrMemoryCharge(qrMemories, free);
+  const videoOffer = videoOfferOf(schedule);
+  const qrCharge = qrMemoryCharge(qrMemories, free, videoOffer);
   const termCharge = hostingTermCharge(schedule, hostingYears);
   const hdCharge = hdMemoriesCharge(schedule, hdMemories, qrMemories);
   const longCharge = longVideoCharge(schedule, videoMinutes, qrMemories);
   const items: PriceLine[] = [
     {
-      label: `Megy Mini — A5 · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
+      label: `${bookletName(offer.size)} — ${bookletPaper(offer.size)} · ${offer.pages} pages · staples · ${free} video ${free === 1 ? 'memory' : 'memories'} included`,
       amount: offer.price,
     },
     { label: 'Shipping', amount: offer.shipping_fee },
   ];
   if (qrCharge > 0) {
-    items.push({ label: `Video memories · ${qrPacksLine(qrMemories, free)}`, amount: qrCharge });
+    items.push({ label: `Video memories · ${videoBillLine(qrMemories, free, videoOffer)}`, amount: qrCharge });
   }
   if (termCharge > 0 && hostingYears != null) {
     const included = includedHostingYears(schedule);

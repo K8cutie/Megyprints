@@ -14,7 +14,7 @@ import { resolveOrderAlbumId, assertAlbumSavedForOrder, AlbumNotSavedError, Albu
 import { readLocalDraftSummary, readDraftAlbumForOrder } from '../lib/localDraft';
 import { saveCheckoutOrder, clearCheckoutOrder, resumableCheckoutOrder, saveCheckoutForm, readCheckoutForm, saveLastDelivery, readLastDelivery, prefillPlan, type CheckoutOrder, type CheckoutStage } from '../lib/checkoutSession';
 import { useIndexedDBPhotos } from '../lib/useIndexedDBPhotos';
-import { priceBreakdown, priceOf, crossedOutPrintOf, launchOf, launchLine, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, QR_PACK_SENTENCE, MIN_PAGES, type Binding } from '../lib/pricing';
+import { priceBreakdown, priceOf, crossedOutPrintOf, launchOf, launchLine, freeShippingValueOf, countQrMemories, hostingTiersOf, includedHostingYears, hdMemoriesPriceOf, FREE_QR_MEMORIES, videoOfferOf, videoOfferSentence, includedVideosValue, MIN_PAGES, type Binding } from '../lib/pricing';
 import { uploadStagedClips, prefetchStagedClipUploads, stagedClipBytes, currentClipQuality, stagedClipQuality, MissingClipError, findMissingClips, type ClipUploadPhase, type ClipQuality } from '../lib/memoryClips';
 import { UnpaidLimitError, PAY_WITHIN_MESSAGE } from '../lib/orderExpiry';
 import { checkProof, uploadPaymentProof, submitPaymentProof, cleanReference, referenceProblem } from '../lib/payment';
@@ -419,6 +419,9 @@ export default function Order() {
     ? wasPrint + (totalPrice - priceOf(schedule, albumSize, binding, pageCount))
     : null;
   const launch = schedule && wasTotal !== null ? launchOf(schedule) : null;
+  // How extra videos are sold (0078), and what the free ones are worth at the single price.
+  const videoOffer = videoOfferOf(schedule);
+  const freeVideosValue = includedVideosValue(FREE_QR_MEMORIES, videoOffer);
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it
   // can settle with no schedule (offline, RPC blocked), and quoting ₱0 then would
   // charge nothing for a real album.
@@ -1317,7 +1320,7 @@ export default function Order() {
                 <p className="text-xs font-semibold text-dark">Included with your album</p>
                 <ul className="mt-1 text-xs text-medium space-y-0.5">
                   <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />Free shipping{freeShippingValue > 0 && <> (₱{freeShippingValue.toLocaleString('en-PH')} value)</>}</li>
-                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs</li>
+                  <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{FREE_QR_MEMORIES} living-memory QRs{freeVideosValue ? ` (₱${freeVideosValue} value)` : ''}</li>
                   {includedYears !== null && (
                     <li className="flex items-start gap-1.5"><Check size={13} className="text-success shrink-0 mt-0.5" />{includedYears} years of memory hosting</li>
                   )}
@@ -1328,7 +1331,7 @@ export default function Order() {
                 <p className="text-xs text-cocoa leading-snug">
                   {eventLink
                     ? <><b className="text-dark">Video memories are part of your event deal</b> — a video plays when anyone scans your printed album.</>
-                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. {QR_PACK_SENTENCE}</>}
+                    : <><b className="text-dark">{FREE_QR_MEMORIES} living-memory QRs included</b> — a video plays when anyone scans your printed album. {videoOfferSentence(videoOffer)}</>}
                   {qrCount > 0 && <> This album has <b className="text-dark">{qrCount}</b>.</>}
                   {qrCount > 0 && hdPrice > 0 && !eventLink && (
                     <> Quality: <b className="text-dark">{hdMemories ? `HD 1080p (+₱${hdPrice})` : 'Standard 720p'}</b>, set in the builder.</>

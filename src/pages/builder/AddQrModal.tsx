@@ -11,7 +11,7 @@ import {
 } from '../../lib/memoryClips';
 import { useAuth } from '../../lib/authContext';
 import { useAuthModal } from '../../components/AuthModalProvider';
-import { FREE_QR_MEMORIES, QR_PACK_OFFER, includedHostingYears, hdMemoriesPriceOf } from '../../lib/pricing';
+import { FREE_QR_MEMORIES, includedHostingYears, hdMemoriesPriceOf, countQrMemories, videoOfferOf, videoOfferShort, videoPopupFor } from '../../lib/pricing';
 import { getPriceSchedule } from '../../lib/storeSettings';
 import { useModalDialog } from '../../lib/useModalDialog';
 import { useBuilderContext } from './BuilderContext';
@@ -105,6 +105,17 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
     return () => { alive = false; };
   }, [albumPages]);
   const offerTier = !initial && tierLocked === false && hdPrice > 0 && !fromEvent;
+
+  // THE POP-UP (owner's design 2026-10-26: "they click on the golden button
+  // and a pop-up appears"; re-asked 2026-11-24; the Christmas sale drawn and
+  // approved the same day): when the next video is the moment it costs money
+  // (lib/pricing videoPopupFor), the customer is told before choosing it,
+  // never finds out at checkout. Both buttons go on to choose the video; "Not
+  // now" closes. An event album's booking pays for its videos: no pop-up.
+  const videoOffer = videoOfferOf(schedule);
+  const usedVideos = countQrMemories(albumPages);
+  const [packOk, setPackOk] = useState(false);
+  const popup = !initial && !fromEvent && !packOk ? videoPopupFor(usedVideos, FREE_QR_MEMORIES, videoOffer) : null;
 
   // Preview the PICKED file (object URL), revoked on change/unmount.
   const previewUrl = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
@@ -208,6 +219,37 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
   const legacyLink = initial && initial.kind !== 'clip' ? initial.destination : null;
   const mb = file ? (file.size / 1024 / 1024).toFixed(1) : null;
 
+  if (popup) {
+    return (
+      <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+        <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="pack-offer-title" tabIndex={-1} data-testid="qr-pack-offer"
+          className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="rounded-xl border border-line bg-[#F9F8F5] p-4">
+            {popup.tag && (
+              <span className="inline-block rounded-full bg-[#B85C38] px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-white" data-testid="qr-pack-tag">{popup.tag}</span>
+            )}
+            <p id="pack-offer-title" className="mt-2 text-lg font-extrabold text-dark leading-snug">{popup.title}</p>
+            {popup.now !== null && (
+              <p className="mt-1.5 flex items-baseline gap-2" data-testid="qr-pack-price">
+                {popup.was !== null && <s className="text-sm text-medium">₱{popup.was}</s>}
+                <span className="text-2xl font-extrabold text-[#B85C38]">₱{popup.now}</span>
+                {popup.pct !== null && <span className="rounded-md bg-success px-2 py-0.5 text-xs font-extrabold text-white">{popup.pct}% off</span>}
+              </p>
+            )}
+            <p className="text-sm text-medium mt-2 leading-snug" data-testid="qr-pack-body">{popup.line}</p>
+          </div>
+          <button onClick={() => setPackOk(true)} data-testid="qr-pack-yes"
+            className="mt-4 w-full py-3 rounded-xl bg-[#B85C38] text-white text-sm font-bold hover:brightness-105">{popup.main}</button>
+          {popup.second && (
+            <button onClick={() => setPackOk(true)} data-testid="qr-pack-single"
+              className="mt-2 w-full py-2.5 rounded-xl border-2 border-[#B85C38] text-[#B85C38] text-sm font-bold">{popup.second}</button>
+          )}
+          <button onClick={onClose} className="mt-2 w-full py-2 text-sm font-semibold text-medium" data-testid="qr-pack-no">{popup.no}</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
       <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="clip-modal-title" tabIndex={-1}
@@ -231,7 +273,7 @@ function ClipModal({ initial, onSave, onRemove, onClose, corner, onCorner, allow
                 <Clock size={11} className="shrink-0" />
                 {fromEvent
                   ? <span data-testid="qr-event-included">Part of your event deal{includedYears ? ` · live for ${includedYears} years` : ''}</span>
-                  : <>{FREE_QR_MEMORIES} memories included · {QR_PACK_OFFER}{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
+                  : <>{FREE_QR_MEMORIES} memories included · {videoOfferShort(videoOffer)}{includedYears ? ` · live for ${includedYears} years, longer at checkout` : ''}</>}
               </p>
             </div>
           )}
