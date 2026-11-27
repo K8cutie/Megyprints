@@ -1,8 +1,9 @@
 /* Card, GCash and Maya through PayMongo (owner, 2026-11-27), next to the
    GoTyme bank-transfer QR (lib/payment.ts).
 
-   The shop switches it on in the database (store_settings.paymongo_on, 0077);
-   until then nothing here shows. Paying opens PayMongo's own page: our
+   The shop switches it on in the database (store_settings.paymongo_mode,
+   0077: 'owners' while testing, 'everyone' when live); until then nothing
+   here shows. Paying opens PayMongo's own page: our
    server (/api/pay) makes the checkout for the order's own total, and
    PayMongo tells the server when it's paid, which marks the order paid.
    The browser never sends an amount. */

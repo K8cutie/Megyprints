@@ -29,6 +29,7 @@ let db;
 const freshDb = () => ({
   user: { id: 'user-1' },
   payOptions: { paymongo: true },
+  isOwner: true,
   order: { id: ORDER_ID, user_id: 'user-1', order_number: 'MP-7K2Q9', status: 'pending_payment', payment_status: 'unpaid', quoted_amount: 1965, paymongo_checkout_id: null },
   markResult: { data: 'paid', error: null },
   calls: [],
@@ -40,7 +41,8 @@ vi.mock('@supabase/supabase-js', () => ({
     auth: { getUser: async () => ({ data: { user: key === 'anon-test' ? db.user : null }, error: db.user ? null : { message: 'no' } }) },
     rpc: async (name, args) => {
       db.calls.push([name, args]);
-      if (name === 'public_pay_options') return { data: db.payOptions, error: null };
+      if (name === 'public_pay_options') return { data: key === 'anon-test' ? db.payOptions : null, error: null };
+      if (name === 'is_owner') return { data: key === 'anon-test' ? db.isOwner : false, error: null };
       if (name === 'mark_order_paid_by_gateway') return db.markResult;
       return { data: null, error: { message: 'unknown rpc' } };
     },
@@ -177,6 +179,7 @@ describe('a customer asks to pay', () => {
     ['already paid', () => { db.order.status = 'paid'; db.order.payment_status = 'paid'; }, 409],
     ['cancelled', () => { db.order.status = 'cancelled'; }, 409],
     ['PayMongo switched off', () => { db.payOptions = { paymongo: false }; }, 409],
+    ['a test key and not an owner account', () => { db.isOwner = false; }, 409],
     ['no total', () => { db.order.quoted_amount = null; }, 409],
   ])('is refused when %s, and PayMongo is never called', async (_name, setup, code) => {
     setup();
@@ -184,6 +187,21 @@ describe('a customer asks to pay', () => {
     await handler(checkoutReq(), res);
     expect(res.statusCode).toBe(code);
     expect(fetchCalls).toHaveLength(0);
+  });
+
+  it('with a live key, serves customers who are not owners', async () => {
+    process.env.PAYMONGO_SECRET_KEY = 'sk_live_abc123';
+    db.isOwner = false;
+    const res = fakeRes();
+    await handler(checkoutReq(), res);
+    process.env.PAYMONGO_SECRET_KEY = 'sk_test_abc123';
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('asks whether it is on as the customer, not as the server', async () => {
+    const res = fakeRes();
+    await handler(checkoutReq(), res);
+    expect(db.calls.map((c) => c[0])).toEqual(['public_pay_options', 'is_owner']);
   });
 
   it('is refused without a real order id', async () => {
@@ -299,7 +317,9 @@ describe('the database side (0077)', () => {
     expect(sql).toContain('p_amount_centavos <> o.quoted_amount::bigint * 100');
     expect(sql).toMatch(/for update;/);
   });
-  it('is off until the owner turns it on', () => {
-    expect(sql).toContain('add column if not exists paymongo_on boolean not null default false');
+  it('is off until the owner turns it on, and has an owners-only setting for testing', () => {
+    expect(sql).toContain("add column if not exists paymongo_mode text not null default 'off'");
+    expect(sql).toContain("check (paymongo_mode in ('off', 'owners', 'everyone'))");
+    expect(sql).toContain("s.paymongo_mode = 'everyone' or (s.paymongo_mode = 'owners' and public.is_owner())");
   });
 });

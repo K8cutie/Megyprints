@@ -9,9 +9,11 @@
 --  it checks the money and can be called twice.
 --
 --  WHAT:
---   1. store_settings.paymongo_on (off until the owner turns it on, after
---      PayMongo has activated the account). public_pay_options() lets the
---      website and the app read it, signed in or not, with no app release.
+--   1. store_settings.paymongo_mode: 'off' (the default), 'owners' (only
+--      the owner accounts see it: for testing with PayMongo's test keys, so
+--      no customer can "pay" a real order with a fake test card), or
+--      'everyone' (live). public_pay_options() tells the website and the app
+--      whether THIS caller sees it, signed in or not, with no app release.
 --   2. orders.paymongo_checkout_id: the PayMongo checkout made for the order,
 --      so asking to pay again reuses it instead of opening a second one.
 --   3. mark_order_paid_by_gateway(order, amount in centavos, payment id,
@@ -30,7 +32,10 @@
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ══════ 1. The switch ══════
-alter table public.store_settings add column if not exists paymongo_on boolean not null default false;
+alter table public.store_settings add column if not exists paymongo_mode text not null default 'off';
+alter table public.store_settings drop constraint if exists store_settings_paymongo_mode_chk;
+alter table public.store_settings add constraint store_settings_paymongo_mode_chk
+  check (paymongo_mode in ('off', 'owners', 'everyone'));
 
 create or replace function public.public_pay_options()
 returns jsonb
@@ -39,7 +44,9 @@ stable
 security definer
 set search_path = ''
 as $$
-  select jsonb_build_object('paymongo', coalesce((select s.paymongo_on from public.store_settings s where s.id = 1), false));
+  select jsonb_build_object('paymongo', coalesce((
+    select s.paymongo_mode = 'everyone' or (s.paymongo_mode = 'owners' and public.is_owner())
+      from public.store_settings s where s.id = 1), false));
 $$;
 revoke all on function public.public_pay_options() from public;
 grant execute on function public.public_pay_options() to anon, authenticated;
@@ -123,9 +130,9 @@ revoke all on function public.mark_order_paid_by_gateway(uuid, bigint, text, tex
 grant execute on function public.mark_order_paid_by_gateway(uuid, bigint, text, text) to service_role;
 
 -- ══════ Checks ══════
-select 'paymongo_on: off by default' as check,
+select 'paymongo_mode: off by default' as check,
   (select column_default from information_schema.columns
-    where table_schema = 'public' and table_name = 'store_settings' and column_name = 'paymongo_on') = 'false' as ok;
+    where table_schema = 'public' and table_name = 'store_settings' and column_name = 'paymongo_mode') = '''off''::text' as ok;
 select 'public_pay_options: anyone may read' as check,
   has_function_privilege('anon', 'public.public_pay_options()', 'EXECUTE')
   and has_function_privilege('authenticated', 'public.public_pay_options()', 'EXECUTE') as ok;

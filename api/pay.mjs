@@ -17,8 +17,11 @@
 //      read; then mark_order_paid_by_gateway (0077) checks the money and marks
 //      the order paid. Repeats are harmless (it answers 'already_paid').
 //
-// Off until the owner turns it on: store_settings.paymongo_on (0077), read
-// through public_pay_options(). Environment (Vercel):
+// Off until the owner turns it on: store_settings.paymongo_mode (0077) is
+// 'off', 'owners' (testing: only owner accounts) or 'everyone', read through
+// public_pay_options() AS the customer. A test key (sk_test_) also serves
+// owner accounts only, whatever the switch says: a fake test-card payment
+// must never mark a real customer's order paid. Environment (Vercel):
 //   PAYMONGO_SECRET_KEY      sk_test_… while testing, sk_live_… after activation
 //   PAYMONGO_WEBHOOK_SECRET  the webhook endpoint's secret key (Dashboard → Developers → Webhooks)
 //   PAYMONGO_METHODS         optional, e.g. "card,gcash,paymaya,qrph" (the methods the account has)
@@ -231,12 +234,16 @@ async function handleCheckout(req, res) {
   const uid = userData?.user?.id;
   if (userErr || !uid) { res.status(401).json({ error: 'Please sign in again.' }); return; }
 
-  const admin = serviceClient();
-  const { data: opts } = await admin.rpc('public_pay_options');
-  if (!opts || opts.paymongo !== true) {
-    res.status(409).json({ error: 'Card, GCash and Maya payments aren\'t on yet. Please pay by bank transfer.' });
-    return;
+  // Asked as the customer: in 'owners' mode only an owner account sees it.
+  const notOn = () => res.status(409).json({ error: 'Card, GCash and Maya payments aren\'t on yet. Please pay by bank transfer.' });
+  const { data: opts } = await asUser.rpc('public_pay_options');
+  if (!opts || opts.paymongo !== true) { notOn(); return; }
+  if (keyMode(secretKey) === 'test') {
+    const { data: owner } = await asUser.rpc('is_owner');
+    if (owner !== true) { notOn(); return; }
   }
+
+  const admin = serviceClient();
 
   const { data: order, error: orderErr } = await admin
     .from('orders')
