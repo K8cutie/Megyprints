@@ -13,7 +13,9 @@
 --  for line: the receipt-path check, MP030 for an order that didn't finish
 --  sending, MP003 for a closed order):
 --    1. an empty reference keeps the one already saved; a new one replaces it;
---    2. payment_submitted_at keeps the FIRST time the customer said they paid;
+--    2. the sent time moves only with a new reference (a new payment to
+--       match); a second "I've sent" with no reference, or the same one,
+--       keeps the time the reference was sent;
 --    3. a cancelled order's words say who closed it: the 7-day close
 --       (cancelled_by = 'auto-expire'), or a plain cancel (the customer or the
 --       shop). Both stay MP003, so every app reads them as before.
@@ -53,8 +55,11 @@ begin
      -- 0080: an empty reference keeps the saved one (B-D1).
      set payment_reference    = coalesce(v_ref, payment_reference),
          payment_proof_path   = coalesce(p_proof_path, payment_proof_path),
-         -- 0080: the first time they said they paid (B-D1).
-         payment_submitted_at = coalesce(payment_submitted_at, now())
+         -- 0080: the time goes with the reference (B-D1). SET reads the old row.
+         payment_submitted_at = case
+           when v_ref is not null and v_ref is distinct from payment_reference then now()
+           else coalesce(payment_submitted_at, now())
+         end
    where id = p_order_id
      and user_id = auth.uid()
      and payment_status = 'unpaid'
@@ -84,6 +89,9 @@ grant execute on function public.submit_payment_proof(uuid, text, text) to authe
 -- ══════ Verify ══════
 select 'submit_payment_proof keeps a saved reference when the new one is empty' as check,
        position('coalesce(v_ref, payment_reference)' in pg_get_functiondef('public.submit_payment_proof(uuid, text, text)'::regprocedure)) > 0 as ok
+union all
+select 'the sent time moves only with a new reference',
+       position('when v_ref is not null and v_ref is distinct from payment_reference then now()' in pg_get_functiondef('public.submit_payment_proof(uuid, text, text)'::regprocedure)) > 0
 union all
 select 'a plain cancel has its own words (MP003)',
        position('This order was cancelled, so it can''''t be paid' in pg_get_functiondef('public.submit_payment_proof(uuid, text, text)'::regprocedure)) > 0
