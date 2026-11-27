@@ -419,7 +419,7 @@ export default function Order() {
     ? wasPrint + (totalPrice - priceOf(schedule, albumSize, binding, pageCount))
     : null;
   const launch = schedule && wasTotal !== null ? launchOf(schedule) : null;
-  // How extra videos are sold (0073), and what the free ones are worth at the single price.
+  // How extra videos are sold (0078), and what the free ones are worth at the single price.
   const videoOffer = videoOfferOf(schedule);
   const freeVideosValue = includedVideosValue(FREE_QR_MEMORIES, videoOffer);
   // Loaded AND priceable. `settingsReady` alone only means the load settled — it

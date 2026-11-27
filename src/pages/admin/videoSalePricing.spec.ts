@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 
-/* The owner's Video memory sale box (0073): says whether a sale runs and its
+/* The owner's Video memory sale box (0078): says whether a sale runs and its
    % off, refuses a sale with no name or end before asking the database, saves
    a new theme, and ends one. */
 
@@ -66,9 +66,9 @@ describe('Admin → Pricing: Video memory sale', () => {
     expect(byId('video-sale-state').textContent).toBe('No sale: extra videos are ₱50 each.');
   });
 
-  it('a database before 0073 (or not the owner) says so', async () => {
+  it('a database before 0078 (or not the owner) says so', async () => {
     mocks.loaded = null;
     await show();
-    expect(byId('video-sale-pricing').textContent).toContain('Not set up on this database yet (migration 0073)');
+    expect(byId('video-sale-pricing').textContent).toContain('Not set up on this database yet (migration 0078)');
   });
 });

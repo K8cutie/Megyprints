@@ -392,7 +392,7 @@ export default function PricingPanel() {
         {/* Launch price (0072): today's prices as % off a regular price, with an end date */}
         <LaunchPricing />
 
-        {/* Video memory sale (0073): ₱50 a video, a named sale with a pack price */}
+        {/* Video memory sale (0078): ₱50 a video, a named sale with a pack price */}
         <VideoSalePricing />
 
         {/* Crossed-out "was" price — the real old price, with an end date */}

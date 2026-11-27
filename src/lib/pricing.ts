@@ -128,7 +128,7 @@ export interface PriceSchedule {
   free_shipping_value?: number;
   /** The crossed-out "was" prices, while they run (0041). */
   compare_at?: CompareAt | null;
-  /** How extra videos are sold (0073), put here by the loaders from
+  /** How extra videos are sold (0078), put here by the loaders from
    *  public_video_offer(); absent = the 0066 packs. Read it through videoOfferOf(). */
   video_offer?: VideoOffer | null;
   /** The launch price (0072), put here by the loaders from
@@ -420,15 +420,15 @@ export interface PriceBreakdown { items: PriceLine[]; total: number }
 
 // ── Video memories (living-memory QRs) ──────────────────────────────────────
 // Owner, 2026-11-19: "2 free video memory … 3 videos per 100 php" (0066).
-// Then 2026-11-24 (0073): "the price of each video is 50 regular but its 3 for
+// Then 2026-11-24 (0078): "the price of each video is 50 regular but its 3 for
 // 100", and "Christmas sale is urgency so end at December 31": an extra video
 // is ₱50, and while a sale runs any 3 are ₱100 (33% off). The price list
 // carries it as `video_offer` (public_video_offer(), put on the schedule by
-// the loaders). A list from before 0073 has none, and then the 0066 rule
+// the loaders). A list from before 0078 has none, and then the 0066 rule
 // holds: packs of 3 for ₱100, no single videos. Every album includes
 // FREE_QR_MEMORIES (a Megy Mini: its own offer's free_qr). Counted per QR code
 // (hosted clip or pasted link alike). The database prices the order the same
-// way (0073 video_memory_fee; videoOffer.spec holds them equal).
+// way (0078 video_memory_fee; videoOffer.spec holds them equal).
 export const FREE_QR_MEMORIES = 2;
 export const QR_PACK_SIZE = 3;
 export const QR_PACK_PRICE = 100;
@@ -438,7 +438,7 @@ export interface VideoPack { size: number; price: number; name: string | null; u
 /** How extra videos are sold: one at a time for `single`, and a pack while a sale runs. */
 export interface VideoOffer { single: number | null; pack: VideoPack | null }
 
-/** The 0066 rule, for a price list from before 0073: packs of 3 for ₱100, always. */
+/** The 0066 rule, for a price list from before 0078: packs of 3 for ₱100, always. */
 export const LEGACY_VIDEO_OFFER: VideoOffer = {
   single: null,
   pack: { size: QR_PACK_SIZE, price: QR_PACK_PRICE, name: null, until: null },
@@ -467,7 +467,7 @@ export function parseVideoOffer(data: unknown): VideoOffer | null {
 }
 
 /** The offer on `today` (Manila): the price list's, its sale gone the day
- *  after its last day; a price list from before 0073: the 0066 packs. */
+ *  after its last day; a price list from before 0078: the 0066 packs. */
 export function videoOfferOf(
   schedule: { video_offer?: unknown } | null | undefined,
   today: string = manilaToday(),

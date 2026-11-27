@@ -108,7 +108,7 @@ describe('"Add a video memory": the pop-up in the Christmas sale', () => {
   });
 });
 
-describe('after the sale, or on a price list from before 0073', () => {
+describe('after the sale, or on a price list from before 0078', () => {
   it('no sale: one button, ₱50', async () => {
     h.offer = { single: 50, pack: null };
     await open(2);
@@ -117,7 +117,7 @@ describe('after the sale, or on a price list from before 0073', () => {
     expect(q('qr-pack-single')).toBeNull();
   });
 
-  it('before 0073: the 0066 packs, as before', async () => {
+  it('before 0078: the 0066 packs, as before', async () => {
     h.offer = null;
     await open(2);
     expect(q('qr-pack-yes')?.textContent).toBe('Add 3 more · ₱100');

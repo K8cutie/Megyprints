@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   VIDEO MEMORY SALE in the owner's Pricing panel (0073).
+   VIDEO MEMORY SALE in the owner's Pricing panel (0078).
 
    Owner, 2026-11-24: "the price of each video is 50 regular but its 3 for
    100", "Christmas sale is urgency so end at December 31. We can always have
@@ -40,7 +40,7 @@ export default function VideoSalePricing() {
     return (
       <div className="mt-5 pt-5 border-t border-sand-deep" data-testid="video-sale-pricing">
         <h4 className="font-semibold text-dark">Video memory sale</h4>
-        <p className="text-xs text-medium mt-1">Not set up on this database yet (migration 0073), or owner sign-in is needed.</p>
+        <p className="text-xs text-medium mt-1">Not set up on this database yet (migration 0078), or owner sign-in is needed.</p>
       </div>
     );
   }

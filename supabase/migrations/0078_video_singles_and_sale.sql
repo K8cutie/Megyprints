@@ -1,5 +1,5 @@
--- 0077 — Video memories: ₱50 each, and a named sale with a pack price
--- (was 0073 in PR #327; renumbered and rebuilt by the bug hunt, 2026-11-27,
+-- 0078 — Video memories: ₱50 each, and a named sale with a pack price
+-- (was 0073 in PR #327, then 0077; renumbered and rebuilt by the bug hunt, 2026-11-27,
 -- F-00 / F-01: 0073's order_quote was 0067's, so applied after 0075 / 0076 it
 -- dropped the 24-page Mini price (a 24-page Mini charged at the 16-page
 -- price) and knew no A4 booklet. Rebuilt again the same day on
@@ -8,7 +8,11 @@
 -- product"). This order_quote is 0076_megy_magazine_a4's, line for line,
 -- with only 0073's video-fee lines and 'qr_singles' changed.)
 --
--- Run AFTER 0076_megy_magazine_a4 (the guard below refuses otherwise).
+-- Run AFTER 0076_megy_magazine_a4 (the guard below refuses otherwise). 0077
+-- is PayMongo (#341, no price functions); 0079 the longer-videos switch (#317,
+-- the price list only, independent of this file). Run by hand only with
+-- psql -v ON_ERROR_STOP=1, or the guard's error is printed and the rest runs
+-- anyway (supabase db push stops on it).
 --
 -- (owner, 2026-11-24: "the price of each video is 50 regular but its 3 for
 -- 100", "Christmas sale is urgency so end at December 31", "Yes, build it")
@@ -49,7 +53,7 @@ begin
   if not exists (select 1 from information_schema.columns
                   where table_schema = 'public' and table_name = 'pricing_model'
                     and column_name = 'a4_price') then
-    raise exception '0077 needs 0076_megy_magazine_a4 first (pricing_model.a4_price is missing)';
+    raise exception '0078 needs 0076_megy_magazine_a4 first (pricing_model.a4_price is missing)';
   end if;
 end
 $$;
@@ -122,7 +126,7 @@ begin
     pprice := (p_offer -> 'pack' ->> 'price')::integer;
   end if;
 
-  -- No single price (a list from before 0073): the 0066 packs, always.
+  -- No single price (a list from before 0078): the 0066 packs, always.
   if single is null or single < 1 then
     packs := ceil(e::numeric / coalesce(nullif(psize, 0), 3))::integer;
     return jsonb_build_object('fee', packs * coalesce(pprice, 100), 'packs', packs, 'singles', 0);

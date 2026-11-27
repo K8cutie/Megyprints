@@ -86,9 +86,9 @@ export function isMissingFunction(e: { code?: string; message?: string } | null 
   return !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function/i.test(e.message ?? ''));
 }
 
-/** How extra videos are sold (public_video_offer, 0073). It sets what videos
+/** How extra videos are sold (public_video_offer, 0078). It sets what videos
  *  cost, so it is part of the prices: a failed read is a failed load (no
- *  price, tried again), and only a database before 0073 (no such function)
+ *  price, tried again), and only a database before 0078 (no such function)
  *  means the 0066 packs (video_offer null → videoOfferOf's legacy rule). */
 async function loadVideoOffer(): Promise<{ ok: true; offer: VideoOffer | null } | { ok: false }> {
   try {
@@ -239,7 +239,7 @@ export async function setLaunchPrice(pct: number | null, until: string | null): 
 
 /** Owner-only (pricing_model is owner-only, 0058). The video sale as set,
  *  running or not, and the prices it sells at, for the Pricing panel; null
- *  when it can't be read (not the owner, or a database before 0073). */
+ *  when it can't be read (not the owner, or a database before 0078). */
 export async function loadOwnerVideoSale(): Promise<{ name: string | null; until: string | null; single: number; packSize: number; packPrice: number } | null> {
   if (!supabaseConfigured) return null;
   try {
@@ -253,7 +253,7 @@ export async function loadOwnerVideoSale(): Promise<{ name: string | null; until
   }
 }
 
-/** Owner-only (definer RPC, 0073). Starts or changes the video sale — its
+/** Owner-only (definer RPC, 0078). Starts or changes the video sale — its
  *  name and last day (YYYY-MM-DD) — or ends it with nulls. The SQL refuses an
  *  end date past 6 months and a name over 30 letters. Reloads the schedule. */
 export async function setVideoSale(name: string | null, until: string | null): Promise<string | null> {

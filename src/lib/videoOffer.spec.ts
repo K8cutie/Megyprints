@@ -12,7 +12,7 @@ import {
    31". An extra video is ₱50; in the sale any 3 are ₱100 (33% off). The
    "33% off" and "for a limited time" are true only because the ₱50 single is
    really sold and the sale really ends. The database charges the same
-   (0073 video_memory_fee; scripts/video-fee-parity.ts proves 246 cases equal
+   (0078 video_memory_fee; scripts/video-fee-parity.ts proves 246 cases equal
    on a real Postgres), and the pop-up comes before the video that costs.
    ══════════════════════════════════════════════════════════════════════════ */
 
@@ -31,7 +31,7 @@ describe('what extra videos cost', () => {
     expect([0, 1, 3, 4].map((e) => videoFee(e, NO_SALE).fee)).toEqual([0, 50, 150, 200]);
   });
 
-  it('a price list from before 0073: the 0066 packs of 3 for ₱100, nothing changes', () => {
+  it('a price list from before 0078: the 0066 packs of 3 for ₱100, nothing changes', () => {
     expect([0, 1, 3, 4, 6, 7].map((e) => videoFee(e, LEGACY_VIDEO_OFFER).fee)).toEqual([0, 100, 100, 200, 200, 300]);
     expect(qrMemoryCharge(5, 2)).toBe(100);
   });
@@ -92,7 +92,7 @@ describe('the pop-up (drawn and approved 2026-11-24)', () => {
     expect(videoPopupFor(3, 2, NO_SALE)).toBeNull();
   });
 
-  it('a price list from before 0073: the 0066 pop-up', () => {
+  it('a price list from before 0078: the 0066 pop-up', () => {
     expect(videoPopupFor(2, 2, LEGACY_VIDEO_OFFER)?.main).toBe('Add 3 more · ₱100');
   });
 });
@@ -120,9 +120,9 @@ describe('the words around it', () => {
   });
 });
 
-describe("the database's fee is this one (0073)", () => {
+describe("the database's fee is this one (0078)", () => {
   // Line endings as checked out (Windows may give \r\n).
-  const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0077_video_singles_and_sale.sql'), 'utf8').replace(/\r\n/g, '\n');
+  const sql = readFileSync(resolve(__dirname, '../../supabase/migrations/0078_video_singles_and_sale.sql'), 'utf8').replace(/\r\n/g, '\n');
   it('order_quote charges video_memory_fee for albums (2 free) and the Mini (its own free)', () => {
     expect(sql).toContain('vf     := public.video_memory_fee(greatest(0, qr - 2), vo);');
     expect(sql).toContain('vf     := public.video_memory_fee(greatest(0, qr - free_qr), vo);');

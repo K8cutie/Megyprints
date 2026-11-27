@@ -21,8 +21,8 @@ vi.mock('./supabase', () => ({
       if (name === 'public_launch_price') {
         return net.online && net.launch ? { data: net.launch, error: null } : { data: null, error: { message: 'Failed to fetch' } };
       }
-      // The video offer (0073) IS part of the prices. 'missing' = a database
-      // before 0073 (no such function: the 0066 packs).
+      // The video offer (0078) IS part of the prices. 'missing' = a database
+      // before 0078 (no such function: the 0066 packs).
       if (name === 'public_video_offer') {
         if (!net.online) return { data: null, error: { message: 'Failed to fetch' } };
         return net.video === 'missing'
@@ -48,14 +48,14 @@ beforeEach(async () => {
 });
 afterEach(() => { vi.useRealTimers(); });
 
-describe('the video offer (0073) is part of the prices', () => {
+describe('the video offer (0078) is part of the prices', () => {
   it('the sale rides along with the prices', async () => {
     net.online = true; net.video = { single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2026-12-31' } };
     await m.loadStoreSettings();
     expect(m.getPriceSchedule()?.video_offer).toEqual({ single: 50, pack: { size: 3, price: 100, name: 'Christmas sale', until: '2026-12-31' } });
   });
 
-  it('a database before 0073 (no such function): the prices load, with no offer (the 0066 packs)', async () => {
+  it('a database before 0078 (no such function): the prices load, with no offer (the 0066 packs)', async () => {
     net.online = true; net.video = 'missing';
     await m.loadStoreSettings();
     expect(m.getPriceSchedule()).not.toBeNull();

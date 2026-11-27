@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
---  MEGY PRINTS — VIDEO SALE PROOF (0077, was 0073; always rolled back)
+--  MEGY PRINTS — VIDEO SALE PROOF (0078, was 0073 then 0077; always rolled back)
 --
 --  Proves, on the real schema:
 --    V1  the owner's decision is in: ₱50 a video, the Christmas sale (3 for
@@ -18,7 +18,7 @@
 --  One transaction that ENDS BY RAISING (the report is the error message).
 --  Makes a throwaway owner when the database has none (rolled back).
 --
---  HOW TO RUN (local test database, after 0077):
+--  HOW TO RUN (local test database, after 0076 and 0078; psql -v ON_ERROR_STOP=1):
 --    docker exec -i supabase_db_megyprints_testers psql -U postgres < supabase/security/video-sale-proof.sql
 -- ════════════════════════════════════════════════════════════════════════════
 begin;
