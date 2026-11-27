@@ -61,8 +61,8 @@ beforeEach(() => {
 });
 
 /** Nothing but reads, and the RPCs a test expects. */
-// my_unsent_orders (0068) only reads.
-const writes = () => calls.rpcs.map((r) => r.name).filter((n) => n !== 'my_unsent_orders');
+// my_unsent_orders (0068) and public_pay_options (0077, is PayMongo on?) only read.
+const writes = () => calls.rpcs.map((r) => r.name).filter((n) => n !== 'my_unsent_orders' && n !== 'public_pay_options');
 
 describe('Your orders', () => {
   it("lists this account's orders, newest first, each where it is now, in the website's words", async () => {
