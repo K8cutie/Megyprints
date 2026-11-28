@@ -5,6 +5,8 @@
 
 export interface Recorded {
   inserts: { table: string; row: Record<string, unknown> }[];
+  /** The columns each insert asked back (`.insert(…).select(columns)`). */
+  insertSelects: string[];
   upserts: { table: string; rows: unknown[]; opts: unknown }[];
   rpcs: { name: string; args: unknown }[];
   reads: { table: string; columns: string; filters: Record<string, unknown> }[];
@@ -12,7 +14,7 @@ export interface Recorded {
   uploads: { bucket: string; path: string; contentType?: string; opts: Record<string, unknown> }[];
 }
 
-export const rec: Recorded = { inserts: [], upserts: [], rpcs: [], reads: [], uploads: [] };
+export const rec: Recorded = { inserts: [], insertSelects: [], upserts: [], rpcs: [], reads: [], uploads: [] };
 
 export const fake = {
   userId: 'user-1',
@@ -24,6 +26,8 @@ export const fake = {
   rpc: {} as Record<string, { data: unknown; error: { message: string; code?: string } | null }>,
   /** What the orders insert answers with as an error (a refused code, the unpaid limit). */
   insertError: null as { message: string; code?: string } | null,
+  /** More columns the orders insert answers with (e.g. the quoted_amount the database priced it at). */
+  insertAnswer: null as Record<string, unknown> | null,
   /** Holds an RPC's answer until the test lets it go (a request still on its way). */
   hold: {} as Record<string, Promise<void> | undefined>,
   /** The account's event bookings (event_bookings reads). */
@@ -31,8 +35,8 @@ export const fake = {
 };
 
 export function resetFake(): void {
-  rec.inserts = []; rec.upserts = []; rec.rpcs = []; rec.reads = []; rec.uploads = [];
-  fake.userId = 'user-1'; fake.albumRow = null; fake.orderRow = null; fake.rpc = {}; fake.insertError = null; fake.hold = {}; fake.bookings = [];
+  rec.inserts = []; rec.insertSelects = []; rec.upserts = []; rec.rpcs = []; rec.reads = []; rec.uploads = [];
+  fake.userId = 'user-1'; fake.albumRow = null; fake.orderRow = null; fake.rpc = {}; fake.insertError = null; fake.insertAnswer = null; fake.hold = {}; fake.bookings = [];
 }
 
 function from(table: string) {
@@ -60,10 +64,10 @@ function from(table: string) {
     insert(row: Record<string, unknown>) {
       rec.inserts.push({ table, row });
       return {
-        select: () => ({
-          single: async () => (fake.insertError
+        select: (columns?: string) => ({
+          single: async () => (rec.insertSelects.push(columns ?? ''), fake.insertError
             ? { data: null, error: fake.insertError }
-            : { data: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' }, error: null }),
+            : { data: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment', ...(fake.insertAnswer ?? {}) }, error: null }),
         }),
       };
     },

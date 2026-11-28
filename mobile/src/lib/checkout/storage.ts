@@ -47,10 +47,12 @@ export function createOnlyUpload(client: StorageClient): CreateOnlyUpload {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timedOut = new Promise<'timed out'>((done) => { timer = setTimeout(() => done('timed out'), uploadTimeLimitMs(body.byteLength)); });
     try {
-      const answer = await Promise.race([client.storage.from(bucket).upload(path, buffer, { ...opts, upsert: false }), timedOut]);
+      const { reportExisting: _keep, ...uploadOpts } = opts;
+      const answer = await Promise.race([client.storage.from(bucket).upload(path, buffer, { ...uploadOpts, upsert: false }), timedOut]);
       if (answer === 'timed out') return { message: 'Upload timed out: no answer from the server' };
       const { error } = answer;
-      if (!error || isAlreadyExists(error)) return null;
+      if (!error) return null;
+      if (isAlreadyExists(error)) return opts.reportExisting ? { message: 'already exists', alreadyThere: true } : null;
       return { message: error.message || 'upload failed' };
     } finally {
       clearTimeout(timer);

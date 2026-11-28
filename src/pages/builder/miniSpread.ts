@@ -40,6 +40,9 @@ export const SPREAD_RIGHT_ID = 'mini-spread-right';
 export const SPREAD_QR_CORNERS: Record<SpreadHalf, readonly QrCorner[]> = { left: ['bl', 'tl'], right: ['br', 'tr'] };
 
 const MINI = '5.8x8.3' as const;
+/** Megy Magazine's A4 takes the same spread, only bigger (its video chip too:
+ *  1.7 in). Measured on A5, so the Megy Mini's spread stays as it was. */
+const A4 = '8.3x11.7' as const;
 /** A5 in inches: the spread half's own page, no spine reserve. */
 const PAGE_W_IN = 148 / 25.4;
 const PAGE_H_IN = 210 / 25.4;
@@ -88,7 +91,7 @@ function half(side: SpreadHalf, corner: QrCorner | null): PageTemplate {
     margin: { top: 0, bottom: 0, left: 0, right: 0 },
     orientation: 'landscape',
     targetRatio: '4:3',
-    albumSizes: [MINI],
+    albumSizes: [MINI, A4],
     fullBleed: true,
     spreadHalf: side,
     slots,

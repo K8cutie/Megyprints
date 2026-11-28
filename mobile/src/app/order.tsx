@@ -37,7 +37,7 @@ import { countQrMemories, FREE_QR_MEMORIES, includedHostingLine, includedVideosV
 import { albumPhotoCount, photosShortBy, tooFewToOrderMessage } from '@web/pages/builder/albumMinimum';
 import { coverChoiceNote, coverFitsSheet } from '@web/pages/builder/printSheet';
 import { ALBUM_SIZES, COVERS, MATERIALS, type CoverType, type MaterialType } from '@web/pages/builder/types';
-import { isMiniSize, MINI_COVER, MINI_NAME } from '@web/lib/megyMini';
+import { bookletName, bookletPaper, isMiniSize, MINI_COVER } from '@web/lib/megyMini';
 
 /** The Megy Mini's one cover (lib/megyMini): never offered for an album. */
 const MINI_COVER_CHOICE: (typeof COVERS)[number] = {
@@ -67,10 +67,13 @@ import { checkoutAlbumFrom, loadOrderAlbumRow } from '../lib/checkout/orderStart
 import { useOptionalBuilder } from '../builder/BuilderProvider';
 import type { OrderAlbumRow } from '../lib/checkout/orderPayload';
 import { TesterCodeGoneError } from '../lib/checkout/testerCode';
-import type { PlacedOrder } from '../lib/checkout/sendOrder';
+import { OrderAlreadySavedError, type PlacedOrder } from '../lib/checkout/sendOrder';
 import { finishToCopy, sameFinishNote, type CopiedFinish } from '../lib/checkout/sameFinish';
 import { lastFinishForAlbum } from '../lib/orders/myOrders';
-import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, placedOn, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
+import { newOrderId } from '../lib/checkout/orderId';
+import { lowSpaceWords } from '../lib/checkout/sizeLimits';
+import { Paths } from 'expo-file-system';
+import { askedToPay, openOrderForAlbum, openOrderView, openOrderWords, payAfterPlacing, placedOn, PRICE_MOVED, secondOrderQuestion, unfinishedTestOrder, type OpenOrder } from '../lib/checkout/openOrder';
 import { albumQrFills, placeOrderPlan, type PlaceOrderPlan } from '../lib/checkout/orderPayload';
 import { placeFrames, type PlaceFrame } from '../lib/checkout/placeRun';
 import { checkoutPrice, peso, placeOrderLabel } from '../lib/checkout/price';
@@ -83,10 +86,7 @@ import type { VideoMinutes } from '@web/lib/pricing';
 import { dropEventLink, readEventLink, saveEventLink } from '../lib/events/albumEventLink';
 import * as EV from '../lib/events/eventDeal';
 import { ClipTooBigError, MissingClipError, missingClipMessage, tooBigClipMessage, type ClipQuality } from '../lib/memories/clips';
-import {
-  allSentBody, allSentTitle, FINISH_LOAD_FAILED, FINISH_SENDING, finishAlbum, finishEndsOnPayment, finishPlan,
-  listUnsentOrders, loadFinishOrder, NEW_ORDER_INSTEAD, unsentBody, unsentHeadline, type FinishOrderRow, type UnsentOrder,
-} from '../lib/checkout/unsentOrders';
+import { allSentBody, allSentTitle, FINISH_LOAD_FAILED, FINISH_SENDING, finishAlbum, finishEndsOnPayment, finishPlan, listUnsentOrders, loadFinishOrder, NEW_ORDER_INSTEAD, unsentBody, unsentHeadline, type FinishOrderRow, type UnsentOrder, retryFinishesSavedOrder, savedOrderNote, SAVED_ORDER_LOAD_FAILED } from '../lib/checkout/unsentOrders';
 import { isOrderBeingSent, LEAVE_SCREEN, LEAVE_SENDING_LINE, LEAVE_SENDING_TITLE, STAY_HERE } from '../lib/checkout/backgroundSend';
 import type { CheckoutAlbum } from '../lib/checkout/orderPayload';
 
@@ -131,6 +131,10 @@ export default function OrderScreen() {
   const ownText = own?.text ?? null;
   // The order a try made: Place order again reuses it (never a second order).
   const placedRef = useRef<PlacedOrder | null>(null);
+  // The phone's free space, read when an order is about to be made (B-D6); unknown: go on.
+  const roomWords = (): string | null => { try { return lowSpaceWords(Paths.availableDiskSpace); } catch { return null; } };
+  // The id the next new order is sent with, kept until an order is known saved (L1-47).
+  const orderIdRef = useRef<string | null>(null);
   // The files a try sent: never made or sent again (sendOrder `sent`).
   // The files this phone sent, known again when this order is finished on a
   // later visit (sentFiles.ts: the app closed on a stopped send, round 3).
@@ -197,7 +201,12 @@ export default function OrderScreen() {
   const [askSecond, setAskSecond] = useState(false);
   const secondOk = useRef(false);
   const [plan, setPlan] = useState<PlaceOrderPlan | null>(null);
+  // The last try was a free tester order (its code is on its row): Place order again
+  // keeps that path, where the code claims it; Finish sending has no claim (Mother, L1-45).
+  const savedIsTestOrder = !!plan?.orderRow?.tester_code;
   const [placedAmount, setPlacedAmount] = useState(0);
+  // The saved total differs from the phone's (a price moved mid-checkout): bug hunt B3.
+  const [priceMoved, setPriceMoved] = useState(false);
 
   const scrollRef = useRef<ScrollViewInstance>(null);
   // Where each part of the form starts on the page, to go to the first thing
@@ -253,6 +262,8 @@ export default function OrderScreen() {
   const tooFew = photosShortBy(photosIn, albumSize, pageCount) > 0;
   // MEGY MINI (lib/megyMini): its own cover (staples), its own price + shipping.
   const mini = isMiniSize(albumSize);
+  // Its name: "Megy Mini" (A5) or "Megy Magazine" (A4).
+  const bookName = bookletName(albumSize);
 
   // THE PRESS: a cover too big for the shop's sheet isn't offered (shared printSheet).
   const coverChoices = mini ? [MINI_COVER_CHOICE] : COVERS.filter((c) => coverFitsSheet(albumSize, c.type, pageCount, { material }));
@@ -410,6 +421,15 @@ export default function OrderScreen() {
       setMessage('Getting your album ready… Tap Place order again in a moment.');
       return;
     }
+    // Too little room on the phone to make the print files: said before any order is saved (B-D6).
+    const tooFull = live ? roomWords() : null;
+    if (tooFull) { setMessage(tooFull); return; }
+    // A send that stopped after its order row was saved, this visit (L1-45):
+    // finish THAT order from what it froze, never from the form.
+    if (retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing || savedIsTestOrder, eventAlbum: !!eventLink })) {
+      void startFinishing(placedRef.current!.id);
+      return;
+    }
     try {
       const p = placeOrderPlan({
         userId,
@@ -424,9 +444,11 @@ export default function OrderScreen() {
         affiliateCode: eventLink || tester ? null : affiliate?.code ?? null,
         includedYears: price.includedYears,
         eventBookingId: eventLink && coveredByBooking ? eventLink.bookingId : null,
+        orderId: live && !finishing ? (orderIdRef.current ??= newOrderId()) : undefined,
       });
       setPlan(p);
       setPlacedAmount(price.payTotal);
+      setPriceMoved(false);
       if (finishing && !placedRef.current) placedRef.current = { id: openOrder!.id, order_number: openOrder!.order_number, status: openOrder!.status };
       setStep('placing');
     } catch (e) {
@@ -437,14 +459,17 @@ export default function OrderScreen() {
   // Finish sending: the order read back with the album it froze, drawn from
   // this phone's photos, and sent on the SAME order: only what isn't in the
   // bucket yet goes up (unsentOrders.ts).
-  const startFinishing = async () => {
-    if (!unsent || !userId || !b || finishBusy) return;
-    if (!ownText) { setMessage('Getting your album ready… Tap Finish sending again in a moment.'); return; }
+  const startFinishing = async (savedId?: string) => {
+    const orderId = savedId ?? unsent?.order_id;
+    if (!orderId || !userId || !b || finishBusy) return;
+    if (!ownText) { setMessage(`Getting your album ready… Tap ${savedId ? 'Place order' : 'Finish sending'} again in a moment.`); return; }
+    const tooFull = roomWords();
+    if (tooFull) { setMessage(tooFull.replace('Place order', savedId ? 'Place order' : 'Finish sending')); return; }
     setMessage('');
     setFinishBusy(true);
     try {
-      const order = await loadFinishOrder(supabase as never, userId, unsent.order_id);
-      if (!order) { setMessage(FINISH_LOAD_FAILED); return; }
+      const order = await loadFinishOrder(supabase as never, userId, orderId);
+      if (!order) { setMessage(savedId ? SAVED_ORDER_LOAD_FAILED : FINISH_LOAD_FAILED); return; }
       const fa = finishAlbum(order, b.uploadedPhotos);
       const p = finishPlan(order, userId, price.ready ? price.includedYears : null);
       placedRef.current = { id: order.id, order_number: order.order_number, status: order.status };
@@ -454,7 +479,7 @@ export default function OrderScreen() {
       setPlan(p);
       setStep('placing');
     } catch (e) {
-      setMessage(e instanceof Error && e.message ? e.message : FINISH_LOAD_FAILED);
+      setMessage(e instanceof Error && e.message ? e.message : savedId ? SAVED_ORDER_LOAD_FAILED : FINISH_LOAD_FAILED);
     } finally {
       setFinishBusy(false);
     }
@@ -519,7 +544,11 @@ export default function OrderScreen() {
         text={ownText} placed={placedRef.current} sent={sentRef.current}
         bookingNumber={eventLink?.bookingNumber ?? null}
         finishing={!!fo}
-        onOrder={(o) => { placedRef.current = o; }}
+        onOrder={(o) => {
+          placedRef.current = o;
+          // A new order row: ask for the total the database saved on it (B3).
+          if (!fo) { const p = payAfterPlacing(o, price.payTotal); setPlacedAmount(p.amount); setPriceMoved(p.changed); }
+        }}
         onSent={(r) => {
           placedRef.current = r.order;
           setPlacedOrder(r.order);
@@ -544,6 +573,13 @@ export default function OrderScreen() {
               : e instanceof MissingClipError ? missingClipMessage(pages, e.codes)
                 : e instanceof Error && e.message ? e.message : 'Something went wrong sending your order.');
             setStep('form');
+            return;
+          }
+          // The order an earlier try saved, its answer lost (L1-47): finish THAT one.
+          if (e instanceof OrderAlreadySavedError) {
+            placedRef.current = { id: e.orderId, order_number: '', status: 'pending_payment' };
+            setMessage(e.message); setStep('form');
+            void startFinishing(e.orderId);
             return;
           }
           // A memory video too big for the server, said before any order was made.
@@ -604,7 +640,8 @@ export default function OrderScreen() {
     const summary = { albumLine, breakdown: price.breakdown.items, total: price.total, wasTotal: price.wasTotal, shipsFree: !price.mini };
     if (live && placedOrder) {
       // After Finish sending the summary is the order's, not the album's now: left out.
-      return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={payAfterFinish ? undefined : summary} live
+      return <PaymentStep amount={placedAmount} order={{ id: placedOrder.id, order_number: placedOrder.order_number, created_at: new Date().toISOString() }} summary={payAfterFinish || priceMoved ? undefined : summary} live
+        note={priceMoved && !payAfterFinish ? PRICE_MOVED : undefined}
         onBack={() => setStep('form')}
         onPaid={(receiptError) => { setDone({ number: placedOrder.order_number, test: false, receiptError }); setStep('done'); }} />;
     }
@@ -622,13 +659,13 @@ export default function OrderScreen() {
         <Button label={FINISH_SENDING} busy={finishBusy} onPress={() => { void startFinishing(); }} testID="order-finish-sending" />
         {!!message && <Text style={styles.error} accessibilityRole="alert" testID="order-finish-error">{message}</Text>}
         {/* A new order is still possible (the album changed since, say): outlined. */}
-        <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; setNewInstead(true); setMessage(''); }} testID="order-new-instead" />
+        <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; orderIdRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-new-instead" />
       </ScrollView>
     );
   }
 
   /* ══════════════ FORM ══════════════ */
-  const sizeName = mini ? `${MINI_NAME} · A5` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
+  const sizeName = mini ? `${bookName} · ${bookletPaper(albumSize)}` : ALBUM_SIZES.find((s) => s.preset === albumSize)?.name ?? albumSize;
   const materialName = MATERIALS.find((m) => m.type === material)?.name ?? material;
   const coverName = mini ? MINI_COVER_CHOICE.name : COVERS.find((c) => c.type === cover)?.name ?? cover;
   // An order that didn't finish sending is never "pay that order" (0068).
@@ -640,6 +677,12 @@ export default function OrderScreen() {
       // (the form opened at the top, the words below the fold: beta round 2).
       onContentSizeChange={() => { if (!showFailure.current) return; showFailure.current = false; scrollRef.current?.scrollToEnd({ animated: false }); }}>
       {ordersOwn && <View testID="order-own-album" />}
+      {retryFinishesSavedOrder({ live, placed: placedRef.current, finishingTestOrder: finishing || savedIsTestOrder, eventAlbum: !!eventLink }) && placedRef.current && (
+        <View style={styles.notice} testID="order-saved-note">
+          <Text style={styles.noticeBody}>{savedOrderNote(placedRef.current.order_number)}</Text>
+          <Button label={NEW_ORDER_INSTEAD} kind="plain" onPress={() => { secondOk.current = true; placedRef.current = null; orderIdRef.current = null; setNewInstead(true); setMessage(''); }} testID="order-saved-new-instead" />
+        </View>
+      )}
       {!!ownRowError && (
         <View style={styles.notice} testID="order-not-saved">
           <Text style={styles.noticeBody}>{ownRowError}</Text>
@@ -747,7 +790,7 @@ export default function OrderScreen() {
         {!price.mini && <Row label="Shipping" value="Free" good testID="order-shipping" />}
         {!eventLink && tester && price.ready && <Row label={testerLine(tester)} value={`−${peso(price.total - price.payTotal)}`} good testID="order-tester-line" />}
         {/* A Megy Mini takes no affiliate discount (0065): the line says so, with no amount. */}
-        {!eventLink && !tester && affiliate && price.ready && <Row label={affiliateLine(affiliate, mini)} value={mini ? '' : `−${peso(price.total - price.payTotal)}`} good testID="order-affiliate-line" />}
+        {!eventLink && !tester && affiliate && price.ready && <Row label={affiliateLine(affiliate, mini && bookName)} value={mini ? '' : `−${peso(price.total - price.payTotal)}`} good testID="order-affiliate-line" />}
         <View style={styles.totalRow}>
           <Text style={styles.strong}>Total</Text>
           <Text style={styles.total} testID="order-total">
@@ -767,11 +810,11 @@ export default function OrderScreen() {
         {/* Your own album: the database checks the code, as on the website (its
             trigger takes a code only from an account that checked it). The
             test album writes nothing, so it checks the code's shape only. */}
-        {!eventLink && price.ready && <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} onAffiliate={setAffiliate} mini={mini}
+        {!eventLink && price.ready && <CheckoutCodeBox tester={tester} affiliate={affiliate} onTester={setTester} onAffiliate={setAffiliate} mini={mini && bookName}
           check={(typed) => (live && userId ? checkCheckoutCode(typed) : checkTesterCodeOffline(typed, !!userId))}
           signedIn={!!userId} onSignIn={signIn} />}
         <View style={styles.included} testID="order-included">
-          <Text style={styles.strongSmall}>Included with your {mini ? MINI_NAME : 'album'}</Text>
+          <Text style={styles.strongSmall}>Included with your {mini ? bookName : 'album'}</Text>
           {!mini && <Text style={styles.small}>✓ Free shipping{price.freeShippingValue > 0 ? ` (${peso(price.freeShippingValue)} value)` : ''}</Text>}
           {mini
             ? <Text style={styles.small}>✓ {price.freeVideos} video memories</Text>
@@ -802,7 +845,7 @@ export default function OrderScreen() {
             {eventLink
               ? <><Text style={styles.strongSmall}>{EV.EVENT_MEMORIES}</Text> — a video plays when anyone scans your printed album.</>
               : mini
-                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {MINI_NAME}. {videoOfferSentence(videoOffer)}</>
+                ? <><Text style={styles.strongSmall}>{price.freeVideos} video memories included</Text> — a video plays when anyone scans your printed {bookName}. {videoOfferSentence(videoOffer)}</>
                 : <><Text style={styles.strongSmall}>{FREE_QR_MEMORIES} living-memory QRs included</Text> — a video plays when anyone scans your printed album. {videoOfferSentence(videoOffer)}</>}
             {qrCount > 0 && <> This album has <Text style={styles.strongSmall}>{qrCount}</Text>.</>}
           </Text>
@@ -814,7 +857,7 @@ export default function OrderScreen() {
       ) : asking ? null : (
         <>
           <Button
-            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.payTotal, miniOff: price.miniOff })}
+            label={eventLink ? EV.PLACE_EVENT : placeOrderLabel({ ready: price.ready, loading: prices.loading, retrying: prices.retrying, tester: !!tester, total: price.payTotal, miniOff: price.miniOff, miniName: bookName })}
             busy={!price.ready && (prices.loading || prices.retrying)}
             onPress={onPlace}
             testID="order-place"

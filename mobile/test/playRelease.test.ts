@@ -98,7 +98,7 @@ describe('the Play build is the 1.x app, a newer version', () => {
     expect(play.name).toBe('Megy Prints');
   });
 
-  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.8', () => {
+  it('a higher version code than 1.x and than the 2.0 codes Play already has (Play takes only a higher one); version 2.1.9', () => {
     expect(oneXVersionCode).toBeGreaterThan(0);
     expect(play.android.versionCode).toBeGreaterThan(oneXVersionCode);
     // 100 (2.0.0) was built 2026-11-03 but never uploaded; 101 (2.0.1) went to Alpha 2026-11-04;
@@ -133,8 +133,10 @@ describe('the Play build is the 1.x app, a newer version', () => {
     //             the back cover (owner: "prep the package", "Add the order tag to 2.1.7").
     // 118 (2.1.8) where each photo was taken: the album keeps photos from the same place
     //             together, as the website does (owner: "Yes, add it", "put it on 2.1.8", PR #336).
-    expect(play.android.versionCode).toBe(118);
-    expect(play.version).toBe('2.1.8');
+    // 119 (2.1.9) Megy Magazine, the A4 booklet, its own product beside the A5 Megy Mini
+    //             (owner: "the A4 album becomes another product", "₱599 / ₱699").
+    expect(play.android.versionCode).toBe(119);
+    expect(play.version).toBe('2.1.9');
   });
 
   it('everything else is the dev build\'s: screens, permissions, plugins (and the signing, and saying it is the Play build)', () => {

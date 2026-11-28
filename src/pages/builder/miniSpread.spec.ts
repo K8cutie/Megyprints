@@ -78,7 +78,8 @@ describe('the middle spread: which pages, which photo', () => {
     for (const t of SPREAD_TEMPLATES) {
       expect(ids.has(t.id)).toBe(false);
       expect(getTemplateById(t.id)).toBe(t);
-      expect(t.albumSizes).toEqual([MINI_SIZE]);
+      // and Megy Magazine's A4: the same spread, only bigger (miniSpread.ts)
+      expect(t.albumSizes).toEqual([MINI_SIZE, '8.3x11.7']);
     }
   });
 });

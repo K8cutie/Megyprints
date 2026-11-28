@@ -21,7 +21,7 @@ import { analyzePhotos, type PhotoRatio } from './photoAnalyzer';
 import { PER_SIZE_AUTHORED } from './templateKit';
 import { templateTracker, ShuffleBag, shuffleArray } from './varietyTracker';
 import { MIN_ALBUM_PAGES as MIN_PAGES, naturalPerPage } from './densities';
-import { isMiniSize, MINI_SIZE, MINI_PAGES, MINI_MEMORY_PAGES, MINI_OPENING_PAGES } from '../../lib/megyMini';
+import { isMiniSize, MINI_PAGES, MINI_MEMORY_PAGES, MINI_OPENING_PAGES } from '../../lib/megyMini';
 import { pickSpreadPhoto, spreadLeftIndex, spreadPages } from './miniSpread';
 import { planMiniPages } from './miniPlanner';
 
@@ -447,6 +447,7 @@ export function isFullPagePhoto(page: AlbumPage): boolean {
    faces, only those whose faces the centred crop keeps. */
 const PAGE_ASPECT: Record<string, number> = {
   '5.8x8.3': 148 / 210,  // A5, the Megy Mini
+  '8.3x11.7': 210 / 297, // A4, Megy Magazine
   '6x4': 6 / 4, '8x6': 8 / 6, '6x8': 6 / 8, '6x6': 1, '8x8': 1, '11.5x8': 11.5 / 8, '8.5x11': 8.5 / 11,
 };
 const SIDE_CROP_OK = 0.34;
@@ -1410,7 +1411,7 @@ export function generateAlbum(
   // opening and memory pages leave gaps in what is laid out around them, and
   // those gaps must not split the rest into more scenes.
   if (isMiniSize(albumSize) && options?.memoryPages === undefined) {
-    return generateMiniBook(photos, photosPerPage, background, options);
+    return generateMiniBook(photos, albumSize, photosPerPage, background, options);
   }
   const opts = options?.scenes === undefined ? { ...options, scenes: planScenes(photos) } : options;
   const made = (memoryPages: number) => generateAlbumWith(photos, albumSize, photosPerPage, background, opts, memoryPages);
@@ -1463,7 +1464,8 @@ export function generateAlbum(
   return best;
 }
 
-/** The Megy Mini (lib/megyMini): always exactly its 16 (or 24) pages, every page
+/** A stapled booklet (the Megy Mini or Megy Magazine, lib/megyMini; at its own
+ *  size): always exactly its 16 (or 24) pages, every page
  *  filled edge to edge with the Mini's own layouts (miniTemplates; owner,
  *  2026-11-17: "im trying to avoid pages with lots of free spaces since the
  *  pages for mini are very few"). One opening full page and two memory pages
@@ -1473,6 +1475,7 @@ export function generateAlbum(
  *  A chosen photos-per-page doesn't apply: the 16 pages set the mix. */
 function generateMiniBook(
   photos: UploadedPhoto[],
+  size: AlbumSizePreset,
   _photosPerPage: number | undefined,
   background: AlbumPage['background'] | undefined,
   options: GenerateOptions | undefined,
@@ -1485,21 +1488,21 @@ function generateMiniBook(
   const carried = new Set((options?.memories ?? []).map((m) => m.photo));
   const middle = spreadLeftIndex(wanted);
   const spread = wanted >= middle + 2 ? pickSpreadPhoto(photos, carried) : null;
-  if (spread == null) return dealMiniPages(photos, wanted, background, options);
+  if (spread == null) return dealMiniPages(photos, size, wanted, background, options);
 
   const restMap = photos.map((_, i) => i).filter((i) => i !== spread);
   const toRest = (i: number) => (i < spread ? i : i - 1);
   const faceCenters = options?.faceCenters
     ? Object.fromEntries(Object.entries(options.faceCenters).filter(([k]) => +k !== spread).map(([k, v]) => [toRest(+k), v]))
     : undefined;
-  const pages = dealMiniPages(restMap.map((i) => photos[i]), wanted - 2, background, {
+  const pages = dealMiniPages(restMap.map((i) => photos[i]), size, wanted - 2, background, {
     ...options,
     ...(faceCenters ? { faceCenters } : {}),
     memories: options?.memories?.map((m) => ({ ...m, photo: toRest(m.photo) })),
   });
   remapSlotFills(pages, restMap);
   const at = Math.min(middle, pages.length);
-  const pair = spreadPages(createEmptyPage(at, MINI_SIZE, background, options?.border), createEmptyPage(at + 1, MINI_SIZE, background, options?.border), spread);
+  const pair = spreadPages(createEmptyPage(at, size, background, options?.border), createEmptyPage(at + 1, size, background, options?.border), spread);
   pages.splice(at, 0, ...pair);
   pages.forEach((p, i) => { p.id = makePageId(i); });
   return pages;
@@ -1509,25 +1512,25 @@ function generateMiniBook(
  *  memory pages (and a memory that came along, as its badge page), and the
  *  page planner's pages for the rest, `want` pages in all. */
 function dealMiniPages(
-  photos: UploadedPhoto[], want: number, background: AlbumPage['background'] | undefined, options: GenerateOptions | undefined,
+  photos: UploadedPhoto[], size: AlbumSizePreset, want: number, background: AlbumPage['background'] | undefined, options: GenerateOptions | undefined,
 ): AlbumPage[] {
-  const solo = memorySingleTemplate(MINI_SIZE);
+  const solo = memorySingleTemplate(size);
   const badges = new Map<number, CarriedMemory[]>();
   for (const m of options?.memories ?? []) {
-    if (photos[m.photo] && qrBadgeTemplate(MINI_SIZE, m.corner ?? 'br')) badges.set(m.photo, [...(badges.get(m.photo) ?? []), m]);
+    if (photos[m.photo] && qrBadgeTemplate(size, m.corner ?? 'br')) badges.set(m.photo, [...(badges.get(m.photo) ?? []), m]);
   }
-  const opening = solo ? pickOpeningPhotos(photos, MINI_SIZE, MINI_OPENING_PAGES, new Set(badges.keys()), options?.faceCenters) : [];
+  const opening = solo ? pickOpeningPhotos(photos, size, MINI_OPENING_PAGES, new Set(badges.keys()), options?.faceCenters) : [];
   const carriedPhotos = [...badges].flatMap(([photo, list]) => list.map(() => photo));
   const memWant = solo ? Math.max(0, Math.min(MINI_MEMORY_PAGES, photos.length - opening.length) - carriedPhotos.length) : 0;
   const spoken = new Set([...badges.keys(), ...opening]);
-  const reserved = [...carriedPhotos, ...(memWant > 0 ? pickMemoryPhotosBesides(photos, MINI_SIZE, memWant, spoken, options, memWant) : [])];
+  const reserved = [...carriedPhotos, ...(memWant > 0 ? pickMemoryPhotosBesides(photos, size, memWant, spoken, options, memWant) : [])];
   const taken = new Set([...reserved, ...opening]);
   const rest = groupPhotosByMoment(photos).flat().filter((i) => !taken.has(i));
   const sceneOf = options?.scenes === false ? null : (options?.scenes ?? planScenes(photos));
   const plan = planMiniPages(rest.map((i) => photos[i]), Math.max(0, want - opening.length - reserved.length),
     options?.randomize ? Math.random : () => 0, sceneOf ? rest.map((i) => sceneOf.get(photos[i].id)) : undefined);
   const pages = plan.map((pp, k) => {
-    const page = createEmptyPage(k, MINI_SIZE, background, options?.border, options?.cornerBase);
+    const page = createEmptyPage(k, size, background, options?.border, options?.cornerBase);
     page.templateId = pp.templateId;
     page.slotFills = pp.photos.map((i) => rest[i]);
     page.slotScales = pp.photos.map(() => 1);
@@ -1535,8 +1538,8 @@ function dealMiniPages(
     page.slotOffsetsY = pp.photos.map(() => 0);
     return page;
   });
-  if (solo) pages.unshift(...opening.map((photo, i) => asFullPage(createEmptyPage(i, MINI_SIZE, background, options?.border, options?.cornerBase), solo, photo)));
-  insertMemoryPages(pages, reserved, solo, photos, MINI_SIZE, background, options, badges, opening.length);
+  if (solo) pages.unshift(...opening.map((photo, i) => asFullPage(createEmptyPage(i, size, background, options?.border, options?.cornerBase), solo, photo)));
+  insertMemoryPages(pages, reserved, solo, photos, size, background, options, badges, opening.length);
   // Two shots of the same moment the customer kept never share a page.
   separateLookAlikes(pages, photos, isMemoryReady);
   pages.forEach((p, i) => { p.id = makePageId(i); });

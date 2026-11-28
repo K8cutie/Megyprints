@@ -28,13 +28,11 @@ import { fixtureCheckoutAlbum } from '../src/lib/checkout/fixtureAlbum';
 import { placeOrderPlan, type OrderAlbumRow, type PlanInput } from '../src/lib/checkout/orderPayload';
 import { paymentSubmitPlan } from '../src/lib/checkout/payment';
 import { TesterCodeGoneError } from '../src/lib/checkout/testerCode';
-import {
-  COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, ORDER_OFFLINE, PAGES_SEND_FAILED, sendOrder, sendPayment, TESTER_CLAIM_FAILED,
-  type ClipSender, type PlacedOrder, type SendDeps, type SendStep,
-} from '../src/lib/checkout/sendOrder';
+import { OrderAlreadySavedError, ORDER_ALREADY_SAVED, COVER_MAKE_FAILED, COVER_SEND_FAILED, MEMORY_ROWS_FAILED, MemoryVideosNotInAppError, ORDER_OFFLINE, PAGES_SEND_FAILED, sendOrder, sendPayment, TESTER_CLAIM_FAILED, type ClipSender, type PlacedOrder, type SendDeps, type SendStep } from '../src/lib/checkout/sendOrder';
 import { createOnlyUpload, isAlreadyExists, uploadTimeLimitMs } from '../src/lib/checkout/storage';
 import { MissingClipError } from '../src/lib/memories/clips';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
+import { PAGES_TOO_BIG } from '../src/lib/checkout/sizeLimits';
 
 jest.mock('@web/lib/supabase', () => jest.requireActual('./helpers/fakeSupabase').supabaseModule);
 jest.mock('@web/lib/storageUpload', () => jest.requireActual('./helpers/fakeSupabase').storageUploadModule);
@@ -147,6 +145,54 @@ describe('a retry, and files already sent', () => {
     const d = deps({ onOrder: (o) => { seen.push(`order ${o.id}`); }, makeCover: async () => { seen.push('cover'); return COVER; } });
     await sendOrder(placeOrderPlan(input()), d);
     expect(seen).toEqual(['order order-1', 'cover']);
+  });
+
+  it('the order row is read back with the total the database saved on it (bug hunt B3: the payment step asks for that)', async () => {
+    fake.insertAnswer = { quoted_amount: 1355, amount: null };
+    const seen: unknown[] = [];
+    const r = await sendOrder(placeOrderPlan(input()), deps({ onOrder: (o) => { seen.push(o); } }));
+    expect(rec.insertSelects).toEqual(['id, order_number, status, quoted_amount, amount']);
+    expect(seen[0]).toMatchObject({ id: 'order-1', quoted_amount: 1355, amount: null });
+    expect(r.order).toMatchObject({ quoted_amount: 1355 });
+  });
+
+  // Bug hunt B-D7: storage refusing the pages file for its size is not the internet, and no try after it can pass.
+  it('the pages file refused for its size (live takes 50 MB a file): the size words at once, no more tries', async () => {
+    const d = deps({
+      upload: async (bucket, path) => {
+        rec.uploads.push({ bucket, path, contentType: '', opts: {} });
+        return /cover/.test(path) ? null : { message: 'The object exceeded the maximum allowed size' };
+      },
+    });
+    await expect(sendOrder(placeOrderPlan(input()), d)).rejects.toThrow(PAGES_TOO_BIG);
+    expect(d.waits).toEqual([]);
+    expect(rec.uploads.filter((u) => !/cover/.test(u.path))).toHaveLength(1);
+  });
+
+  // Bug hunt L1-47: the answer to a saved insert was lost; Place order again.
+  const ID = '6f1c2d3e-4a5b-4c6d-8e7f-0123456789ab';
+  it('the order is sent with the id the phone chose (left out: the database picks it, as the website does)', () => {
+    expect(placeOrderPlan(input({ orderId: ID })).orderRow.id).toBe(ID);
+    expect('id' in placeOrderPlan(input()).orderRow).toBe(false);
+  });
+
+  it('the same id refused again (orders_pkey) means "already saved": no second order, nothing sent, the app finishes that one', async () => {
+    fake.insertError = { code: '23505', message: 'duplicate key value violates unique constraint "orders_pkey"' };
+    const err = await sendOrder(placeOrderPlan(input({ orderId: ID })), deps()).then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(OrderAlreadySavedError);
+    expect((err as OrderAlreadySavedError).orderId).toBe(ID);
+    expect((err as Error).message).toBe(ORDER_ALREADY_SAVED);
+    expect(rec.inserts).toHaveLength(1);
+    expect(rec.uploads).toHaveLength(0);
+  });
+
+  it('another duplicate (not the order id), or an order with no phone-chosen id, is not mistaken for it', async () => {
+    fake.insertError = { code: '23505', message: 'duplicate key value violates unique constraint "orders_order_number_key"' };
+    const a = await sendOrder(placeOrderPlan(input({ orderId: ID })), deps()).then(() => null, (e: unknown) => e);
+    expect(a).not.toBeInstanceOf(OrderAlreadySavedError);
+    fake.insertError = { code: '23505', message: 'duplicate key value violates unique constraint "orders_pkey"' };
+    const b = await sendOrder(placeOrderPlan(input()), deps()).then(() => null, (e: unknown) => e);
+    expect(b).not.toBeInstanceOf(OrderAlreadySavedError);
   });
 
   it('a file already there is "done" by the website\'s own rule (storageUpload isAlreadyExists)', async () => {
@@ -413,7 +459,10 @@ describe('"I\'ve sent ₱X" sends what the website sends', () => {
     const d = deps();
     const r = await sendPayment(paymentSubmitPlan('order-1', ' 2026091012345678 ', png), new Uint8Array([9]), d);
     expect(r.receiptError).toBeNull();
-    expect(rec.uploads).toEqual(website.uploads);
+    // `reportExisting` only tells the app's own upload to say a receipt already
+    // there (bug hunt B-D4); storage.ts never sends it to storage.
+    expect(rec.uploads.map((u) => ({ ...u, opts: { ...(u.opts as Record<string, unknown>), reportExisting: undefined } }))).toEqual(website.uploads.map((u) => ({ ...u, opts: { ...(u.opts as Record<string, unknown>), reportExisting: undefined } })));
+    expect((rec.uploads[0].opts as Record<string, unknown>).reportExisting).toBe(true);
     expect(rec.rpcs).toEqual(website.rpcs);
   });
 

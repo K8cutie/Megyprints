@@ -24,7 +24,7 @@ import type { PhotoRatio } from './photoAnalyzer';
  *
  *  Add a size here when you take over authoring it; it starts EMPTY, and a size
  *  with zero layouts is not offered in the size picker (see albumSizeOptions). */
-export const PER_SIZE_AUTHORED = new Set<AlbumSizePreset>(['6x6', '8x8', '6x4', '8x6', '6x8', '5.8x8.3']);
+export const PER_SIZE_AUTHORED = new Set<AlbumSizePreset>(['6x6', '8x8', '6x4', '8x6', '6x8', '5.8x8.3', '8.3x11.7']);
 
 export const STD: TemplateMargin = { top: 0.04, bottom: 0.04, left: 0.04, right: 0.04 };
 
@@ -53,6 +53,7 @@ export const CANVAS_DIMS: Record<AlbumSizePreset, { w: number; h: number }> = {
   '11.5x8': { w: 3450, h: 2400 },
   '8.5x11': { w: 2550, h: 3300 },
   '5.8x8.3': { w: 1748, h: 2480 },  // A5, the Megy Mini (lib/megyMini)
+  '8.3x11.7': { w: 2480, h: 3508 }, // A4, Megy Magazine (lib/megyMini)
 };
 
 /** Standard photo aspect ratios (width / height) */
@@ -77,6 +78,8 @@ export const ALBUM_INCHES: Record<AlbumSizePreset, { w: number; h: number }> = {
   '8.5x11': { w: 8.5,  h: 11 },
   // A5 (148 x 210 mm), the Megy Mini: exact, so its frames print to the millimetre.
   '5.8x8.3': { w: 148 / 25.4, h: 210 / 25.4 },
+  // A4 (210 x 297 mm), Megy Magazine.
+  '8.3x11.7': { w: 210 / 25.4, h: 297 / 25.4 },
 };
 
 /** Smallest short side we will print a photo frame at. Below this a frame reads

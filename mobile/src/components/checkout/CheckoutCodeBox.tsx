@@ -23,7 +23,8 @@ export function CheckoutCodeBox({ tester, affiliate, onTester, onAffiliate, chec
   signedIn: boolean;
   onSignIn: () => void;
   /** A Megy Mini: an affiliate code takes nothing off (0065). */
-  mini?: boolean;
+  /** A stapled booklet: true, or its name ("Megy Magazine"). */
+  mini?: boolean | string;
 }) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState('');

@@ -53,5 +53,5 @@ describe('the code box says what the code does', () => {
 
 it("the affiliate's terms say it", () => {
   expect(affiliateTerms({ on: true, ratePct: 10, discount: 100, windowDays: 30, minPayout: 500 }))
-    .toContain('A Megy Mini has no discount for your client, and you still earn 10% of its price.');
+    .toContain('A Megy Mini or Megy Magazine has no discount for your client, and you still earn 10% of its price.');
 });

@@ -18,7 +18,7 @@ import type { AlbumPage, AlbumSizeConfig, AlbumSizePreset, UploadedPhoto } from 
 import { offerableSizesAmong } from '@web/pages/builder/sizeOffer';
 import { densityRangeLabel } from '@web/pages/builder/densities';
 import { photosGoingIn, photosOverBy, photosShortBy, tooFewToMakeMessage } from '@web/pages/builder/albumMinimum';
-import { isMiniSize, miniPagesOf, miniPhotoProblem, MINI_NAME, MINI_SIZE } from '@web/lib/megyMini';
+import { bookletName, bookletPaper, isMiniSize, miniPagesOf, miniPhotoProblem } from '@web/lib/megyMini';
 import { albumIsBuilt, COVER_TO_PAGES, COVER_TO_PHOTOS, coverStepNext as wizardCoverStepNext, KEEP_PAGES, MAKE_ALBUM, REMAKE_ALBUM, TO_COVER } from '@web/assistant/wizardSteps';
 import { albumIsMade, confirmedIntent, placedMemories, rebuildQuestion, remakeLosesMessage } from '@web/assistant/rebuildQuestion';
 import { isAlbumNameReady } from '@web/lib/albumName';
@@ -117,8 +117,8 @@ export function sizeTap(builder: SizeBuilder, size: AlbumSizePreset): SizeTap {
   const have = photosGoingIn(builder.uploadedPhotos);
   const pages = builder.miniPages;
   if (photosShortBy(have, size, pages) > 0) return { kind: 'tooFew', message: tooFewToMakeMessage(have, size, pages) };
-  // A Megy Mini holds 16 to 40 photos (24 to 60 at 24 pages; lib/megyMini).
-  if (photosOverBy(have, size, pages) > 0) return { kind: 'tooFew', message: miniPhotoProblem(have, pages) ?? '' };
+  // A booklet holds 16 to 40 photos (24 to 60 at 24 pages; lib/megyMini).
+  if (photosOverBy(have, size, pages) > 0) return { kind: 'tooFew', message: miniPhotoProblem(have, pages, size) ?? '' };
   const q = rebuildQuestion({ type: 'change_size', payload: { size }, rawMessage: '' }, builder);
   return { kind: 'ask', question: (q ?? '').replace(CHAT_YES, '') };
 }
@@ -139,7 +139,7 @@ export async function resizeMadeAlbum(
   const r: GenerateResult = await builder.generateAlbum(bg, { size, ...(lost.length ? { confirmedLost: lost } : {}), ...(isMiniSize(size) && miniPages != null ? { miniPages } : {}) });
   const label = sizeName(size);
   if (!r.made) return { done: false, message: `The size was not changed: your album stays ${sizeName(builder.albumSize)}.` };
-  if (isMiniSize(size)) return { done: true, message: `Your photos are now a ${MINI_NAME}: ${miniPagesOf(miniPages ?? builder.miniPages)} A5 pages, laid out again from your photos.` };
+  if (isMiniSize(size)) return { done: true, message: `Your photos are now a ${bookletName(size)}: ${miniPagesOf(miniPages ?? builder.miniPages)} ${bookletPaper(size)} pages, laid out again from your photos.` };
   return { done: true, message: `Album size changed to ${label}. Every page is laid out again for the new shape.` };
 }
 
@@ -159,26 +159,28 @@ export function miniPagesTap(builder: Pick<BuilderActions, 'albumPages' | 'album
   if (n === builder.miniPages) return { kind: 'same' };
   if (!albumIsMade(builder.albumPages)) return { kind: 'set' };
   const have = photosGoingIn(builder.uploadedPhotos);
-  const problem = miniPhotoProblem(have, n);
+  const problem = miniPhotoProblem(have, n, builder.albumSize);
   if (problem) return { kind: 'tooFew', message: problem };
   return { kind: 'ask', question: `Every page is laid out again from your photos for ${n} pages. Your video memories stay on their photos.` };
 }
 
-/** "Yes" to miniPagesTap's question: the Mini made again at `pages` pages. */
+/** "Yes" to miniPagesTap's question: the booklet made again at `pages` pages, at its own size. */
 export async function remakeMiniAt(
-  builder: Pick<BuilderActions, 'generateAlbum' | 'albumPages' | 'currentPageIndex' | 'miniPages'>,
+  builder: Pick<BuilderActions, 'generateAlbum' | 'albumPages' | 'albumSize' | 'currentPageIndex' | 'miniPages'>,
   pages: number,
 ): Promise<{ done: boolean; message: string }> {
   const n = miniPagesOf(pages);
   const bg = builder.albumPages[builder.currentPageIndex ?? 0]?.background;
-  const r: GenerateResult = await builder.generateAlbum(bg, { size: MINI_SIZE, miniPages: n });
-  if (!r.made) return { done: false, message: `The pages were not changed: your ${MINI_NAME} stays ${builder.miniPages} pages.` };
-  return { done: true, message: `Your ${MINI_NAME} is now ${n} pages, laid out again from your photos.` };
+  const size = builder.albumSize;
+  const name = bookletName(size);
+  const r: GenerateResult = await builder.generateAlbum(bg, { size, miniPages: n });
+  if (!r.made) return { done: false, message: `The pages were not changed: your ${name} stays ${builder.miniPages} pages.` };
+  return { done: true, message: `Your ${name} is now ${n} pages, laid out again from your photos.` };
 }
 
-/** A size as a customer reads it: "8×8", or "Megy Mini" for A5. */
+/** A size as a customer reads it: "8×8", or "Megy Mini" (A5) / "Megy Magazine" (A4). */
 export function sizeName(size: AlbumSizePreset): string {
-  return isMiniSize(size) ? MINI_NAME : size.replace('x', '×');
+  return isMiniSize(size) ? bookletName(size) : size.replace('x', '×');
 }
 
 /** The wizard's size choice line: '8×8" Square: 1-4 photos per page'. */

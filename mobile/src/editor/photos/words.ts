@@ -103,8 +103,8 @@ export const PAGES_TITLE = 'Pages';
 export const ADD_PAGE = 'Add a page';
 /** The Pages sheet on a Megy Mini (lib/megyMini): no page goes in or out. */
 export const MINI_PAGES_FIXED = "A Megy Mini is always 16 pages, so pages can't be added or deleted.";
-/** The same, for the Mini's own page count (16 or 24). */
-export const miniPagesFixed = (pages: number) => `A Megy Mini is always ${pages} pages, so pages can't be added or deleted.`;
+/** The same, for the booklet's own page count (16 or 24) and name. */
+export const miniPagesFixed = (pages: number, name = 'Megy Mini') => `A ${name} is always ${pages} pages, so pages can't be added or deleted.`;
 export const ADD_PAGE_DESC = 'A new page after this one. Then choose its layout.';
 export const deletePageLabel = (pageIndex: number) => `Delete page ${pageIndex + 1}`;
 export const DELETE_PAGE_DESC = 'Its words go with it. Its photos stay in your photos, ready to place again.';

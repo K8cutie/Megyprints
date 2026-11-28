@@ -191,12 +191,15 @@ export interface PlanInput extends OrderInsertInput {
   includedYears: number | null;
   /** An event album its booking pays for (0045, cover_order_with_booking). */
   eventBookingId?: string | null;
+  /** The order's id, chosen on the phone once per checkout visit (orderId.ts,
+   *  bug hunt L1-47); left out, the database picks it (the website's way). */
+  orderId?: string;
 }
 
 /** Place order, as the website runs it, as data. Nothing is sent. */
 export function placeOrderPlan(input: PlanInput): PlaceOrderPlan {
   const now = input.now ?? new Date();
-  const orderRow = buildOrderInsert({ ...input, now });
+  const orderRow: Record<string, unknown> = { ...(input.orderId ? { id: input.orderId } : {}), ...buildOrderInsert({ ...input, now }) };
   const fills = albumQrFills(input.pages);
   const clipCodes = fills.filter((f) => f?.kind === 'clip').map((f) => (f as QrFill).code);
   const rows = memoryRows(fills, input.userId, input.includedYears, now);

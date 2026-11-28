@@ -20,13 +20,19 @@
    price, once the price list sells both: two choices inside its card. A tap
    on one before the Mini is made just picks it; on a made Mini it is laid
    out again at the new count, asked first (albumFlow.miniPagesTap).
+
+   Megy Magazine, the same booklet at A4 (owner, 2026-11-27: "the A4 album
+   becomes another product"), has its own card under the Mini's, the same
+   way, with its own prices (price list .a4). Each card shows only while its
+   booklet is on sale, or when this album already is one.
    ══════════════════════════════════════════════════════════════════════════ */
 import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ALBUM_SIZES, type AlbumSizeConfig } from '@web/pages/builder/types';
-import { isMiniSize, miniOfferOf, miniPhotoRangeLabel, MINI_NAME, MINI_PAGES, MINI_PHOTO_RANGE, MINI_SIZE, type MiniOffer } from '@web/lib/megyMini';
+import { A4_SIZE, bookletName, bookletPaper, isMiniSize, miniOfferOf, miniPhotoRangeLabel, MINI_PAGES, MINI_PHOTO_RANGE, MINI_SIZE, type MiniOffer } from '@web/lib/megyMini';
+import type { AlbumSizePreset } from '@web/pages/builder/types';
 import { Button } from '../components/Button';
 import { useBuilder } from '../builder/BuilderProvider';
 import { miniPagesTap, offerableSizes, pagesHoldPhotos, remakeMiniAt, resizeMadeAlbum, saveStep, SIZE_LINE, sizePhotosPerPage, sizeTap } from '../builder/albumFlow';
@@ -38,36 +44,48 @@ import { startsAt, startsAtLine, startsAtRegular } from '../lib/checkout/startsA
 import { peso } from '../lib/checkout/price';
 import { loadLaunchPrice, loadVideoOffer } from '../lib/checkout/priceSchedule';
 
+/** The booklets on sale, by size: the Megy Mini (A5) and Megy Magazine (A4). */
+type Booklets = Partial<Record<AlbumSizePreset, MiniOffer>>;
+
 /** From the price list (public_price_schedule): the sizes the owner switched
- *  off, or none; the Megy Mini while it is on sale (0062), or null; and the
- *  list itself, for each size's "Starts at" (null when it can't be read). */
-async function sizeOffers(): Promise<{ off: string[]; mini: MiniOffer | null; schedule: PriceSchedule | null }> {
-  if (!supabaseConfigured) return { off: [], mini: null, schedule: null };
+ *  off, or none; the booklets while they are on sale (.mini 0062, .a4 0076);
+ *  and the list itself, for each size's "Starts at" (null when it can't be read). */
+async function sizeOffers(): Promise<{ off: string[]; booklets: Booklets; schedule: PriceSchedule | null }> {
+  if (!supabaseConfigured) return { off: [], booklets: {}, schedule: null };
   try {
     const [{ data, error }, launch, video] = await Promise.all([supabase.rpc('public_price_schedule'), loadLaunchPrice(supabase), loadVideoOffer(supabase)]);
     // The free videos' worth (0073) is only words here: an offer that didn't
     // load just leaves the line out.
     const schedule = !error && data && typeof data === 'object'
-      ? ({ ...(data as object), launch, video_offer: video.ok ? video.offer : null } as { disabled_sizes?: unknown; mini?: unknown })
+      ? ({ ...(data as object), launch, video_offer: video.ok ? video.offer : null } as { disabled_sizes?: unknown; mini?: unknown; a4?: unknown })
       : null;
     const list = schedule?.disabled_sizes;
+    const booklets: Booklets = {};
+    for (const size of [MINI_SIZE, A4_SIZE]) {
+      const offer = miniOfferOf(schedule, size);
+      if (offer) booklets[size] = offer;
+    }
     return {
       off: Array.isArray(list) ? list.filter((s): s is string => typeof s === 'string') : [],
-      mini: miniOfferOf(schedule),
+      booklets,
       schedule: schedule as PriceSchedule | null,
     };
   } catch {
-    return { off: [], mini: null, schedule: null };
+    return { off: [], booklets: {}, schedule: null };
   }
 }
 
-/** The Megy Mini's card: A5's own size entry, named as the product. */
-const MINI_CARD: AlbumSizeConfig = { ...(ALBUM_SIZES.find((s) => s.preset === MINI_SIZE) as AlbumSizeConfig), name: MINI_NAME };
+/** A booklet's card: its size's own entry, named as the product. */
+const bookletCard = (size: AlbumSizePreset): AlbumSizeConfig =>
+  ({ ...(ALBUM_SIZES.find((s) => s.preset === size) as AlbumSizeConfig), name: bookletName(size) });
+
+/** Each booklet's testID stem: the Mini keeps its first ones (size-mini, ...). */
+const bookletId = (size: AlbumSizePreset): string => (size === A4_SIZE ? 'a4' : 'mini');
 
 export default function AlbumSize() {
   const { builder, platform } = useBuilder();
   const [sizes, setSizes] = useState<AlbumSizeConfig[]>(() => offerableSizes());
-  const [mini, setMini] = useState<MiniOffer | null>(null);
+  const [booklets, setBooklets] = useState<Booklets>({});
   const [prices, setPrices] = useState<PriceSchedule | null>(null);
   const [resizing, setResizing] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
@@ -78,17 +96,17 @@ export default function AlbumSize() {
   now.current = builder;
   useEffect(() => {
     let live = true;
-    void sizeOffers().then(({ off, mini: offer, schedule }) => {
+    void sizeOffers().then(({ off, booklets: onSale, schedule }) => {
       if (!live) return;
       setPrices(schedule);
       const next = offerableSizes(off);
       setSizes(next);
-      setMini(offer);
+      setBooklets(onSale);
       // The size on the album is no longer offered: the first one that is,
       // but only while no page holds a photo (a made album is never laid out
-      // again without a tap and a yes). A Megy Mini stays one while it is on sale.
+      // again without a tap and a yes). A booklet stays one while it is on sale.
       const b = now.current;
-      const stillOffered = next.some((s) => s.preset === b.albumSize) || (isMiniSize(b.albumSize) && !!offer);
+      const stillOffered = next.some((s) => s.preset === b.albumSize) || (isMiniSize(b.albumSize) && !!onSale[b.albumSize]);
       if (next.length && !stillOffered && !pagesHoldPhotos(b.albumPages, b.coverFront)) b.setAlbumSize(next[0].preset);
     });
     return () => { live = false; };
@@ -117,10 +135,10 @@ export default function AlbumSize() {
     ]);
   };
 
-  /** A tap on one of the Mini's page counts (16 or 24). */
-  const pickMiniPages = (pages: number) => {
+  /** A tap on one of a booklet's page counts (16 or 24). */
+  const pickMiniPages = (size: AlbumSizePreset, pages: number) => {
     if (resizing) return;
-    if (!isMiniSize(builder.albumSize)) { pick(MINI_CARD, pages); return; }
+    if (builder.albumSize !== size) { pick(bookletCard(size), pages); return; }
     const tap = miniPagesTap(builder, pages);
     if (tap.kind === 'same') return;
     if (tap.kind === 'set') { setSaid(null); builder.setMiniPages(pages); return; }
@@ -130,7 +148,7 @@ export default function AlbumSize() {
       {
         text: 'Lay it out again',
         onPress: () => {
-          setResizing(MINI_SIZE);
+          setResizing(size);
           void remakeMiniAt(now.current, pages)
             .then((r) => setSaid(r.message))
             .catch(() => setSaid('The pages were not changed. Try again.'))
@@ -189,51 +207,62 @@ export default function AlbumSize() {
             </Pressable>
           );
         })}
-        {(mini || isMiniSize(builder.albumSize)) && (() => {
-          // MEGY MINI (lib/megyMini): its own product next to the albums, shown
-          // only while it is on sale (or when this album already is one).
-          const on = isMiniSize(builder.albumSize);
-          // Both page counts on sale (0070): a choice inside the card, each
-          // with its price. One (an older price list): the card as before.
-          const choices = mini && mini.options.length > 1 ? mini.options : null;
+        {(() => {
+          // THE BOOKLETS (lib/megyMini): the Megy Mini (A5) and Megy Magazine
+          // (A4), each its own product next to the albums, shown only while it
+          // is on sale (or when this album already is one).
+          const shown = [MINI_SIZE, A4_SIZE].filter((size) => !!booklets[size] || builder.albumSize === size);
+          if (!shown.length) return null;
           return (
             <>
-              <Text style={styles.section}>Or a small booklet</Text>
-              <Pressable accessibilityRole="radio" accessibilityState={{ checked: on, busy: resizing === MINI_SIZE }} onPress={() => pick(MINI_CARD)}
-                style={[styles.card, on && styles.cardOn]} testID="size-mini">
-                <View style={styles.cardTop}>
-                  <View style={[styles.shape, styles.mini]} />
-                  <View style={styles.cardWords}>
-                    <Text style={styles.name}>{MINI_NAME}</Text>
-                    <Text style={styles.perPage}>{choices ? 'A5 · 16 or 24 pages' : `A5 · ${MINI_PAGES} pages · ${MINI_PHOTO_RANGE} photos`}</Text>
-                  </View>
-                  {resizing === MINI_SIZE ? <ActivityIndicator color={colors.accent} />
-                    : on && <Text style={styles.tick} accessibilityLabel="Picked">✓</Text>}
-                </View>
-                <Text style={styles.line}>
-                  {choices && mini
-                    ? `A stapled booklet with ${mini.free_qr} video memories included. Shipping ₱${mini.shipping_fee} on top.`
-                    : mini
-                      ? `A stapled booklet with ${mini.free_qr} video memories included. ₱${mini.price} + ₱${mini.shipping_fee} shipping.`
-                      : 'A stapled booklet with video memories included.'}
-                </Text>
-                {choices && (
-                  <View style={styles.pagesRow} accessibilityRole="radiogroup">
-                    {choices.map((o) => {
-                      const picked = on && builder.miniPages === o.pages;
-                      return (
-                        <Pressable key={o.pages} accessibilityRole="radio" accessibilityState={{ checked: picked }}
-                          onPress={() => pickMiniPages(o.pages)} style={[styles.pagesChoice, picked && styles.pagesChoiceOn]}
-                          testID={`size-mini-pages-${o.pages}`}>
-                          <Text style={styles.pagesName}>{o.pages} pages</Text>
-                          <Text style={styles.perPage}>{miniPhotoRangeLabel(o.pages)} photos</Text>
-                          <Text style={styles.price} testID={`size-mini-price-${o.pages}`}>₱{o.price}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                )}
-              </Pressable>
+              <Text style={styles.section}>{shown.length > 1 ? 'Or a stapled booklet' : 'Or a small booklet'}</Text>
+              {shown.map((size) => {
+                const offer = booklets[size] ?? null;
+                const on = builder.albumSize === size;
+                const id = bookletId(size);
+                const paper = bookletPaper(size);
+                // Both page counts on sale (0070): a choice inside the card, each
+                // with its price. One (an older price list): the card as before.
+                const choices = offer && offer.options.length > 1 ? offer.options : null;
+                const what = size === A4_SIZE ? 'A bigger stapled booklet, A4 pages,' : 'A stapled booklet';
+                return (
+                  <Pressable key={size} accessibilityRole="radio" accessibilityState={{ checked: on, busy: resizing === size }} onPress={() => pick(bookletCard(size))}
+                    style={[styles.card, on && styles.cardOn]} testID={`size-${id}`}>
+                    <View style={styles.cardTop}>
+                      <View style={[styles.shape, size === A4_SIZE ? styles.a4 : styles.mini]} />
+                      <View style={styles.cardWords}>
+                        <Text style={styles.name}>{bookletName(size)}</Text>
+                        <Text style={styles.perPage}>{choices ? `${paper} · 16 or 24 pages` : `${paper} · ${MINI_PAGES} pages · ${MINI_PHOTO_RANGE} photos`}</Text>
+                      </View>
+                      {resizing === size ? <ActivityIndicator color={colors.accent} />
+                        : on && <Text style={styles.tick} accessibilityLabel="Picked">✓</Text>}
+                    </View>
+                    <Text style={styles.line}>
+                      {choices && offer
+                        ? `${what} with ${offer.free_qr} video memories included. Shipping ₱${offer.shipping_fee} on top.`
+                        : offer
+                          ? `${what} with ${offer.free_qr} video memories included. ₱${offer.price} + ₱${offer.shipping_fee} shipping.`
+                          : `${what} with video memories included.`}
+                    </Text>
+                    {choices && (
+                      <View style={styles.pagesRow} accessibilityRole="radiogroup">
+                        {choices.map((o) => {
+                          const picked = on && builder.miniPages === o.pages;
+                          return (
+                            <Pressable key={o.pages} accessibilityRole="radio" accessibilityState={{ checked: picked }}
+                              onPress={() => pickMiniPages(size, o.pages)} style={[styles.pagesChoice, picked && styles.pagesChoiceOn]}
+                              testID={`size-${id}-pages-${o.pages}`}>
+                              <Text style={styles.pagesName}>{o.pages} pages</Text>
+                              <Text style={styles.perPage}>{miniPhotoRangeLabel(o.pages)} photos</Text>
+                              <Text style={styles.price} testID={`size-${id}-price-${o.pages}`}>₱{o.price}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })}
             </>
           );
         })()}
@@ -259,6 +288,8 @@ const styles = StyleSheet.create({
   portrait: { width: 30, height: 44 },
   // A5 is smaller than every album: a smaller shape, the same portrait.
   mini: { width: 22, height: 31 },
+  // A4: a little taller than the portrait albums, the same kind of shape.
+  a4: { width: 31, height: 44 },
   section: { fontSize: 16, fontWeight: '700', color: colors.muted, marginTop: space.sm },
   cardWords: { flex: 1 },
   name: { fontSize: 18, fontWeight: '700', color: colors.text },

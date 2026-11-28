@@ -94,9 +94,10 @@ export function checkoutPrice(schedule: PriceSchedule | null, input: PriceInput)
   const effectiveYears = input.qrCount > 0 ? (input.hostingYears ?? includedYears) : null;
   const hdPrice = schedule ? hdMemoriesPriceOf(schedule) : 0;
   if (isMiniSize(input.albumSize)) {
-    // MEGY MINI (0062): a set price + shipping on top; never a "was" price.
-    // Its price is its page count's: 16 or 24 pages (0070).
-    const offer = schedule ? miniOfferFor(miniOfferOf(schedule), input.pageCount) : null;
+    // A BOOKLET (Megy Mini 0062, Megy Magazine 0076): a set price + shipping
+    // on top; never a "was" price. Its price is its own list's, for its page
+    // count: 16 or 24 pages (0070).
+    const offer = schedule ? miniOfferFor(miniOfferOf(schedule, input.albumSize), input.pageCount) : null;
     const breakdown = schedule && offer
       ? miniPriceBreakdown(schedule, offer, input.qrCount, effectiveYears, input.hdMemories, input.videoMinutes ?? null)
       : { items: [], total: 0 };
@@ -158,9 +159,9 @@ export function peso(n: number): string {
 }
 
 /** The Place order button, in the website's words. */
-export function placeOrderLabel(p: { ready: boolean; loading: boolean; retrying: boolean; tester: boolean; total: number; miniOff?: boolean }): string {
-  // A Megy Mini the owner took off sale: the tap checks the prices again.
-  if (p.miniOff && !p.loading && !p.retrying) return "Megy Mini isn't on sale right now — tap to check again";
+export function placeOrderLabel(p: { ready: boolean; loading: boolean; retrying: boolean; tester: boolean; total: number; miniOff?: boolean; miniName?: string }): string {
+  // A booklet the owner took off sale: the tap checks the prices again.
+  if (p.miniOff && !p.loading && !p.retrying) return `${p.miniName ?? 'Megy Mini'} isn't on sale right now — tap to check again`;
   if (p.ready && p.tester) return 'Place order · free with tester code';
   if (p.ready) return `Place order · pay ${peso(p.total)} by bank transfer`;
   if (p.loading || p.retrying) return 'Loading price…';

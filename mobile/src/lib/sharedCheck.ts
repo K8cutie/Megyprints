@@ -113,7 +113,7 @@ const MADE_UP_MODEL: PricingModel = {
     '8x8': { pps: 4, hb: 100, surcharge: 0 },
     '11.5x8': { pps: 4, hb: 150, surcharge: 50 },
     '8.5x11': { pps: 4, hb: 150, surcharge: 50 },
-    // No A5: the Megy Mini isn't priced from the album model (0062).
+    // No A5 or A4: the Megy Mini isn't priced from the album model (0062).
   } as PricingModel['sizes'],
 };
 

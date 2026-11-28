@@ -39,6 +39,11 @@ import type { PageTemplate, PhotoRatio, TemplateMargin, TemplateSlot } from './t
 import { fill, gutterFrac } from './templateKit';
 
 const MINI = '5.8x8.3' as const;
+/** Megy Magazine's A4 (lib/megyMini) takes the same layouts: they are fractions
+ *  of the page, and A4 is A5's shape, so its frames are the same, only bigger
+ *  (the gaps too). Measured on A5, so the Megy Mini's pages stay exactly as
+ *  they were. */
+const A4 = '8.3x11.7' as const;
 const W_IN = 148 / 25.4;
 const H_IN = 210 / 25.4;
 const ZERO: TemplateMargin = { top: 0, bottom: 0, left: 0, right: 0 };
@@ -67,7 +72,7 @@ function t(id: string, name: string, category: PageTemplate['category'], target:
   return {
     id, name, category, slotCount: slots.length, margin: ZERO,
     orientation: target === MINI_TALL ? 'portrait' : 'landscape',
-    targetRatio: target, albumSizes: [MINI], fullBleed: true, slots,
+    targetRatio: target, albumSizes: [MINI, A4], fullBleed: true, slots,
   };
 }
 

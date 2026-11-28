@@ -4635,6 +4635,14 @@ If 2.1.2 is still in review or was never sent, 2.1.3 goes up instead and takes 2
 
 Keep the two affiliate lines only once PR #288 is merged, 0061 is on the live database and the program is switched on (Shop admin → Affiliates). Before that the Affiliate page says the program can't be loaded, so leave both lines out.
 
+### Release notes 2.1.9 (code 119: 2.1.8 + Megy Magazine, the A4 booklet; draft, check against the app on upload day)
+
+    <en-US>
+    • New: Megy Magazine, a bigger A4 booklet with 2 videos: 16 pages ₱599, 24 pages ₱699
+    </en-US>
+
+Owner 2026-11-27: "A5 stays, with its current prices, the A4 album becomes another product which is the gap between mini and the cheapest album"; "₱599 / ₱699". Shipping (₱120) is on top, as the Mini's. Its prices need 0076 (#339) applied and `store_settings.a4_on` true before the upload. If 2.1.8 was never uploaded, upload 2.1.9 alone with the 2.1.8 lines added.
+
 ### Release notes 2.1.8 (code 118: 2.1.7 + where each photo was taken + the 24-page Megy Mini; draft, check against the app on upload day)
 
     <en-US>

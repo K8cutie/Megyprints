@@ -4,7 +4,7 @@ import { getTemplatesForAlbum, getTemplateById } from './pageTemplates';
 import { offerableSizesAmong, isSizeOfferableAmong } from './sizeOffer';
 import { coverWrapGeometry, isHardcover, spineWidthInches, PRINTER_SPEC } from './coverGeometry';
 import { bindingInchesFor, bindingMarginFraction, BINDING_INCHES, MINI_FOLD_INCHES } from './binding';
-import { saddleFolds, saddleSheetPlan, PRESS_SHEET } from './printSheet';
+import { saddleFolds, saddleFoldOf, saddleSheetPlan, PRESS_SHEET } from './printSheet';
 import { ALBUM_SIZES, type AlbumPage, type UploadedPhoto } from './types';
 import { ALBUM_INCHES, MIN_FRAME_INCHES } from './templateKit';
 import {
@@ -58,7 +58,7 @@ describe('Megy Mini: the product', () => {
     expect(offerableSizesAmong([]).map((s) => s.preset)).not.toContain(MINI_SIZE);
     // and every album size still is
     expect(offerableSizesAmong([]).map((s) => s.preset)).toEqual(
-      ALBUM_SIZES.map((s) => s.preset).filter((s) => s !== MINI_SIZE));
+      ALBUM_SIZES.map((s) => s.preset).filter((s) => !isMiniSize(s)));
   });
 
   it('has its own page and photo counts; albums keep theirs', () => {
@@ -225,6 +225,6 @@ describe('Megy Mini: the press sheet (folded and stapled)', () => {
     }
     // the two spreads never overlap, and each folds down its middle
     expect(layout.slots[1].y - layout.slots[1].bleed.top).toBeGreaterThanOrEqual(layout.slots[0].y + layout.slots[0].h + layout.slots[0].bleed.bottom - 1e-9);
-    expect(layout.foldX).toBeCloseTo(layout.slots[0].x + layout.trimW, 9);
+    expect(saddleFoldOf(layout, layout.slots[0])).toBeCloseTo(layout.slots[0].x + layout.trimW, 9);
   });
 });
