@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
+import { BRAND_OF_LINE, BUSINESS_ADDRESS } from '../lib/business';
+import { LEGAL_CONTACT } from '../lib/legal';
 
 /* Only REAL ways to reach us (1-star testers, 2026-10-04: on the thank-you
    page, just after paying, the footer said "123 Main St, City" and
@@ -13,6 +15,8 @@ const SOCIAL_LINKS: { label: string; href: string; icon: LucideIcon }[] = [
 const quickLinks = [
   { label: 'Home', path: '/' },
   { label: 'Events', path: '/events' },
+  // PayMongo asks for prices in pesos on the website (2026-11-27).
+  { label: 'Prices', path: '/prices' },
   { label: 'About', path: '/about' },
   { label: 'Contact', path: '/contact' },
   // Affiliates (0061): the page explains it and asks visitors to sign in.
@@ -82,6 +86,9 @@ export default function Footer() {
               <li>
                 <Link to="/orders" className="font-body text-sm text-white hover:text-peach transition-colors duration-200">Check on your order</Link>
               </li>
+              <li>
+                <a href={`mailto:${LEGAL_CONTACT}`} className="font-body text-sm text-white hover:text-peach transition-colors duration-200 break-all">{LEGAL_CONTACT}</a>
+              </li>
             </ul>
           </div>
         </div>
@@ -101,6 +108,16 @@ export default function Footer() {
             <Link to="/terms" className="font-body text-sm text-white underline underline-offset-2 hover:text-peach transition-colors duration-200" data-testid="footer-terms">
               Terms of Service
             </Link>
+            <Link to="/refund" className="font-body text-sm text-white underline underline-offset-2 hover:text-peach transition-colors duration-200" data-testid="footer-refund">
+              Return and Refund Policy
+            </Link>
+          </p>
+          {/* Who sells (src/lib/business.ts): PayMongo checks the site matches
+              its documents (owner's handoff, 2026-11-25). The address shows
+              once the owner gives it; never a placeholder. */}
+          <p className="mt-4 font-body text-xs text-light text-center" data-testid="footer-who-sells">
+            {BRAND_OF_LINE}
+            {BUSINESS_ADDRESS && <><br />{BUSINESS_ADDRESS}</>}
           </p>
         </div>
       </div>

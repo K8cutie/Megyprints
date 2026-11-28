@@ -4,12 +4,15 @@ import { MessageCircle, Package, Landmark, ChevronDown, Send, ArrowRight, Loader
 import { useNavigate, Link } from 'react-router-dom';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import { reportError } from '../lib/report';
+import { BRAND_OF_LINE, BUSINESS_ADDRESS } from '../lib/business';
+import { LEGAL_CONTACT } from '../lib/legal';
 
 const faqs = [
   { q: 'How long does printing take?', a: 'Most albums are printed and ready within 5-7 business days. Premium options may take 2-3 additional days.' },
   { q: 'What file formats do you accept?', a: 'We accept JPG and PNG files. Photos should be at least 1MB for best print quality.' },
   { q: 'Can I edit my album after submitting?', a: 'Contact us within 2 hours of submission and we\'ll help you make changes.' },
-  { q: 'What is your refund policy?', a: 'Since albums are custom printed, we don\'t offer refunds. However, if there\'s a defect, we\'ll reprint at no charge.' },
+  // The same rule as the Return and Refund Policy (src/lib/legalPages.ts), linked under this list.
+  { q: 'What is your refund policy?', a: 'Albums are made to order, so we can\'t cancel or refund a paid order because you changed your mind. If your album arrives damaged or wrong, we print a new one for free. If we can\'t, you can choose your money back.' },
   { q: 'Do you offer bulk discounts?', a: 'Yes! Schools and events ordering 10+ albums receive special pricing. Contact us for details.' },
   { q: 'Can I see a preview before printing?', a: 'Yes! Our preview feature shows exactly how your album will look.' },
   { q: 'How do I pay?', a: 'By bank transfer: at checkout, scan our InstaPay QR with any PH bank or e-wallet app (GCash, Maya, BPI, BDO…) and send the amount shown. We confirm it, then print.' },
@@ -86,6 +89,15 @@ export default function Contact() {
           })}
         </div>
 
+        {/* Who sells, and where to write (src/lib/business.ts): PayMongo
+            checks the site shows the business, its address and a way to
+            reach customer service. The address shows once the owner gives it. */}
+        <div className="text-center text-sm text-medium -mt-4 mb-10 space-y-1" data-testid="contact-business">
+          <p>{BRAND_OF_LINE}</p>
+          {BUSINESS_ADDRESS && <p>{BUSINESS_ADDRESS}</p>}
+          <p>Email: <a href={`mailto:${LEGAL_CONTACT}`} className="text-rust underline break-all">{LEGAL_CONTACT}</a></p>
+        </div>
+
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Contact Form */}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
@@ -137,6 +149,11 @@ export default function Contact() {
                 </div>
               ))}
             </div>
+            <p className="text-sm text-medium mt-3">
+              <Link to="/refund" className="text-rust underline" data-testid="contact-refund">Return and Refund Policy</Link>
+              {' · '}
+              <Link to="/terms" className="text-rust underline">Terms of Service</Link>
+            </p>
           </div>
         </div>
 

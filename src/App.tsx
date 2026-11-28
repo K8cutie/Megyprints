@@ -8,6 +8,8 @@ import About from './pages/About';
 import Contact from './pages/Contact';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
+import Refund from './pages/Refund';
+import Prices from './pages/Prices';
 import Order from './pages/Order';
 import Profile from './pages/Profile';
 import MyMemories from './pages/MyMemories';
@@ -91,6 +93,8 @@ export default function App() {
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
+          <Route path="/refund" element={<Refund />} />
+          <Route path="/prices" element={<Prices />} />
           <Route path="/order" element={<Order />} />
           <Route path="/events" element={<Events />} />
           <Route path="/events/book" element={<EventBook />} />
