@@ -22,7 +22,13 @@ import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
@@ -98,6 +104,15 @@ class PhotoFilesModule : Module() {
 
     AsyncFunction("inspect") Coroutine { uris: List<String> ->
       withContext(Dispatchers.IO) { uris.map { inspectOne(it) } }
+    }
+
+    AsyncFunction("opensWhole") Coroutine { uris: List<String> ->
+      withContext(Dispatchers.IO) {
+        val lanes = Semaphore(3)
+        coroutineScope {
+          uris.map { uri -> async { lanes.withPermit { mapOf("uri" to uri, "whole" to opensWhole(uri)) } } }.awaitAll()
+        }
+      }
     }
 
     AsyncFunction("drawableCopy") Coroutine { source: String, target: String, maxSide: Int ->
@@ -234,6 +249,35 @@ class PhotoFilesModule : Module() {
       "size" to size,
       "lastModified" to modified,
     )
+  }
+
+  /**
+   * Does the whole photo open, as the print files open it (ImageDecoder, no
+   * half image allowed)? Decoded small (about 256 px), so it is quick and
+   * light; the pixels are dropped at once. A file cut off halfway has a good
+   * header and fails only here (bug hunt, Mother 2026-11-28). True: it opens.
+   * False: it can't be opened (cut off, broken, gone). Null: this phone can't
+   * tell (Android 8 or older has no ImageDecoder; or a reason that is not the
+   * file, such as memory), so the order goes on, as before.
+   */
+  private fun opensWhole(address: String): Boolean? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return null
+    return try {
+      val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, Uri.parse(address))) { decoder, info, _ ->
+        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        val longest = maxOf(info.size.width, info.size.height)
+        var sample = 1
+        while (longest / (sample * 2) >= 256) sample *= 2
+        decoder.setTargetSampleSize(sample)
+      }
+      bitmap.recycle()
+      true
+    } catch (_: IOException) {
+      // ImageDecoder.DecodeException (cut off, broken) and a file that is gone.
+      false
+    } catch (_: Throwable) {
+      null
+    }
   }
 
   /**

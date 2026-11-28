@@ -13,6 +13,11 @@
 import { forward, pagesAt, pagesLabel, PLACE_AT, videosAt, type PlaceProgress } from '@web/lib/placeProgress';
 import type { SendStep } from './sendOrder';
 
+/** Before the order is saved, each photo is opened whole (photoCheck.ts). */
+export function photosCheckLabel(done: number, total: number): string {
+  return total > 0 && done < total ? `Checking your photos… ${done} of ${total}` : 'Checking your photos…';
+}
+
 export interface PlaceFrame {
   progress: PlaceProgress;
   /** What the screen says (the website puts it on the Place order button). */
@@ -66,6 +71,7 @@ export function placeFrames(s: PlaceShape): PlaceFrame[] {
  *  the website shows for it (placeOrder's advance and setPrepMsg). */
 export function sendFrame(prev: PlaceProgress | null, s: SendStep): { progress: PlaceProgress; message: string } {
   switch (s.step) {
+    case 'photosCheck': return { progress: forward(prev, PLACE_AT.start), message: photosCheckLabel(s.done, s.total) };
     case 'order': return { progress: forward(prev, PLACE_AT.start), message: 'Placing your order…' };
     case 'cover': return { progress: forward(prev, PLACE_AT.cover), message: 'Making your cover…' };
     case 'pages': return s.total > 0

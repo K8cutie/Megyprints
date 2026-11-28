@@ -100,6 +100,7 @@ interface PhotoFilesNative {
   keptCount(): number;
   srgbCopy(source: string, target: string): Promise<SrgbCopyResult>;
   inspect?(uris: string[]): Promise<PhotoInspection[]>;
+  opensWhole?(uris: string[]): Promise<PhotoWhole[]>;
   drawableCopy?(source: string, target: string, maxSide: number): Promise<DrawableCopyResult>;
   pickPhotos?(): Promise<{ canceled: boolean; assets: PickedPhotoFile[] }>;
   photoPermissions?(): PhotoPermissions;
@@ -143,6 +144,28 @@ export async function inspectPhotos(uris: string[]): Promise<PhotoInspection[] |
   if (!native || typeof native.inspect !== 'function') return null;
   if (uris.length === 0) return [];
   return native.inspect(uris);
+}
+
+/** Whether the whole photo opens, as the print files open it. */
+export interface PhotoWhole {
+  uri: string;
+  /** true: it opens. false: it can't (cut off, broken, gone). null: this phone can't tell (Android 8 or older). */
+  whole: boolean | null;
+}
+
+/** Each photo opened whole and small, as the print files open it (Android's
+ *  ImageDecoder), so a photo cut off halfway is found before an order is
+ *  saved: its header is fine, so inspectPhotos can't see it. In groups of
+ *  24, saying how far it got after each group. Null when the build has no
+ *  native half (jest, an older APK). */
+export async function photosOpenWhole(uris: string[], onDone?: (done: number, total: number) => void): Promise<PhotoWhole[] | null> {
+  if (!native || typeof native.opensWhole !== 'function') return null;
+  const out: PhotoWhole[] = [];
+  for (let i = 0; i < uris.length; i += 24) {
+    out.push(...await native.opensWhole(uris.slice(i, i + 24)));
+    onDone?.(out.length, uris.length);
+  }
+  return out;
 }
 
 /** A small upright sRGB JPEG of the photo at `source`, written to the
