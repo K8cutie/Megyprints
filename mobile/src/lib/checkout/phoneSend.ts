@@ -18,8 +18,8 @@ import type { CoverType, MaterialType } from '@web/pages/builder/types';
 import { PageDrawer } from '../../render/drawPage';
 import type { PageText } from '../../render/pageText';
 import { checkoutFiles, NotDrawnError, photosUsed } from '../../print/printFiles';
-import { inspectPhotos } from '../../../modules/photo-files';
-import { firstUnopenable, PhotoGoneError } from './photoCheck';
+import { inspectPhotos, photosOpenWhole } from '../../../modules/photo-files';
+import { firstNotWhole, firstUnopenable, PhotoGoneError } from './photoCheck';
 import { fontStore } from '../../editor/text/fonts/appFonts';
 import { ensureAlbumFonts } from '../../editor/text/fonts/fontStore';
 import { siteFile } from '../../builder/siteFiles';
@@ -93,6 +93,10 @@ export async function sendFromPhone(o: {
     const looks = await inspectPhotos(wanted).catch(() => null);
     const gone = looks ? firstUnopenable(used, o.album.photoUris, looks) : null;
     if (gone) throw new PhotoGoneError(gone, !!o.placed);
+    // Then each one opened whole: a photo cut off halfway has a good header.
+    const opens = await photosOpenWhole(wanted, (done, total) => o.onStep({ step: 'photosCheck', done, total })).catch(() => null);
+    const broken = opens ? firstNotWhole(used, o.album.photoUris, opens) : null;
+    if (broken) throw new PhotoGoneError(broken, !!o.placed);
     return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips, sent: o.sent }, o.placed);
   } finally {
     files.dispose();

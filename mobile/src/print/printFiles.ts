@@ -32,6 +32,7 @@ import type { AlbumPage, AlbumSizePreset, CoverType, MaterialType } from '@web/p
 import { bindingInchesFor } from '@web/pages/builder/binding';
 import { PRINT_FILE_BUDGET_BYTES, PRINT_PAGE_JPEG_QUALITY, PRINT_PAGE_MAX_SIDE } from '@web/pages/builder/printFileSpec';
 import { PagesTooBigError } from '../lib/checkout/sizeLimits';
+import { photoGoneSavedWords } from '../lib/checkout/photoCheck';
 import { imposeAlbumSheets, imposeCoverSheet } from '@web/pages/builder/printSheetPdf';
 import { makeSheetsJpegZip, SHEET_JPEG_DPI, SHEET_JPEG_QUALITY, type SheetTools } from '@web/lib/pressSheetZip';
 import { sheetsNote, coverSheetNote, type PressOrder } from '@web/lib/pressSheetWords';
@@ -112,10 +113,11 @@ export class NotDrawnError extends Error {
   }
 }
 
-/** A photo a page needs could not be opened. */
+/** A photo a page needs could not be opened. Only while the files are made,
+ *  after the order is saved, so the words say how to finish it. */
 export class PhotoNotOpenedError extends Error {
   constructor(readonly page: string, readonly photoIndex: number) {
-    super(`Photo ${photoIndex + 1} on ${page} can't be opened on this phone.`);
+    super(photoGoneSavedWords({ page, index: photoIndex }));
     this.name = 'PhotoNotOpenedError';
   }
 }

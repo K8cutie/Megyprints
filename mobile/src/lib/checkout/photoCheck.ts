@@ -13,8 +13,13 @@
    the first check trusted that size and let these through). The print files
    open photos with the same Android decoders, so a photo whose header can't
    be read can't be printed either. HEIC is read on Android 9 and newer.
-   The file's size is not used: the phone's list can be out of date. */
-import type { PhotoInspection } from '../../../modules/photo-files';
+   The file's size is not used: the phone's list can be out of date.
+
+   Then each photo is opened whole, small (modules/photo-files opensWhole,
+   Android 9 and newer): a photo cut off halfway has a good header, so only
+   opening it all finds it (Mother, 2026-11-28: it made an order row, then
+   failed). Android 8 and older can't tell: the order goes on, as before. */
+import type { PhotoInspection, PhotoWhole } from '../../../modules/photo-files';
 
 export interface UsedPhoto { page: string; index: number }
 
@@ -32,16 +37,29 @@ export function firstUnopenable(used: readonly UsedPhoto[], uris: readonly strin
   return null;
 }
 
+/** The first photo that doesn't open whole (cut off, broken), else null.
+ *  A photo the phone can't tell about (null) goes on. */
+export function firstNotWhole(used: readonly UsedPhoto[], uris: readonly string[], opens: readonly PhotoWhole[]): UsedPhoto | null {
+  const byUri = new Map(opens.map((o) => [o.uri, o.whole]));
+  for (const u of used) {
+    const uri = uris[u.index];
+    if (uri && byUri.get(uri) === false) return u;
+  }
+  return null;
+}
+
 /** Said before any order is saved: which photo, where, and what to do. */
 export function photoGoneWords(u: UsedPhoto): string {
   const where = u.page === 'the cover' ? 'the cover' : u.page.replace(/^page /, 'page ');
-  return `Photo ${u.index + 1} on ${where} can't be opened on this phone: it may have been deleted or moved. Open ${where}, put that photo in again or pick another one, then tap Place order again.`;
+  return `Photo ${u.index + 1} on ${where} can't be opened on this phone: it may have been deleted, moved or damaged. Open ${where}, put that photo in again or pick another one, then tap Place order again.`;
 }
 
-/** The same, for an order already saved (Finish sending draws the album as it was ordered). */
+/** The same, for an order already saved (Finish sending draws the album as
+ *  it was ordered). Not final: when the photo is back on the phone (from the
+ *  gallery's trash), the same order finishes (Mother, 2026-11-28). */
 export function photoGoneSavedWords(u: UsedPhoto): string {
   const where = u.page === 'the cover' ? 'the cover' : u.page;
-  return `Photo ${u.index + 1} on ${where} can't be opened on this phone, so this order can't be finished here. Cancel it in Your orders and order the album again, or message us and we'll help.`;
+  return `Photo ${u.index + 1} on ${where} can't be opened on this phone. If you deleted it, put it back from your gallery's trash, then open Your orders and tap Finish sending. If you can't, cancel this order in Your orders and order the album again, or message us and we'll help.`;
 }
 
 export class PhotoGoneError extends Error {

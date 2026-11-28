@@ -65,6 +65,7 @@ export interface SendDb {
 export type CreateOnlyUpload = (bucket: string, path: string, body: Uint8Array, opts: { contentType: string; cacheControl?: string; reportExisting?: boolean }) => Promise<{ message: string; alreadyThere?: boolean } | null>;
 
 export type SendStep =
+  | { step: 'photosCheck'; done: number; total: number }
   | { step: 'order' }
   | { step: 'cover' }
   | { step: 'pages'; done: number; total: number; smaller: boolean }
@@ -298,7 +299,10 @@ async function sendCover(step: Extract<PlanStep, { kind: 'upload' }>, path: stri
       const error = await deps.upload(step.bucket, path, bytes, { contentType: step.contentType });
       if (error) throw new Error(`Cover file upload failed: ${error.message}`);
       return;
-    } catch {
+    } catch (e) {
+      // A photo the cover needs can't be opened: its own words, at once (a
+      // try again won't bring it back; "close your other apps" was wrong).
+      if (!sending && e instanceof Error && e.name === 'PhotoNotOpenedError') throw e;
       if (attempt > COVER_RETRY_WAITS_MS.length) throw new Error(sending ? COVER_SEND_FAILED : COVER_MAKE_FAILED);
       await wait(COVER_RETRY_WAITS_MS[attempt - 1]);
     }

@@ -33,6 +33,7 @@ import { createOnlyUpload, isAlreadyExists, uploadTimeLimitMs } from '../src/lib
 import { MissingClipError } from '../src/lib/memories/clips';
 import { fake, fakeClient, rec, resetFake } from './helpers/fakeSupabase';
 import { PAGES_TOO_BIG } from '../src/lib/checkout/sizeLimits';
+import { PhotoNotOpenedError } from '../src/print/printFiles';
 
 jest.mock('@web/lib/supabase', () => jest.requireActual('./helpers/fakeSupabase').supabaseModule);
 jest.mock('@web/lib/storageUpload', () => jest.requireActual('./helpers/fakeSupabase').storageUploadModule);
@@ -291,6 +292,16 @@ describe('when something fails: the website\'s words', () => {
     await expect(sendOrder(placeOrderPlan(input()), d)).rejects.toThrow(COVER_MAKE_FAILED);
     expect(tries).toBe(3);
     expect(COVER_MAKE_FAILED).toBe("We couldn't make your album's cover on this phone. Your order is saved: close your other apps, then tap Place order again. If it keeps happening, message us.");
+  });
+
+  it('a photo the cover needs can\'t be opened: its own words at once, not "close your other apps" (bug hunt, Mother)', async () => {
+    let tries = 0;
+    const gone = new PhotoNotOpenedError('the cover', 2);
+    const d = deps({ makeCover: async () => { tries++; throw gone; } });
+    await expect(sendOrder(placeOrderPlan(input()), d)).rejects.toThrow(gone.message);
+    expect(tries).toBe(1);
+    expect(d.waits).toEqual([]);
+    expect(gone.message).toMatch(/^Photo 3 on the cover can't be opened on this phone\. If you deleted it, put it back from your gallery's trash, then open Your orders and tap Finish sending\./);
   });
 
   it('the pages file that didn\'t go up: tried 3 times, the same file (made once), then plain words, nothing after it', async () => {
