@@ -435,18 +435,70 @@ describe('checkout on the album "Order this album" opened it with', () => {
     expect(mockSend.payments[0].plan.rpc.args).toEqual({ p_order_id: 'order-1', p_reference: '2026091012345678', p_proof_path: null });
   });
 
-  it('a step that fails: the website\'s words on the form; Place order again reuses the order', async () => {
+  it('a step that fails: the website\'s words on the form; Place order again finishes THAT order as it was saved, whatever the form says now (bug hunt L1-45)', async () => {
     mockSend.run = async (c) => {
       c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
       throw new Error('Print file upload failed: timeout');
     };
     await place(false);
     expect(await screen.findByText('Print file upload failed: timeout')).toBeOnTheScreen();
+    // The form says the order is saved and how it will be finished.
+    expect(screen.getByTestId('order-saved-note')).toHaveTextContent(/^Your order MP-2026-TEST01 is saved\. Place order finishes sending it as you placed it\./);
+    // The customer changes the cover on the form (Seeker B's case: Softcover → Hardbound).
+    await fireEvent.press(screen.getAllByRole('radio', { name: /Hardbound/ })[0]);
+    // The saved order, as the database holds it: softcover, matte, and its own total.
+    fake.orderRow = {
+      id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment', payment_status: 'unpaid', payment_submitted_at: null,
+      album_id: 'album-7', album_snapshot: ROW, album_size: '8x8', cover: 'softcover', material: 'matte', page_count: pages.length,
+      quoted_amount: 1505, amount: null, created_at: '2026-11-27T16:00:00Z', tester_code: null,
+    };
     mockSend.run = async () => ({ order: { id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' }, paidByTester: false });
     await fireEvent.press(screen.getByTestId('order-place'));
     expect(await screen.findByTestId('pay-order-placed')).toBeOnTheScreen();
+    // The same order, no second one; drawn as it was saved, not as the form says now.
     expect(mockSend.calls).toHaveLength(2);
     expect(mockSend.calls[1].placed).toEqual({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+    expect(mockSend.calls[1].cover).toBe('softcover');
+    expect(mockSend.calls[1].material).toBe('matte');
+    // And the money asked is the saved order's total.
+    expect(screen.getByText('Send ₱1,505')).toBeOnTheScreen();
+  });
+
+  it('a free tester order whose send stopped after it was saved: Place order again keeps the code\'s path ("Test order placed"), the same order (Mother, L1-45)', async () => {
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+      throw new Error('Print file upload failed: timeout');
+    };
+    await place(true);
+    expect(await screen.findByText('Print file upload failed: timeout')).toBeOnTheScreen();
+    // No saved-order note: a free tester order is finished by its code, not paid.
+    expect(screen.queryByTestId('order-saved-note')).toBeNull();
+    mockSend.run = placesAndSends;
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByText('Test order placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(2);
+    expect(mockSend.calls[1].placed).toEqual({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+    expect(mockSend.calls[1].plan.orderRow.tester_code).toBe('MEGYTEST');
+    expect(screen.queryByText(/^Send ₱/)).toBeNull();
+  });
+
+  it('"Place a new order instead" on that note really places a new order (bug hunt L1-45 b)', async () => {
+    mockSend.run = async (c) => {
+      c.onOrder({ id: 'order-1', order_number: 'MP-2026-TEST01', status: 'pending_payment' });
+      throw new Error('Print file upload failed: timeout');
+    };
+    await place(false);
+    expect(await screen.findByTestId('order-saved-note')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByTestId('order-saved-new-instead'));
+    expect(screen.queryByTestId('order-saved-note')).toBeNull();
+    mockSend.run = placesAndSends;
+    await fireEvent.press(screen.getByTestId('order-place'));
+    expect(await screen.findByTestId('pay-order-placed')).toBeOnTheScreen();
+    expect(mockSend.calls).toHaveLength(2);
+    expect(mockSend.calls[1].placed).toBeNull();
+    // A new id for the new order (L1-47), not the first one's.
+    expect(mockSend.calls[1].plan.orderRow.id).toEqual(expect.any(String));
+    expect(mockSend.calls[1].plan.orderRow.id).not.toBe(mockSend.calls[0].plan.orderRow.id);
   });
 
   it('not in the account: the website\'s words, and the way back to the album', async () => {

@@ -17,7 +17,9 @@ import { Skia } from '@shopify/react-native-skia/lib/commonjs/skia/Skia';
 import type { CoverType, MaterialType } from '@web/pages/builder/types';
 import { PageDrawer } from '../../render/drawPage';
 import type { PageText } from '../../render/pageText';
-import { checkoutFiles, NotDrawnError } from '../../print/printFiles';
+import { checkoutFiles, NotDrawnError, photosUsed } from '../../print/printFiles';
+import { inspectPhotos } from '../../../modules/photo-files';
+import { firstUnopenable, PhotoGoneError } from './photoCheck';
 import { fontStore } from '../../editor/text/fonts/appFonts';
 import { ensureAlbumFonts } from '../../editor/text/fonts/fontStore';
 import { siteFile } from '../../builder/siteFiles';
@@ -84,6 +86,13 @@ export async function sendFromPhone(o: {
     throw e;
   }
   try {
+    // Every photo the pages and cover use, by its header, before any order row (bug hunt B-D5).
+    const albumForCheck = { albumSize: o.album.albumSize, pages: o.album.pages, photoCount: o.album.photoUris.length, photoIds: o.album.photoIds, coverFront: o.album.coverFront };
+    const used = photosUsed(albumForCheck, { cover: o.cover, material: o.material }, o.text);
+    const wanted = [...new Set(used.map((u) => o.album.photoUris[u.index]).filter((u): u is string => !!u))];
+    const looks = await inspectPhotos(wanted).catch(() => null);
+    const gone = looks ? firstUnopenable(used, o.album.photoUris, looks) : null;
+    if (gone) throw new PhotoGoneError(gone, !!o.placed);
     return await sendOrder(o.plan, { db, upload, makeCover: files.makeCover, makePages: files.makePages, onStep: o.onStep, onOrder: o.onOrder, clips, sent: o.sent }, o.placed);
   } finally {
     files.dispose();

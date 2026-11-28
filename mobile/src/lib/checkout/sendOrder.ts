@@ -42,6 +42,7 @@ import { ORDER_ID, planClipCodes, type PlaceOrderPlan, type PlanStep } from './o
 import type { SentFiles } from './sentFiles';
 import type { PaymentSubmitPlan } from './payment';
 import { isTesterCodeGoneError, TesterCodeGoneError } from './testerCode';
+import { isTooLargeUpload, PAGES_TOO_BIG } from './sizeLimits';
 import { AffiliateCodeGoneError, isAffiliateCodeGoneError } from '@web/lib/orderCodes';
 import { ClipTooBigError, MissingClipError, publicClipUrl, type ClipExt } from '../memories/clips';
 import { bookingErrorMessage } from '../events/eventDeal';
@@ -59,7 +60,9 @@ export interface SendDb {
 
 /** A create-only upload: null when the file is in the bucket (now, or from
  *  an earlier try), else the storage error. */
-export type CreateOnlyUpload = (bucket: string, path: string, body: Uint8Array, opts: { contentType: string; cacheControl?: string }) => Promise<{ message: string } | null>;
+/** `reportExisting`: say when the file was already there (a receipt sent
+ *  before), instead of counting it as sent (bug hunt B-D4). */
+export type CreateOnlyUpload = (bucket: string, path: string, body: Uint8Array, opts: { contentType: string; cacheControl?: string; reportExisting?: boolean }) => Promise<{ message: string; alreadyThere?: boolean } | null>;
 
 export type SendStep =
   | { step: 'order' }
@@ -117,7 +120,11 @@ export interface SendDeps {
 }
 
 /** The order row as the insert answered it. */
-export interface PlacedOrder { id: string; order_number: string; status: string }
+/** The order row as the database saved it. quoted_amount (0055) is the total the
+ *  database priced the order at, which the payment step asks for (bug hunt B3,
+ *  2026-11-27: the phone's own total could differ if a price or a code's
+ *  discount changed while checkout was open). */
+export interface PlacedOrder { id: string; order_number: string; status: string; quoted_amount?: number | null; amount?: number | null }
 
 /** orders.ts COVER_RETRY_WAITS_MS: 3 tries in all. */
 export const COVER_RETRY_WAITS_MS = [1500, 4000];
@@ -131,6 +138,20 @@ export const COVER_MAKE_FAILED = "We couldn't make your album's cover on this ph
 export const PAGES_SEND_FAILED = "We couldn't send your album's pages. Your order is saved: check your internet, then tap Place order again.";
 /** No connection as the order is placed: plain words, not the phone's
  *  ("fetch failed: java.net.ConnectException…"). */
+/** Bug hunt L1-47: this order was saved by an earlier try whose answer was
+ *  lost (the insert with the same phone-chosen id was refused as a duplicate).
+ *  Checkout finishes that order from its row instead of making a second one. */
+/** Bug hunt B-D4 / B-D3: the payment step's words. */
+export const RECEIPT_ALREADY_KEPT = 'We already have a receipt for this order, so we kept that one. If it was the wrong picture, message us and send the right one there.';
+export const RECEIPT_OFFLINE = "We couldn't upload your receipt (no internet). You can still tap \"I've sent the payment\" when you're back online: we'll confirm from our bank app.";
+export const PAYMENT_OFFLINE = "We couldn't reach Megy Prints, so your payment isn't recorded yet. Check your internet, then tap \"I've sent\" again.";
+export const ORDER_ALREADY_SAVED = 'Your order was already saved. Finishing it now.';
+export class OrderAlreadySavedError extends Error {
+  constructor(public readonly orderId: string) { super(ORDER_ALREADY_SAVED); this.name = 'OrderAlreadySavedError'; }
+}
+const isSameOrderAgain = (e: DbError, id: unknown): id is string =>
+  typeof id === 'string' && !!e && e.code === '23505' && /orders_pkey/.test(e.message);
+
 export const ORDER_OFFLINE = "We couldn't reach Megy Prints. Check your internet, then tap Place order again.";
 /** testerCode.ts claimTesterOrder's words. */
 export const TESTER_CLAIM_FAILED = "We couldn't finish your free tester order. Your order is saved: tap Place order again.";
@@ -184,7 +205,8 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
   let order = placed;
   if (!order) {
     onStep({ step: 'order' });
-    const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status').single();
+    const { data, error } = await db.from('orders').insert(plan.orderRow).select('id, order_number, status, quoted_amount, amount').single();
+    if (isSameOrderAgain(error, plan.orderRow.id)) throw new OrderAlreadySavedError(plan.orderRow.id as string);
     if (isUnpaidLimitError(error)) throw new UnpaidLimitError();
     if (isTesterCodeGoneError(error)) throw new TesterCodeGoneError(String(plan.orderRow.tester_code ?? ''));
     // An affiliate code that stopped working, or this order can't take (0061): the database's words.
@@ -213,7 +235,7 @@ export async function sendOrder(plan: PlaceOrderPlan, deps: SendDeps, placed: Pl
         onStep({ step: 'pages', done: 0, total: 0, smaller: false });
         const bytes = await deps.makePages((done, total, smaller) => onStep({ step: 'pages', done, total, smaller }));
         onStep({ step: 'sending' });
-        await sendTried(() => upload(step.bucket, path, bytes, { contentType: step.contentType }), wait, PAGES_SEND_FAILED);
+        await sendTried(() => upload(step.bucket, path, bytes, { contentType: step.contentType }), wait, PAGES_SEND_FAILED, PAGES_TOO_BIG);
         deps.sent?.add(path);
       }
     } else if (step.kind === 'upsert') {
@@ -285,10 +307,11 @@ async function sendCover(step: Extract<PlanStep, { kind: 'upload' }>, path: stri
 
 /** A file already made, sent: 3 tries, as the cover (a dropped connection
  *  or a 502 on one try is often gone on the next); `failed` after the last. */
-async function sendTried(send: () => Promise<{ message: string } | null>, wait: (ms: number) => Promise<void>, failed: string): Promise<void> {
+async function sendTried(send: () => Promise<{ message: string } | null>, wait: (ms: number) => Promise<void>, failed: string, tooBig?: string): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     const error = await send().catch((e: unknown) => ({ message: e instanceof Error ? e.message : String(e) }));
     if (!error) return;
+    if (tooBig && isTooLargeUpload(error.message)) throw new Error(tooBig);
     if (attempt > COVER_RETRY_WAITS_MS.length) throw new Error(failed);
     await wait(COVER_RETRY_WAITS_MS[attempt - 1]);
   }
@@ -303,13 +326,18 @@ export async function sendPayment(plan: PaymentSubmitPlan, receipt: Uint8Array |
   let receiptError: string | null = null;
   if (plan.upload && receipt) {
     const { bucket, path, contentType, cacheControl } = plan.upload;
-    const error = await deps.upload(bucket, path, receipt, { contentType, cacheControl });
-    if (error) receiptError = `Could not upload your receipt (${error.message}). You can still tap "I've sent the payment" — we'll confirm from our bank app.`;
+    const error = await deps.upload(bucket, path, receipt, { contentType, cacheControl, reportExisting: true });
+    // A receipt was sent for this order before (one file per order, 0042): the
+    // first is kept, and said, never dropped quietly (bug hunt B-D4).
+    if (error?.alreadyThere) { proofPath = path; receiptError = RECEIPT_ALREADY_KEPT; }
+    else if (error) receiptError = isNoConnection(error.message) ? RECEIPT_OFFLINE : `Could not upload your receipt (${error.message}). You can still tap "I've sent the payment" — we'll confirm from our bank app.`;
     else proofPath = path;
   }
   const { error } = await deps.db.rpc(plan.rpc.name, { ...plan.rpc.args, p_proof_path: proofPath });
   // An order that didn't finish sending (0068, MP030): the database's own plain words.
   if (error && isOrderNotSentError(error)) throw new OrderNotSentError(error.message);
+  // No connection: plain words, not the phone's own error (bug hunt B-D3).
+  if (error && isNoConnection(error.message)) throw new Error(PAYMENT_OFFLINE);
   if (error) throw new Error(`Could not record your payment (${error.message}).`);
   return { receiptError };
 }
