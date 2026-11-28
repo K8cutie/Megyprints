@@ -41,6 +41,8 @@ import CheckoutCodeBox from '../components/CheckoutCodeBox';
 import PlayFeedbackCard from '../components/PlayFeedbackCard';
 import PlaceOrderProgress from '../components/PlaceOrderProgress';
 import PayCard from '../components/PayCard';
+import PayOnline from '../components/PayOnline';
+import { loadPayOnline } from '../lib/payOnline';
 import TermsAgreeLine from '../components/TermsAgreeLine';
 import { PLACE_AT, forward, pagesAt, pagesLabel, videosAt, type PlaceProgress } from '../lib/placeProgress';
 import { keepScreenOn } from '../lib/keepScreenOn';
@@ -98,6 +100,10 @@ export default function Order() {
   // the way to them.
   const [unpaidLimit, setUnpaidLimit] = useState(false);
   const secondOkRef = useRef(false);
+  // Card, GCash and Maya through PayMongo, while the shop has it switched on
+  // (0077). Off, or unknown: the pay step is the bank-transfer QR as before.
+  const [payOnline, setPayOnline] = useState(false);
+  useEffect(() => { let alive = true; void loadPayOnline().then((on) => { if (alive) setPayOnline(on); }); return () => { alive = false; }; }, []);
   useEffect(() => {
     const orderId = createdOrderRef.current?.id;
     // The payment step too: an order that closed (0042) must not show a QR.
@@ -1016,8 +1022,14 @@ export default function Order() {
           {placed && (
             <p className="text-center text-sm text-medium mb-5">
               Order <span className="font-mono text-[#C98A5E]">{placed.order_number}</span> is placed.
-              <span className="block text-taupe">Pay by bank transfer to finish.</span>
+              <span className="block text-taupe">{payOnline ? 'Pay by card, GCash, Maya or bank transfer to finish.' : 'Pay by bank transfer to finish.'}</span>
             </p>
+          )}
+          {payOnline && createdOrderRef.current && (
+            <PayOnline orderId={createdOrderRef.current.id} amountLabel={amountLabel} />
+          )}
+          {payOnline && createdOrderRef.current && (
+            <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-taupe" data-testid="pay-or-transfer">Or pay by bank transfer</p>
           )}
           <div className="bg-white rounded-2xl p-6 shadow-sm">
             {/* Who to pay, the QR, Copy for the order number, and the steps (PayCard). */}
@@ -1045,7 +1057,7 @@ export default function Order() {
             <button
               onClick={handlePaymentSent}
               disabled={submitting}
-              className="w-full mt-4 py-3.5 bg-blush-pink text-white text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait"
+              className={`w-full mt-4 py-3.5 text-base font-bold rounded-xl hover:brightness-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-wait ${payOnline && createdOrderRef.current ? 'border-2 border-blush-pink bg-white text-blush-pink' : 'bg-blush-pink text-white'}`}
             >
               {submitting
                 ? <><Loader2 size={16} className="animate-spin" /> {prepMsg || 'Saving…'}</>
